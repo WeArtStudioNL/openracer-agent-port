@@ -694,7 +694,7 @@ speed, the gear, the revs and the pedals. Keys: Enter or Space play/pause, left 
 down one second, Home and End, T the next camera, H hides the bar.
 
 The free camera of the replay (`scripts/replay_free_camera.gd`): W A S D or the arrows (W the way it looks), Z, Space,
-Shift up, X, Alt, Ctrl down, Q E tilt, [ ] field of view, click the scene to look with the mouse (Esc lets it go), a
+Shift up, X, Alt, Ctrl down, Q E tilt, [ ] field of view, the mouse looks; all of these only after the button Move camera (Esc stops it, the arrows are the timeline otherwise), a
 gamepad (left stick moves, right stick looks, triggers up and down, shoulders zoom); F aims at the car, L fixes it to
 the car (its frame), K fixes it with the sky up; a speed slider 0.01..3 (log) and the smoothing of the look (5 and 6),
 both remembered. It starts fixed to the car where the camera was. (In the free camera the arrows move it, not the time.)

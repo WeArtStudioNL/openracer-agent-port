@@ -33,7 +33,10 @@ static func tyre_effects(w: Car.Wheel, dt: float) -> void:
 	var spin_share := clampf(maxf(0.0, spin) / maxf(2.0, slide_speed), 0.0, 1.0)
 	var smoking := 0.12 * smoothstep(180.0, 220.0, w.surf_t) + 0.88 * smoothstep(220.0, 260.0, w.surf_t)
 	w.smoke = smoking * (0.4 + 0.6 * minf(1.0, burnt / 40000.0)) * (0.3 + 0.7 * spin_share)
+	# (a road that is drawn as dirt or gravel does not squeal: CarAudio plays the noise of that ground)
 	w.squeal = smoothstep(1.0, 2.0, w.s) * (1.0 - 0.4 * smoothstep(2.5, 4.0, w.s)) * smoothstep(0.8, 5.0, slide_speed)
+	if Ground.sound_surface(w.surface) != w.surface:
+		w.squeal = 0.0
 	w.mark = smoothstep(1.1, 2.0, w.s) * smoothstep(1.0, 4.0, slide_speed)
 
 

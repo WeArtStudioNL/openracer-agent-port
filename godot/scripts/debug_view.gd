@@ -280,7 +280,9 @@ func _wheels(car: Car) -> void:
 		var pts := []
 		var cols := []
 		for i in 4:
-			if car.shell_tyres.touched[i] or not car.shell_tyres.results[i].is_empty():
+			if ReplayFx.active:
+				car.shell_tyres.replay_lines(i, pts, cols)      # (no physics in a replay: the shape it had, where the wheel is now)
+			elif car.shell_tyres.touched[i] or not car.shell_tyres.results[i].is_empty():
 				ShellTyres.shell_lines(car.shell_tyres.tyres[i].call("shells"), pts, cols)
 		for k in range(0, pts.size() - 1, 2):
 			_line(pts[k], pts[k + 1], cols[k])

@@ -222,6 +222,7 @@ var throttle := 0.0
 var brake := 0.0
 var model_root: Node3D
 var shell: CarShell = null      # the shell that dents (damage on, Settings), or null
+var replay_speed := 0.0         # how fast a replay shows it now (m/s; 0 while the replay stands still): the noise of a road of dirt
 var player_tyres := false       # the player's car (World, the bench of the car editor): it can have the shell tyre (ShellTyres)
 var shell_tyres: ShellTyres = null
 var shell_mesh: SoftBodyMesh = null
@@ -695,7 +696,17 @@ func _build_visual() -> void:
 				var part := body.find_child(str(n), true, false) as Node3D
 				if part != null and not parts.has(part):
 					parts.append(part)
-		if model_wheels and not parts.is_empty():
+		# (objects of the model with the names of the wheels go before the rims and tyres of the library)
+		var named := CarModel.named_wheel_parts(body, w.slot)
+		var own_wheel := model_wheels and not parts.is_empty()
+		var add_tyre := false
+		if not own_wheel and not named.is_empty():
+			own_wheel = true
+			add_tyre = not CarModel.has_named_tyre(named, w.slot)
+			for part in named:
+				if not parts.has(part):
+					parts.append(part)
+		if own_wheel:
 			# the wheel parts of the model: their middle is the hub (the model knows best where its wheels are)
 			var box := AABB()
 			for p in parts.size():
@@ -710,6 +721,11 @@ func _build_visual() -> void:
 				part.owner = null
 				w.spin_node.add_child(part)
 				part.transform = Transform3D(Basis.IDENTITY, -w.hub_node.position) * t
+			if add_tyre:
+				var tyre := MeshInstance3D.new()
+				var made: Dictionary = lib.get("front" if w.front else "rear", {}).get("custom", {})
+				tyre.mesh = CarModel.tyre_mesh(w.radius, w.radius * float(made.get("inner_ratio", 0.68)), float(made.get("width", 0.24)))
+				w.spin_node.add_child(tyre)
 			continue
 		for part in parts:
 			part.get_parent().remove_child(part)

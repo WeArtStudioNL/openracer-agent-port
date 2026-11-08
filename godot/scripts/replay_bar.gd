@@ -161,8 +161,8 @@ func _ready() -> void:
 	var cams := _row(box)
 	_label(cams, "Camera")
 	for c in [["follow", "Follow", "The camera that follows the car"], ["cockpit", "Cockpit", "In the car"], ["bonnet", "Bonnet", "On the bonnet"],
-			["free", "Free", "A camera that you move yourself (W A S D or the arrows, Z and X up and down, click the scene to look, " +
-				"[ and ] zoom, 5 and 6 the smoothing of the look)"],
+			["free", "Free", "A camera that you move yourself: press Move camera, then W A S D or the arrows, Z and X up and down, the mouse to look, " +
+				"[ and ] zoom, 5 and 6 the smoothing of the look; Escape stops it"],
 			["cinematic", "Cinematic", "The cameras of the track: the one nearest to the car, which turns to follow it"]]:
 		_cam_buttons[c[0]] = _button(cams, c[1], c[2], func(): replay.set_camera(c[0]))
 	_cam_buttons["cinematic"].visible = not replay.cinema_cameras().is_empty()
@@ -181,12 +181,15 @@ func _ready() -> void:
 	_free_speed.tooltip_text = "How fast the free camera moves, looks and zooms (0.01 to 3)"
 	_look_label = _label(_free_row, "")
 	_look_label.tooltip_text = "The smoothing of the mouse look: 5 smoother, 6 sharper"
+	_buttons["move"] = _button(_free_row, "Move camera",
+		"The keys and the mouse move the camera, until you press Escape. Otherwise the arrows and Space are for the timeline",
+		func(): replay.free.start_moving())
 	_buttons["aim"] = _button(_free_row, "Aim at the car (F)", "The camera keeps looking at the car", func(): replay.free.toggle_aim())
 	_buttons["parent"] = _button(_free_row, "Fixed to the car (L)", "The camera goes with the car, from where it is now (its place and its turn)",
 		func(): replay.free.toggle_parent())
 	_buttons["sky"] = _button(_free_row, "Fixed, sky up (K)", "The camera goes with the car but does not turn with it: it keeps the sky up",
 		func(): replay.free.toggle_sky())
-	var hint := _label(_free_row, "WASD/arrows move · Space up · Alt down · Q E tilt · click to look · [ ] zoom")
+	var hint := _label(_free_row, "Move camera: WASD/arrows move · Space up · Alt down · Q E tilt · mouse looks · [ ] zoom · Esc stops")
 	hint.modulate.a = 0.55
 	hint.add_theme_font_size_override("font_size", 12)
 
@@ -285,6 +288,7 @@ func _process(delta: float) -> void:
 		var fs: float = r.free.speed
 		_free_speed_label.text = "Speed %s×" % ("%.2f" % fs if fs < 0.1 else "%.1f" % fs)
 		_look_label.text = "Look " + ("direct" if r.free.look_rate >= 60.0 else str(roundi(r.free.look_rate)))
+		_on(_buttons["move"], r.free.moving)
 		_on(_buttons["aim"], r.free.aim)
 		_on(_buttons["parent"], r.free.parent and not r.free.sky)
 		_on(_buttons["sky"], r.free.parent and r.free.sky)

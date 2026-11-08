@@ -22,6 +22,7 @@ var frames_total := 0
 var frame := 0
 var program: Callable               # (the video editor) func(i) -> sets the program to frame i; else the replay is moved
 var source_viewport: SubViewport = null   # (the video editor: its program monitor is filmed as it is)
+var stepped := false                # this frame the replay moved a step of the video: the cameras move once, a step of 1/30 s
 var _sub: SubViewport
 var _cam: Camera3D
 var _pending := false
@@ -52,6 +53,7 @@ func begin(r: Replay, t0: float, t1: float, spd: float, stem: String, sound := t
 		_sub.render_target_update_mode = SubViewport.UPDATE_DISABLED
 		add_child(_sub)
 		_cam = Camera3D.new()
+		_cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF     # (else it is drawn a physics step behind the place it gets)
 		_cam.current = true
 		_sub.add_child(_cam)
 		var late := _Late.new()
@@ -62,7 +64,17 @@ func begin(r: Replay, t0: float, t1: float, spd: float, stem: String, sound := t
 	if not writer.start(VideoPrefs.videos_dir(), stem, size.x, size.y, FPS, sound):
 		return false
 	_started = Time.get_ticks_msec()
+	_chase(0.0)
 	return true
+
+
+## The camera of the game follows the video and not the frames of the screen: between two pictures it rests, and it
+## takes one step per picture. (It moved with the time of the screen while the car jumped 1/30 s: the picture was taken
+## with the camera still behind the car, by more or less each time.)
+func _chase(step: float) -> void:
+	var cam := replay.game_camera()
+	if cam != null:
+		cam.film_step = step
 
 
 ## The size of the video: the outline of the aspect in the window, at most 1920 on its long side.
@@ -80,6 +92,7 @@ func progress() -> float:
 func _process(_delta: float) -> void:
 	if _done:
 		return
+	stepped = false
 	if _pending:
 		var vp := source_viewport if source_viewport != null else _sub
 		writer.add(vp.get_texture().get_image())
@@ -100,6 +113,8 @@ func _process(_delta: float) -> void:
 	else:
 		_sub.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_pending = true
+	stepped = true
+	_chase(1.0 / FPS)
 
 
 ## (late in the frame: the camera of the video is where the camera of the screen is now)
@@ -122,6 +137,7 @@ func stop() -> void:
 	if _done:
 		return
 	_done = true
+	_chase(-1.0)
 	var path := writer.finish()
 	finished.emit(path)
 	queue_free()

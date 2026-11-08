@@ -20,6 +20,7 @@ const CLEAR_SIZE := CLEAR_N * CLEAR_CELL
 const TILE := 64                     # cells per side of a tile of the cleared snow
 const RINGS := 12                    # the rings of the wheels in a puddle that the shader shows
 
+static var road_sound := ""          # a road with the texture of loose ground (dirt, gravel): the surface that it sounds like; it grips as a road
 static var wet := 0.0
 static var snow := 0.0
 static var puddle := 0.0
@@ -62,6 +63,12 @@ static func start(weather: String) -> void:
 
 ## The grip of a surface (Surfaces.js getSurface): level is the snow at the wheel (-1: the snow of the whole ground),
 ## water how deep the water of a puddle is there (0 to 1; it makes the wet at least that much more).
+## What the tyres hear on a surface: the road of a track that is drawn as dirt or gravel (track.json design.textures.road)
+## does not squeal and has the noise of that ground.
+static func sound_surface(id: String) -> String:
+	return road_sound if road_sound != "" and (id == "road" or id == "track01") else id
+
+
 static func surface(id: String, level := -1.0, water := 0.0) -> Dictionary:
 	var key := id if Content.SURFACES.has(id) else "road"
 	var base: Dictionary = Content.SURFACES[key]

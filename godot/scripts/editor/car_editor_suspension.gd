@@ -250,7 +250,10 @@ func refresh(force: bool) -> void:
 func _build(cfg: Dictionary, meas: Dictionary) -> void:
 	if _group != null and is_instance_valid(_group):
 		_group.queue_free()
-	var out := PartsLibrary.assemble(cfg, meas["centres"], meas["diameter"])
+	var model_names := []
+	for n in ed.nodes:
+		model_names.append(str(n["name"]))
+	var out := PartsLibrary.assemble(cfg, meas["centres"], meas["diameter"], model_names)
 	_group = out["group"]
 	_group.visible = not _hidden
 	ed.view.extras.add_child(_group)
@@ -267,6 +270,12 @@ func _build(cfg: Dictionary, meas: Dictionary) -> void:
 		var eyes := HFlowContainer.new()
 		eyes.add_theme_constant_override("h_separation", 6)
 		for part in PartsLibrary.parts_of(cfg, grp):
+			if part["file"] in out["from_model"][grp]:
+				var own := EditorStyle.button("▣ " + str(part["label"]), "small ghost",
+					"The model has this part itself (an object with its name): that object is used and the part of the library is not placed")
+				own.disabled = true
+				eyes.add_child(own)
+				continue
 			var hidden: bool = part["file"] in state[grp]["hidden"]
 			var eb := EditorStyle.button("👁 " + str(part["label"]), "small ghost", ("Hidden: the car's own model has this part. Click to place it from the parts library"
 				if hidden else "Placed from the parts library. Click to hide it (the car's own model has it)"))

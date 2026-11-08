@@ -10,6 +10,7 @@ var distance := 6.0
 var height := 2.4
 var look_height := 0.6
 var smoothing := 3.5
+var film_step := -1.0             # (a video is made, ReplayFilm: > 0 the step of this picture, 0 rests until the next picture; -1 not filming)
 var fov_standing := 50.0
 var fov_fast := 70.0
 var fov_full_speed := 70.0        # m/s: fov_fast from this speed (Car.js)
@@ -94,6 +95,11 @@ func _flat_forward(xf: Transform3D) -> Vector3:
 func _process(delta: float) -> void:
 	if car == null:
 		return
+	if film_step >= 0.0:
+		if film_step == 0.0:
+			return
+		delta = film_step
+		film_step = 0.0
 	var xf := car.get_global_transform_interpolated()
 	var spd := absf(car.speed)
 	CarDriver.camera_inside(car, mode == Mode.COCKPIT)

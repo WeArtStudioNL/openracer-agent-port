@@ -46,8 +46,12 @@ var shift := {"gear": -99, "neutral": false, "time": 9.0, "amp": 0.0, "angle": 0
 var g_off := Vector3.ZERO         # the give in the g-forces: where the body is pushed (the space of the car)
 var g_off_v := Vector3.ZERO
 var g_acc := Vector3.ZERO
+var chest_org := -1               # (a Rigify rig: ORG-spine.003, the bone that the shoulders hang on, beside DEF-spine.003)
+var spine_mid: Array[int] = []    # the bones of the spine between the hips and the chest: the turn of the back is shared over them
+var leg_roots: Array[int] = []    # the bones that the thighs hang on, when that is not the hips
 var ragdoll: RiderRagdoll = null
 var replay_hold := false          # a replay shows him (ReplayExtras): the ragdoll is not moved, a crash does not throw him
+var _follow := []                 # the ORG bones that are put where their DEF bones went: {def, org, from, org_rest}
 var _last_v := Vector3.ZERO
 var _last_p := Vector3.ZERO
 var _have_last := false
@@ -137,6 +141,75 @@ func _bones(names: Dictionary) -> void:
 		var b := _bone(str(names.get(key, dflt)))
 		if b >= 0:
 			bones[key] = b
+	_two_trees()
+
+
+## A rig whose arms and legs hang on a tree of their own (Rigify: ORG- beside the DEF- bones that deform the body): the
+## shoulders stay with the back only when that tree follows it (Driver.js, spineMid, legRoots, captureFollow).
+func _two_trees() -> void:
+	chest_org = -1
+	spine_mid = []
+	leg_roots = []
+	_follow = []
+	if not bones.has("chest"):
+		return
+	var chest: int = bones["chest"]
+	var nm := skel.get_bone_name(chest)
+	var is_def := nm.begins_with("DEF-")
+	if is_def:
+		chest_org = _bone("ORG-" + nm.substr(4))
+		if chest_org == chest:
+			chest_org = -1
+	var hips: int = bones.get("hips", -1)
+	if is_def:
+		var b := skel.get_bone_parent(chest)
+		while b >= 0 and b != hips and spine_mid.size() < 4:
+			spine_mid.push_front(b)
+			b = skel.get_bone_parent(b)
+		if b != hips:
+			spine_mid = []
+	for k in ["legL", "legR"]:
+		if bones.has(k):
+			var up := skel.get_bone_parent(bones[k][0])
+			if up >= 0 and up != hips and not leg_roots.has(up):
+				leg_roots.append(up)
+	var pairs := []
+	if chest_org >= 0:
+		pairs.append([chest, chest_org])
+	if hips >= 0:
+		for r in leg_roots:
+			pairs.append([hips, r])
+	for p in pairs:
+		_follow.append({"def": p[0], "org": p[1], "from": skel.get_bone_global_rest(p[0]).affine_inverse(), "org_rest": skel.get_bone_global_rest(p[1])})
+
+
+## The trunk on the bones: the pelvis, the back shared over the spine, the tree of the shoulders and the hips after them.
+func _pose_torso(chest_turn: Vector3, hip_roll: float, to_skel: Basis) -> void:
+	var hips: int = bones.get("hips", -1)
+	var chest: int = bones.get("chest", -1)
+	if hips >= 0 and absf(hip_roll) > 1e-3 and hips != chest:
+		_turn(hips, Vector3(0.0, 0.0, hip_roll), to_skel)
+	var followed := not _follow.is_empty()
+	if not followed:
+		for b in leg_roots:
+			_turn(b, Vector3(0.0, 0.0, hip_roll), to_skel)
+	var share := 1.0 / (spine_mid.size() + 1)
+	for b in spine_mid:
+		_turn(b, chest_turn * share, to_skel)
+	if chest >= 0:
+		var deform := skel.get_bone_name(chest).begins_with("DEF-")
+		if deform:
+			_turn(chest, chest_turn * share, to_skel)
+		elif not followed:
+			_turn(chest, chest_turn + Vector3(0.0, 0.0, hip_roll), to_skel)
+	if chest_org >= 0 and not followed:
+		_turn(chest_org, chest_turn + Vector3(0.0, 0.0, hip_roll), to_skel)
+	for f in _follow:
+		var m: Transform3D = BoneIK.global(skel, f["def"]) * f["from"] * f["org_rest"]
+		var up := skel.get_bone_parent(f["org"])
+		var local := (BoneIK.global(skel, up).affine_inverse() * m) if up >= 0 else m
+		skel.set_bone_pose_position(f["org"], local.origin)
+		skel.set_bone_pose_rotation(f["org"], local.basis.orthonormalized().get_rotation_quaternion())
 
 
 func _complete() -> bool:
@@ -575,10 +648,7 @@ func update(dt: float, bike: Motorcycle) -> void:
 	# keeps the turn that it had)
 	var tilt := float(st["pelvis_tilt"])
 	var hip_roll := flat * clampf(0.7 * rad_to_deg(lean), -tilt, tilt)
-	if bones.has("hips") and absf(hip_roll) > 1e-3 and bones["hips"] != bones.get("chest", -1):
-		_turn(bones["hips"], Vector3(0.0, 0.0, hip_roll), to_skel.basis)
-	if bones.has("chest"):
-		_turn(bones["chest"], Vector3(float(c[0]) + pitch, float(c[1]), float(c[2]) + roll - hip_roll), to_skel.basis)
+	_pose_torso(Vector3(float(c[0]) + pitch, float(c[1]), float(c[2]) + roll - hip_roll), hip_roll, to_skel.basis)
 	if bones.has("head"):
 		_turn(bones["head"], Vector3(float(h[0]) - 0.7 * pitch, float(h[1]) + 35.0 * float(p["look"]), float(h[2]) - 0.6 * roll), to_skel.basis)
 	# the hands on the grips (the pivot is the grip and an offset in its frame); the hand keeps its turn on the grip;

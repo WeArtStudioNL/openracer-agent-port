@@ -497,9 +497,12 @@ func update_library_preview() -> void:
 		c.queue_free()
 	var lib: Variant = Tuning.read(ed.cfg, "wheels.library")
 	var has_lib := lib is Dictionary and not (lib as Dictionary).is_empty()
+	var named_of := func(slot: String) -> Array[Node3D]:
+		return CarModel.named_wheel_parts(ed.model_root, slot)
+	var own_wheels := 0
 	var hide := func(slot: String):
 		for p in ed.wheel_part_nodes(slot):
-			if (p as Node3D).visible:
+			if (p as Node3D).visible and not (named_of.call(slot) as Array[Node3D]).has(p):
 				p.visible = false
 				p.set_meta("lib_hidden", true)
 	var lines := []
@@ -509,6 +512,14 @@ func update_library_preview() -> void:
 		var axle := "front" if s[0] == "F" else "rear"
 		var a: Dictionary = lib.get(axle, {}) if has_lib else {}
 		var centre := ed.form_hub(s)
+		# (the objects of the model with the names of the wheels are used: no rim of the library there)
+		var named: Array[Node3D] = named_of.call(s)
+		if not named.is_empty():
+			own_wheels += 1
+			if CarModel.has_named_tyre(named, s):
+				continue
+			a = a.duplicate()
+			a.erase("rim")
 		if ed.wheel_mode() == "model":
 			var bx: Variant = ed.wheel_box(s)
 			if bx == null or a.is_empty():
@@ -556,6 +567,8 @@ func update_library_preview() -> void:
 		_lib_info.text = "The demo wheel goes where the grey wheels are (the wheelbase and the tracks of the Chassis card). Choose a rim of the wheel library to see it there."
 	else:
 		_lib_info.text = ""
+	if own_wheels > 0:
+		_lib_info.text = "The model has its own wheel objects (wheel_FL, wheel_FL_rim, ...): those are used, not the rims of the library.\n" + _lib_info.text
 	if ed.model_root != null:
 		CarPaint.paint(ed.view.lib_preview, CarPaint.colors_of(ed.cfg.get("colors")))
 

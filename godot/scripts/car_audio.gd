@@ -155,7 +155,8 @@ func _physics_process(_dt: float) -> void:
 	if ReplayFx.active:
 		# (a replay: the gravel and the grass of the moment it began are not heard over it)
 		car.sound_impact = 0.0
-		_ground_under("")
+		# (but a road of dirt or gravel is heard as long as the replay plays: all of it is that ground)
+		_ground_under(Ground.road_sound if car.replay_speed > 2.0 else "", car.replay_speed)
 		return
 	var vy := car.linear_velocity.y
 	for i in 4:
@@ -191,8 +192,9 @@ func impact(strength: float) -> void:
 func _ground(speed: float) -> void:
 	var under := ""
 	for w in car.wheels:
-		if w.contact and w.surface != "road" and w.surface != "track01":
-			under = w.surface
+		var heard := Ground.sound_surface(w.surface)
+		if w.contact and heard != "road" and heard != "track01":
+			under = heard
 	_ground_under(under if GROUND_SOUND.has(under) else "", speed)
 
 

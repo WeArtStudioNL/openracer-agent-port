@@ -40,6 +40,7 @@ var _axle_fy := [0.0, 0.0]
 var _ready := false
 var _frame := 0                  # (the physics frame of the last step)
 var _deform: Array = []          # a TyreDeform per wheel
+var _frozen: Array = []                         # (the debug view in a replay: the shape of every tyre in the frame of its wheel)
 
 
 static func available() -> bool:
@@ -440,6 +441,37 @@ func draw() -> void:
 
 ## The lines of a shell (TyreShell.shells) as the debug view draws them (DebugView.js): the cables to the rim (every
 ## second one when they are at rest) by their strain, the belt, the nodes (crosses) by their contact, the rim.
+## A replay begins: the shape of every tyre is kept in the frame of its wheel (the replay has the wheels, not the tyres).
+func freeze_for_replay() -> void:
+	_frozen = []
+	for i in 4:
+		var sh: Dictionary = (tyres[i].call("shells") as Dictionary).duplicate() if i < tyres.size() and tyres[i] != null else {}
+		if sh.is_empty() or int(sh.get("count", 0)) == 0 or car.wheels[i].spin_node == null:
+			_frozen.append({})
+			continue
+		var inner: PackedVector3Array = sh["inner"]
+		var mid := Vector3.ZERO
+		for q in inner:
+			mid += q
+		mid /= maxf(1.0, inner.size())
+		var to_wheel := Transform3D(car.wheels[i].spin_node.global_transform.basis.orthonormalized(), mid).affine_inverse()
+		sh["outer"] = to_wheel * (sh["outer"] as PackedVector3Array)
+		sh["inner"] = to_wheel * inner
+		_frozen.append(sh)
+
+
+## The lines of tyre i of the debug view during a replay.
+func replay_lines(i: int, pts: Array, cols: Array) -> void:
+	if i >= _frozen.size() or (_frozen[i] as Dictionary).is_empty() or car.wheels[i].spin_node == null:
+		return
+	var sn: Node3D = car.wheels[i].spin_node
+	var to_world := Transform3D(sn.global_transform.basis.orthonormalized(), sn.global_position)
+	var sh: Dictionary = (_frozen[i] as Dictionary).duplicate()
+	sh["outer"] = to_world * (sh["outer"] as PackedVector3Array)
+	sh["inner"] = to_world * (sh["inner"] as PackedVector3Array)
+	shell_lines(sh, pts, cols)
+
+
 static func shell_lines(sh: Dictionary, pts: Array, cols: Array) -> void:
 	var outer: PackedVector3Array = sh["outer"]
 	var inner: PackedVector3Array = sh["inner"]

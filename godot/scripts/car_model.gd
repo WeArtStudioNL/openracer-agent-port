@@ -77,6 +77,28 @@ static func tyre_mesh(outer_r: float, inner_r: float, width: float, segments := 
 	return mesh
 
 
+## The objects of a model that are the wheel of a corner by their names (wheel_FL, wheel_FL_rim, wheel_FL_disc; capitals
+## and separators do not matter): these are used in place of the wheel library. [] when it has none.
+static func named_wheel_parts(body: Node3D, slot: String) -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if body == null:
+		return out
+	var base := "wheel" + slot.to_lower()
+	for n in body.find_children("*", "Node3D", true, false):
+		if SuspensionRig.clean(str(n.name)) in [base, base + "rim", base + "disc"]:
+			out.append(n as Node3D)
+	return out
+
+
+## Whether those objects are a whole wheel or a tyre (wheel_FL): else only a rim or a disc, and the tyre is still made.
+static func has_named_tyre(parts: Array[Node3D], slot: String) -> bool:
+	var base := "wheel" + slot.to_lower()
+	for p in parts:
+		if SuspensionRig.clean(str(p.name)) == base:
+			return true
+	return false
+
+
 ## A rim of the wheel library (wheels/wheels.json), turned so that its axle is the x axis and sized to the
 ## inner diameter of the tyre; a plain disc when the library does not have it.
 static func library_rim(rim_id: String, diameter: float, width: float) -> Node3D:

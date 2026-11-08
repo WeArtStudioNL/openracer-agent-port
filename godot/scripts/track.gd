@@ -23,6 +23,9 @@ var _walls: WallGrid = null
 func setup(id: String, cfg: Dictionary) -> void:
 	track_id = id
 	config = cfg
+	var look: Variant = cfg.get("design", {}).get("textures") if cfg.get("design") is Dictionary else null
+	var road_look: Variant = look.get("road") if look is Dictionary else null
+	Ground.road_sound = {"dirt": "ground", "gravel": "gravel", "sand": "sand", "mud": "mud"}.get(road_look, "")
 	name = "Track"
 	add_to_group("track")
 	start = cfg.get("start", start)

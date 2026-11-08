@@ -13,7 +13,7 @@ extends CanvasLayer
 ##                   to 4: the field of view of its camera divided by it) with keys, the camera of the clip (the
 ##                   camera track, the free camera as a fixed shot, follow, cockpit, cinematic with a look ahead and
 ##                   its keys); split, move, delete (Delete). The inspector under the timeline has them.
-##   Camera track:   the free camera of the replay (Free camera: W A S D, the arrows, Space/Alt, Q E tilt, click the
+##   Camera track:   the free camera of the replay (Free camera, then Move camera: W A S D, the arrows, Space/Alt, Q E tilt, the
 ##                   picture to look, [ ] zoom; Parent to car L, Point at car F); Key here (K) puts a key at the
 ##                   playhead; between keys the camera moves smoothly (CameraTrack). Without keys: the game camera.
 ##   Save:           with the replay (its file keeps the project and the edit as it plays: Watch plays the edit,
@@ -805,7 +805,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			head_t = total()
 			final_playing = false
 		KEY_LEFT, KEY_RIGHT:
-			if free:
+			if replay.free.moving:
 				handled = false
 			else:
 				head_t = clampf(head_t + (1.0 if event.shift_pressed else DT) * (-1.0 if code == KEY_LEFT else 1.0), 0.0, total())
@@ -827,8 +827,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_TAB:
 			replay.next_car()
 		KEY_ESCAPE:
-			if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-				Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+			replay.free.stop_moving()
 		_:
 			handled = false
 	if handled:
@@ -1037,9 +1036,6 @@ func _build() -> void:
 	monitors.add_child(right)
 	_lbl(right, "PROGRAM")
 	var prog := _monitor(right, _prog_vp)
-	prog.gui_input.connect(func(e: InputEvent):
-		if replay.free.active and e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and not replay.free.aim:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
 	_ui["empty"] = Label.new()
 	_ui["empty"].text = "Empty. Set In and Out in the source, then Insert."
 	_ui["empty"].horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1055,8 +1051,9 @@ func _build() -> void:
 	_ui["time"] = _lbl(fr, "", false)
 	var cr := _frow(right)
 	_lbl(cr, "Camera:")
-	_ui["free"] = _btn(cr, "Free camera", "Fly the camera: WASD or the arrows, Space and Alt up and down, Q and E tilt, click the picture to look, " +
+	_ui["free"] = _btn(cr, "Free camera", "Fly the camera: WASD or the arrows, Space and Alt up and down, Q and E tilt, with Move camera; " +
 		"[ and ] zoom", toggle_free)
+	_ui["move"] = _btn(cr, "Move camera", "The keys and the mouse move the free camera, until you press Escape", func(): _free_do("start_moving"))
 	_ui["parent"] = _btn(cr, "Parent to car", "The camera goes with the car, from where it is now (L)", func(): _free_do("toggle_parent"))
 	_ui["sky"] = _btn(cr, "Parent, sky up", "The camera goes with the car's place but not with its turn", func(): _free_do("toggle_sky"))
 	_ui["aim"] = _btn(cr, "Point at car", "The camera keeps looking at the car (F)", func(): _free_do("toggle_aim"))
@@ -1158,6 +1155,7 @@ func _update_ui(m: Dictionary) -> void:
 	_ui["time"].text = "%s / %s%s" % [fmt(head_t), fmt(length), at_speed]
 	var free := replay.free
 	_on(_ui["free"], free.active)
+	_on(_ui["move"], free.moving)
 	_on(_ui["parent"], free.active and free.parent and not free.sky)
 	_on(_ui["sky"], free.active and free.parent and free.sky)
 	_on(_ui["aim"], free.active and free.aim)

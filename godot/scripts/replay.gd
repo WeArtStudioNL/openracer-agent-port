@@ -205,6 +205,8 @@ func play() -> void:
 			ws.append([w.length, w.steer, w.spin, w.omega, w.squeal])
 		_saved.append({"xf": c.global_transform, "v": c.linear_velocity, "av": c.angular_velocity, "omega": c.engine.omega,
 			"wheels": ws, "mode": c.process_mode, "interp": c.physics_interpolation_mode, "steer": c.steer_angle, "gear": c.gear})
+		if c.shell_tyres != null:
+			c.shell_tyres.freeze_for_replay()
 		c.process_mode = Node.PROCESS_MODE_ALWAYS
 		c.set_physics_process(false)
 		c.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -331,8 +333,8 @@ func _process(delta: float) -> void:
 			time = start_time()
 			if direction < 0.0:
 				running = false
-	# (a held arrow keeps stepping, frame after frame; not while the free camera moves with them)
-	if editor == null and not free.active and (Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_RIGHT)):
+	# (a held arrow keeps stepping, frame after frame; not while the free camera moves with them: Move camera)
+	if editor == null and not free.moving and (Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_RIGHT)):
 		_step_held += delta
 		if _step_held > 0.35:
 			step_frame(1 if Input.is_physical_key_pressed(KEY_RIGHT) else -1)
@@ -341,7 +343,11 @@ func _process(delta: float) -> void:
 	_show(time)
 	if fx != null:
 		fx.show(time)
-	_cameras(delta)
+	# (a video: the cameras move once per picture, with the step of the picture; ReplayFilm)
+	if filming == null:
+		_cameras(delta)
+	elif filming.get("stepped"):
+		_cameras(1.0 / ReplayFilm.FPS)
 	var live := (running or editor_playing or filming != null) and not scrubbing and direction > 0.0
 	_sound(live)
 	frame_shown.emit(time)
@@ -372,6 +378,7 @@ func _show(t: float) -> void:
 		c.linear_velocity = Vector3(samples[a + P_VEL], samples[a + P_VEL + 1], samples[a + P_VEL + 2]).lerp(
 			Vector3(samples[b + P_VEL], samples[b + P_VEL + 1], samples[b + P_VEL + 2]), k)
 		c.speed = c.linear_velocity.dot(c.global_transform.basis.z)
+		c.replay_speed = c.linear_velocity.length() if (running or editor_playing or filming != null) and not scrubbing else 0.0
 		c.steer_angle = lerpf(samples[a + P_STEER], samples[b + P_STEER], k)
 		c.engine.omega = lerpf(samples[a + P_OMEGA], samples[b + P_OMEGA], k)
 		c.engine.throttle_used = lerpf(samples[a + P_THROTTLE], samples[b + P_THROTTLE], k)
@@ -500,13 +507,13 @@ func _input(event: InputEvent) -> void:
 			free.toggle_parent()
 		else:
 			free.toggle_sky()
-	elif free.active and code in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_SPACE, KEY_BRACKETLEFT, KEY_BRACKETRIGHT, KEY_SHIFT, KEY_CTRL, KEY_ALT]:
+	elif free.moving and code in [KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_SPACE, KEY_BRACKETLEFT, KEY_BRACKETRIGHT, KEY_SHIFT, KEY_CTRL, KEY_ALT]:
 		pass                          # (the free camera moves with them)
 	else:
 		match code:
 			KEY_ESCAPE:
-				if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-					Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+				if free.moving:
+					free.stop_moving()
 				elif bar != null and bar.dialog_open():
 					bar.close_dialog()
 				else:

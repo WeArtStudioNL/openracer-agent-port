@@ -2,8 +2,10 @@ class_name ReplayFreeCamera
 extends Camera3D
 ## The free camera of the replay (Replay.js "free"): moved by hand. W A S D or the arrows move it (W the way it
 ## looks, also up and down with the look; the sides are level), Z, Space and Shift up, X, Alt and Control down,
-## Q and E tilt the picture, [ and ] the field of view; click the scene and the mouse looks around (Escape lets it
-## go), a gamepad: the left stick moves, the right stick looks, the triggers up and down, the shoulders zoom.
+## Q and E tilt the picture, [ and ] the field of view, the mouse looks around: all of that only after the button Move
+## camera (start_moving; Escape ends it), so that the arrows and Space are for the timeline otherwise and a click on the
+## scene does nothing. A gamepad always moves it: the left stick moves, the right stick looks, the triggers up and down,
+## the shoulders zoom.
 ## F aims it at the car (and the mouse look rests), L fixes it to the car (its place and its turn: the frame of the
 ## car), K fixes it with the sky up (the car's place, not its turn), Tab another car. Everything is smoothed: the
 ## speed (a slider, 0.01 to 3 times) is how fast it moves, looks and zooms; 5 and 6 the smoothing of the look.
@@ -17,6 +19,7 @@ const STICK_LOOK := 2.4
 const ROLL_RATE := 1.0
 
 var active := false
+var moving := false                 # (Move camera: the keys and the mouse move the camera; Escape ends it)
 var speed := 1.0                    # 0.01 .. 3
 var pos := Vector3.ZERO             # in the frame of the world, or of the car while it is fixed to it
 var vel := Vector3.ZERO
@@ -78,6 +81,19 @@ func leave() -> void:
 	active = false
 	parent = false
 	sky = false
+	stop_moving()
+
+
+## The button Move camera: the keys and the mouse move the camera until Escape.
+func start_moving() -> void:
+	if not active:
+		return
+	moving = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func stop_moving() -> void:
+	moving = false
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -172,7 +188,7 @@ func set_speed(v: float) -> void:
 
 
 func _key(codes: Array) -> float:
-	if not keys_on:
+	if not keys_on or not moving:
 		return 0.0
 	for c in codes:
 		if Input.is_physical_key_pressed(c):
@@ -184,14 +200,8 @@ static func _stick(v: float) -> float:
 	return 0.0 if absf(v) < 0.15 else v
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if active and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT and not aim:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		get_viewport().set_input_as_handled()
-
-
 func _input(event: InputEvent) -> void:
-	if active and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not aim:
+	if active and moving and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not aim:
 		look_by(-event.relative.x * LOOK_SENSITIVITY, -event.relative.y * LOOK_SENSITIVITY)
 		get_viewport().set_input_as_handled()
 

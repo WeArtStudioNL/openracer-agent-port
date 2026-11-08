@@ -342,6 +342,10 @@ static func _place(out: Dictionary, t: String, file: String, node_name: String, 
 	var group: String = "driveline" if t == "driveline" else out["axle"]
 	if file in out["hidden"].get(group, []):
 		return null
+	if in_model(node_name, file, t, out["model"]):
+		if not file in out["from_model"][group]:
+			out["from_model"][group].append(file)
+		return null
 	var tpl := _template(t, file)
 	if t == "driveline" and file == "engine" and out["engine_model"] != "":
 		var own := _template(t, out["engine_model"])
@@ -454,11 +458,68 @@ static func _build_driveline(out: Dictionary, cfg: Dictionary, geo: Dictionary) 
 				_place(out, "driveline", "propshaft", ("susp_propshaft_" if is_live(t) else "propshaft_") + axle, ps, pe, dm["prop_%s_start" % axle], false)
 
 
-## The parts placed in the frame of the car: { group (Node3D), names, missing }.
-static func assemble(cfg: Dictionary, centres: Dictionary, diameter: float) -> Dictionary:
+## The moving parts that a model has itself, from the names of its objects (https://openracer.eu/docs.html#car-names):
+## a list of [clean name, what SuspensionRig.classify makes of it].
+static func model_parts(names: Array) -> Array:
+	var out := []
+	for n in names:
+		var what := SuspensionRig.classify(str(n))
+		if not what.is_empty():
+			out.append([SuspensionRig.clean(str(n)), what])
+	return out
+
+
+## Whether the model has this part of the library itself: then the object of the model is used and the part of the
+## library is not placed. A wishbone is the upper or the lower one; a coilover of the library (a spring round a
+## damper) gives way to any spring, damper, strut or coilover of the model at that corner.
+static func in_model(node_name: String, file: String, t: String, model: Array) -> bool:
+	if model.is_empty():
+		return false
+	var want := SuspensionRig.classify(node_name)
+	var clean_name := SuspensionRig.clean(node_name)
+	for m in model:
+		if m[0] == clean_name:
+			return true
+		if want.is_empty() or clean_name.contains("leaf") or str(m[0]).contains("leaf"):
+			continue
+		var has: Dictionary = m[1]
+		if _same_part(want, has, clean_name, str(m[0]), file, t):
+			return true
+	return false
+
+
+static func _same_part(want: Dictionary, has: Dictionary, name_a: String, name_b: String, file: String, t: String) -> bool:
+	var ka: String = want["kind"]
+	var kb: String = has["kind"]
+	if ka in ["prop", "propaxle"] and kb in ["prop", "propaxle"]:
+		return true
+	if ka != kb or want["wheel"] != has["wheel"] or want["rear"] != has["rear"]:
+		return false
+	if ka == "arm" or ka == "trailing":
+		return name_a.contains("upper") == name_b.contains("upper")
+	if ka != "spring":
+		return true
+	if file == "strut" or t == "double-wishbone":
+		return true
+	if file == "damper":
+		return _re_any(name_b, ["damper", "shock", "strut", "cylinder"])
+	return _re_any(name_b, ["spring", "coil", "strut"])
+
+
+static func _re_any(n: String, words: Array) -> bool:
+	for w in words:
+		if n.contains(w):
+			return true
+	return false
+
+
+## The parts placed in the frame of the car: { group (Node3D), names, missing, from_model }. model_names: the names of
+## the objects of the model of the car.
+static func assemble(cfg: Dictionary, centres: Dictionary, diameter: float, model_names: Array = []) -> Dictionary:
 	var group := Node3D.new()
 	group.name = "parts-library"
-	var out := {"group": group, "names": [], "missing": [], "axle": "front", "engine_model": engine_model(cfg),
+	var out := {"group": group, "names": [], "missing": [], "axle": "front", "engine_model": engine_model(cfg), "model": model_parts(model_names),
+		"from_model": {"front": [], "rear": [], "driveline": []},
 		"hidden": {"front": hidden_of(cfg, "front"), "rear": hidden_of(cfg, "rear"), "driveline": hidden_of(cfg, "driveline")}}
 	if not centres.has("FL"):
 		return out
