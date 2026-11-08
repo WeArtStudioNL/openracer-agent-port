@@ -44,11 +44,10 @@ var _seg := PackedVector3Array()
 var _seg_c := PackedColorArray()
 var _pts := PackedVector3Array()
 var _pts_c := PackedColorArray()
-var _grab := {}                     # the node that is held by the elastic: node, depth, target (frame of the car), mouse
+var _grabber: RefCounted            # the node grabber, the same as in the car editor (node_grabber.gd)
 var _cube := {}                     # the hit of the middle mouse button: face, d, u, w, v, x, t
 var _tool := ""                     # "hinge" or "break": what a right click does to a part
 var _tool_text: Label
-var _strength := 5000.0             # N/m of the elastic of the node grabber
 var _hit_kmh := 50.0
 var _tri_cache := {}
 var _last_peak := 0.0               # N: the most the last hit pushed
@@ -110,11 +109,11 @@ func set_on(value: bool) -> void:
 		if not _grid_made:
 			_make_grid()
 	else:
-		if not _grab.is_empty() or not _cube.is_empty():
-			_grab = {}
-			_cube = {}
-			if world.car != null and world.car.shell != null:
-				world.car.shell.pusher = Callable()
+		_cube = {}
+		_grabber.release()
+		_grabber.clear()
+		if world.car != null and world.car.shell != null:
+			world.car.shell.pusher = Callable()
 		_lines.clear_surfaces()
 		_points.clear_surfaces()
 		if models_hidden:
@@ -192,11 +191,12 @@ func _process(_delta: float) -> void:
 	_wheels(car)
 	if car.bike != null:
 		_rider(car, xf)
-	if not _grab.is_empty() and _grab.has("world") and car.shell != null:
-		_grab_target()
-		_seg.append_array([xf * car.shell.sb.position(int(_grab["node"])), Vector3(_grab["world"])])
-		_seg_c.append(RED)
 	_flush()
+	if _replaying():
+		_grabber.leave()
+		_grabber.clear()
+	else:
+		_grabber.frame()
 
 
 func _track_near(p: Vector3) -> void:
@@ -383,7 +383,8 @@ func _build_panel() -> void:
 	bar.add_child(close)
 	box.add_child(bar)
 	var shell := CheckBox.new()
-	shell.text = "Show the nodes and the beams"
+	shell.text = "Debug lines"
+	shell.tooltip_text = "The nodes and the beams of the shell, the tyres and the triangles of the track. The nodes of the node grabber show at the mouse anyway"
 	shell.button_pressed = bool(Settings.get_value("debug_show_shell"))
 	shell.focus_mode = Control.FOCUS_NONE
 	shell.toggled.connect(func(v: bool): Settings.set_value("debug_show_shell", v))
@@ -416,12 +417,22 @@ func _tools(box: VBoxContainer) -> void:
 	head.text = "Node grabber"
 	head.add_theme_color_override("font_color", Color(0.62, 0.69, 0.77))
 	box.add_child(head)
-	_strength = clampf(float(VideoPrefs.get_value("debug", "grab_strength", 5000.0)), 100.0, 200000.0)
+	_grabber = load("res://scripts/node_grabber.gd").new()
+	_grabber.car_of = func() -> Car: return world.car if world != null else null
+	_grabber.camera_of = func() -> Camera3D: return get_viewport().get_camera_3d()
+	_grabber.holder_of = func() -> Node: return self
+	_grabber.set_pusher = func(held: bool) -> void:
+		if world.car == null or world.car.shell == null:
+			return
+		if held:
+			world.car.shell.pusher = _push
+		elif _cube.is_empty():
+			world.car.shell.pusher = Callable()
 	_hit_kmh = clampf(float(VideoPrefs.get_value("debug", "hit_speed", 50.0)), 5.0, 200.0)
-	var elastic := _slider(box, "Elastic", 2.0, 5.3, 0.01, log(_strength) / log(10.0), func(v: float) -> String:
-		_strength = roundf(pow(10.0, v))
-		VideoPrefs.set_value("debug", "grab_strength", _strength)
-		return "%d N/m" % _strength if _strength < 10000.0 else "%.0f kN/m" % (_strength / 1000.0))
+	var elastic := _slider(box, "Elastic", 2.0, 5.3, 0.01, log(_grabber.strength) / log(10.0), func(v: float) -> String:
+		_grabber.strength = roundf(pow(10.0, v))
+		VideoPrefs.set_value("debug", "grab_strength", _grabber.strength)
+		return "%d N/m" % _grabber.strength if _grabber.strength < 10000.0 else "%.0f kN/m" % (_grabber.strength / 1000.0))
 	elastic.tooltip_text = "Press on a node of the shell with the left mouse button and drag it, held by this elastic"
 	var hit := _slider(box, "Hit (middle mouse)", 5.0, 200.0, 5.0, _hit_kmh, func(v: float) -> String:
 		_hit_kmh = v
@@ -508,19 +519,16 @@ func _replaying() -> bool:
 func _input(event: InputEvent) -> void:
 	if not on or world == null or world.car == null or _replaying():
 		return
-	var car: Car = world.car
 	var mb := event as InputEventMouseButton
-	if mb != null and mb.pressed:
-		if _panel.get_global_rect().has_point(mb.position):
-			return
-		if mb.button_index == MOUSE_BUTTON_LEFT and car.shell != null:
-			var k := _node_under(mb.position)
-			if k >= 0:
-				var cam := get_viewport().get_camera_3d()
-				var p: Vector3 = car.global_transform * car.shell.sb.position(k)
-				_grab = {"node": k, "depth": cam.global_position.distance_to(p), "mouse": mb.position}
-				_grab_target()
-				car.shell.pusher = _push
+	var over_panel := event is InputEventMouse and _panel.get_global_rect().has_point((event as InputEventMouse).position)
+	if event is InputEventMouseMotion:
+		if not _grabber.holding() and (over_panel or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED):
+			_grabber.leave()
+		else:
+			_grabber.input(event)
+	elif mb != null and mb.pressed and not over_panel:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if _grabber.input(mb):
 				get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
 			if hit_car(mb.position):
@@ -528,11 +536,8 @@ func _input(event: InputEvent) -> void:
 		elif mb.button_index == MOUSE_BUTTON_RIGHT and _tool != "":
 			_part_tool(mb.position)
 			get_viewport().set_input_as_handled()
-	elif mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and not _grab.is_empty():
-		drop()
-	elif event is InputEventMouseMotion and not _grab.is_empty():
-		_grab["mouse"] = (event as InputEventMouseMotion).position
-		_grab_target()
+	elif mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and _grabber.holding():
+		_grabber.input(mb)
 
 
 ## The node of the shell nearest to the mouse on the screen (within 30 pixels), or -1.
@@ -558,33 +563,13 @@ func _node_under(mouse: Vector2) -> int:
 	return best
 
 
-## The point under the mouse at the depth of the node, in the frame of the car.
-func _grab_target() -> void:
-	var cam := get_viewport().get_camera_3d()
-	var m: Vector2 = _grab["mouse"]
-	var at := cam.project_ray_origin(m) + cam.project_ray_normal(m) * float(_grab["depth"])
-	_grab["world"] = at
-	_grab["target"] = world.car.global_transform.affine_inverse() * at
-
-
-## Lets the node go.
-func drop() -> void:
-	_grab = {}
-	if _cube.is_empty() and world.car.shell != null:
-		world.car.shell.pusher = Callable()
-
-
 ## In every small step of the shell: the elastic pulls its node, the cube presses on the nodes under its face.
 func _push(h: float) -> void:
 	var car: Car = world.car
 	if car.shell == null:
 		return
 	var sb := car.shell.sb
-	if not _grab.is_empty() and _grab.has("target"):
-		var k: int = _grab["node"]
-		var f := (Vector3(_grab["target"]) - sb.position(k)) * _strength - sb.w[k] * 2.0 * sqrt(_strength * sb.mass[k])
-		sb.force[k] += f
-		sb.quiet = false
+	_grabber.push(h)
 	if _cube.is_empty():
 		return
 	# (the cube flies in the world: the car that it pushes moves away from it; in the frame of the car for the nodes)
@@ -622,7 +607,7 @@ func _push(h: float) -> void:
 	_last_peak = _cube["peak"]
 	if (v_rel < 0.0 and float(_cube["x"]) < -0.05) or float(_cube["x"]) > HIT_START + 1.5 or _cube["t"] > 3.0:
 		_cube = {}
-		if _grab.is_empty():
+		if not _grabber.holding():
 			car.shell.pusher = Callable()
 
 

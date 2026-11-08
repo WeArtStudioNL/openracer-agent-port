@@ -946,7 +946,7 @@ faded, Save keeps it (`hud_layout`). `--edit-hud=gauge` opens it for a screensho
 resumes (in the main menu it goes on), L1/R1 change the tab of the settings; the tuning menu takes the pad while it holds
 a race.
 
-**Debug view** (0, `scripts/debug_view.gd`, DebugView.js): the triangles of the track near the car, the nodes and beams of
+**Debug view** (0, `scripts/debug_view.gd`, DebugView.js; the node grabber `scripts/node_grabber.gd` shows the nodes near the mouse with or without Debug lines, as in the car editor): the triangles of the track near the car, the nodes and beams of
 the shell, the engine bay and the radiator, the contacts of the wheels; a panel with the node grabber (the left mouse
 button on a node drags it on an elastic; its strength a slider), the hit of the middle mouse button (a cube of a tonne at
 the speed of the slider, along the view, against the shell; the car feels it; on a tyre the wheel takes the damage by
