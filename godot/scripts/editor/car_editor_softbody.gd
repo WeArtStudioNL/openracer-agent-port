@@ -130,8 +130,9 @@ func _immediate(points: bool, priority: int) -> ImmediateMesh:
 # ---- the card
 
 func _build(b: VBoxContainer) -> void:
-	b.add_child(EditorStyle.tipline("Dents, breaks, loose parts", "The shell of the car: nodes and beams made from the model that dent, with a yield " +
-		"force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take."))
+	ui["line"] = EditorStyle.tipline("Dents, breaks, loose parts", "The shell of the car: nodes and beams made from the model that dent, with a yield " +
+		"force and a break force, and parts that swing on a hinge or come loose. Show the shell, click a node or a beam in the view and set what it can take.")
+	b.add_child(ui["line"])
 	ui["body"] = b
 	ui["tune"] = VBoxContainer.new()
 	ui["tune"].visible = false
@@ -177,6 +178,7 @@ func _build(b: VBoxContainer) -> void:
 	def_b.pressed.connect(clear_selected)
 	sf.add_child(def_b)
 	var mr := EditorStyle.row(b)
+	ui["make_row"] = mr
 	var most := func():
 		if not (Tuning.read(ed.cfg, "softbody.layout") is Array):
 			changed()
@@ -195,6 +197,7 @@ func _build(b: VBoxContainer) -> void:
 	ed.bind_number(b, "softbody.wheel_strength", "wheel strength (kN·s of a hit that tears it off, 0: never)", 1.0, NAN, NAN, 1.0, "25",
 		func(): changed(), true)
 	var er := EditorStyle.row(b)
+	ui["edit_row"] = er
 	ui["edit"] = EditorStyle.button("Edit nodes", "small", "Click the model to put a node on it, select nodes and remove them")
 	ui["edit"].pressed.connect(func(): set_editing(not editing))
 	er.add_child(ui["edit"])
@@ -397,6 +400,7 @@ func fill(_cfg: Dictionary) -> void:
 
 func on_model(_root: Node3D) -> void:
 	_tri_cache.clear()
+	_beams_mode()
 	if shown:
 		changed()
 
@@ -434,6 +438,21 @@ func read(c: Dictionary) -> void:
 		c.erase("parts")
 	else:
 		c["parts"] = list
+
+
+## A model with an object "beams" (softbody_beams, shell_beams) has its shell (CollisionProxy): the scan, the fill and the
+## editing of nodes make nodes that are not used then, so they are not shown (car-editor.js refreshReady, sbLine).
+func _beams_mode() -> void:
+	var beams := false
+	var re := RegEx.create_from_string("(?i)^(softbody|shell)?beams?$")
+	var letters := RegEx.create_from_string("[^a-zA-Z]")
+	for n in ed.nodes:
+		beams = beams or re.search(letters.sub(str(n["name"]), "", true)) != null
+	var title := (ui["line"] as Control).find_children("*", "Label", true, false)
+	if not title.is_empty():
+		(title[0] as Label).text = "Shell from the beams of the model" if beams else "Dents, breaks, loose parts"
+	for k in ["make_row", "scan_inside", "edit_row"]:
+		(ui[k] as Control).visible = not beams
 
 
 ## A change of the shell: the car is not saved, and the shell is made again a moment after the last change (when it is

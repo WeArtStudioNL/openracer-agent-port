@@ -241,6 +241,20 @@ func _design_track() -> void:
 	_key(KEY_ENTER)
 	_check((ed.design.data["patches"] as Array).size() == 1 and ed.design.patch_group.get_child_count() == 1, "Surfaces: an area of gravel")
 	_edge_over_curb()
+	# a surface of its own: a colour, with the grip of sand (chosen for the next area)
+	ed.select("")
+	TrackEditorPanels._surface_editor(ed, "new")
+	(ed.ui["dsSurfaceName"] as LineEdit).text = "Red sand"
+	(ed.ui["dsSurfaceColour"] as ColorPickerButton).color = Color("#aa4433")
+	(ed.ui["dsSurfaceGrip"] as OptionButton).select(3)
+	TrackEditorPanels._surface_save(ed)
+	var customs: Array = ed.design.data.get("surfaces", [])
+	_check(customs.size() == 1 and customs[0]["label"] == "Red sand" and customs[0]["grip"] == "sand" and customs[0]["colour"] == "#aa4433"
+		and ed.patch_surface == "c:" + str(customs[0]["id"]) and ed.design.surface_of(ed.patch_surface)["role"] == "sand",
+		"New surface: a surface of the track, chosen for the next area")
+	ed.patch_surface = "gravel"
+	_check(is_equal_approx(TrackEditorIO.distance_of("400 ft"), 121.92) and TrackEditorIO.distance_of("120") == 120.0 and is_nan(TrackEditorIO.distance_of("far")),
+		"Scale by two points takes metres or feet")
 	# two cinematic cameras beside the road (the replay of a drive here films from them)
 	ed.set_mode("camera")
 	for k in [2, 6]:

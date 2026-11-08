@@ -602,6 +602,9 @@ func refresh() -> void:
 				(r["reset"] as Button).modulate.a = 1.0 if changed else 0.0
 				if key.begins_with("rubber_"):
 					(r["label"] as Label).text = str(r["text"]) + " · " + _rubber_label(x)
+				elif key.begins_with("tread_"):
+					var rubber: Variant = v.get("rubber_" + key.substr(6))
+					(r["label"] as Label).text = str(r["text"]) + " · " + tread_label(x, float(rubber) if rubber is float or rubber is int else 50.0)
 			"select":
 				EditorStyle.select_value(r["pick"], value if value != null else "")
 			"tick":
@@ -626,6 +629,16 @@ static func _rubber_label(x: float) -> String:
 			d = absf(float(s[1]) - x)
 			best = s[0]
 	return names.get(best, best)
+
+
+## What pattern a tread is (Wheel.js treadPattern, treadLabel): knobbly, all-terrain, or a road tyre or a slick by its rubber.
+static func tread_label(tread: float, rubber: float) -> String:
+	var at := clampf(tread, 0.0, 100.0)
+	if at >= 75.0:
+		return "Knobbly"
+	if at >= 25.0:
+		return "All-terrain"
+	return "Slick" if rubber >= 75.0 else "Road"
 
 
 func sync_visibility() -> void:

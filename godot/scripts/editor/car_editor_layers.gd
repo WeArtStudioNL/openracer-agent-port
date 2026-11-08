@@ -312,6 +312,8 @@ func frame() -> void:
 		return
 	var cams: Dictionary = ed.cfg.get("cameras", {})
 	var r := ed.num("chassis.tire_diameter", 0.65) / 2.0
+	# (the cockpit camera does not see the driver, as in the game, which hides the head and the body inside)
+	ed.view.thumb_camera.cull_mask = 1 | (CarEditorView.DRIVER_LAYER if id == "follow" else 0)
 	if id == "follow":
 		var f: Dictionary = cams.get("follow", {})
 		var pos := Vector3(0, float(f.get("height", 2)) - r, -float(f.get("distance", 6)))
@@ -455,6 +457,8 @@ func placed_on_model() -> Array:
 		list.append("the exhaust points")
 	if ed.cfg.get("driver") is Dictionary:
 		list.append("the driver")
+	if (ed.cfg.get("parts", []) as Array).any(func(p: Variant) -> bool: return p is Dictionary and (p.has("mounts") or p.has("hinge"))):
+		list.append("the hinges and pins of the parts")
 	return list
 
 

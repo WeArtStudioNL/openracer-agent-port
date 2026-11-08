@@ -419,10 +419,13 @@ static func _gates_card(ed: TrackEditor) -> void:
 	var grid := VBoxContainer.new()
 	ed.ui["gridList"] = grid
 	b.add_child(grid)
-	b.add_child(hbox([button("Fill the grid", func(): _fill_grid(ed), "Boxes 2 to 8 behind box 1: two wide and staggered"), button("Clear the grid", func():
-		ed.grid.clear()
-		ed.select("")
-		ed.changed())]))
+	b.add_child(hbox([button("Fill the grid", func():
+		confirm_if(ed, ed.grid.size() > 1, "Make the grid again?", "Boxes 2 to %d are put behind box 1 again." % ed.grid.size(), "Make the grid",
+			func(): _fill_grid(ed)), "Boxes 2 to 8 behind box 1: two wide and staggered"), button("Clear the grid", func():
+		confirm_if(ed, ed.grid.size() > 1, "Clear the grid?", "All %d boxes." % ed.grid.size(), "Clear", func():
+			ed.grid.clear()
+			ed.select("")
+			ed.changed()))]))
 	var gw := number(24, 2, 400, 1, func(v: float): ed.gate_width = v)
 	b.add_child(hbox([field("Width of new gates (m)", gw), field(" ", button("Gate 1 at the start", func(): _gate_at_start(ed)))]))
 	var count := number(8, 2, 40, 1, func(_v: float): pass)
@@ -445,14 +448,28 @@ static func _pit_card(ed: TrackEditor) -> void:
 	var list := VBoxContainer.new()
 	ed.ui["pitList"] = list
 	b.add_child(list)
-	b.add_child(hbox([button("Fill the pit boxes", func(): _fill_pit(ed), "Boxes 2 to 8 in a row after box 1, 10 m apart"), button("Clear the pit boxes", func():
-		ed.pit_boxes.clear()
-		ed.select("")
-		ed.changed())]))
+	b.add_child(hbox([button("Fill the pit boxes", func():
+		confirm_if(ed, ed.pit_boxes.size() > 1, "Make the pit boxes again?", "Boxes 2 to %d are put in a row after box 1." % ed.pit_boxes.size(),
+			"Make the boxes", func(): _fill_pit(ed)), "Boxes 2 to 8 in a row after box 1, 10 m apart"), button("Clear the pit boxes", func():
+		confirm_if(ed, ed.pit_boxes.size() > 1, "Clear the pit boxes?", "All %d boxes." % ed.pit_boxes.size(), "Clear", func():
+			ed.pit_boxes.clear()
+			ed.select("")
+			ed.changed()))]))
 	b.add_child(label("Pit line: the path that the AI cars follow to their box and back. Choose Pit line in the toolbar and click on the road in the order that a " +
 		"car drives: from the racing line, through the boxes, back to the racing line.", true, 12))
 	ed.ui["pitLineNote"] = label("", true, 12)
 	b.add_child(ed.ui["pitLineNote"])
+	# (a track of before has a pit area of its own, a polygon: it is drawn and can be taken away)
+	var old_pit := HBoxContainer.new()
+	var old_text := label("", true, 12)
+	old_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	old_pit.add_child(old_text)
+	old_pit.add_child(button("Remove", func():
+		ed.pit_polygon = []
+		ed.changed()))
+	ed.ui["oldPit"] = old_pit
+	ed.ui["oldPitText"] = old_text
+	b.add_child(old_pit)
 	b.add_child(hbox([button("Undo the last point", func():
 		if not ed.pit_line.is_empty():
 			ed.pit_line.pop_back()
@@ -481,11 +498,27 @@ static func _objects_card(ed: TrackEditor) -> void:
 	var flow := HFlowContainer.new()
 	for type in DesignPrefabs.LIST:
 		var info: Dictionary = DesignPrefabs.INFO[type]
-		var tex := ""
-		var pb := button("%s %s" % [info["icon"], info["label"]], func(): TrackEditorIO.use_prefab(ed, type, tex))
+		var choices: Array = DesignPrefabs.TEXTURE_CHOICES.get(type, [])
+		var tex := [str(choices[0]) if not choices.is_empty() else ""]
+		var pb := button("%s %s" % [info["icon"], info["label"]], func(): TrackEditorIO.use_prefab(ed, type, tex[0]))
 		_tile(pb)
+		pb.tooltip_text = info["label"] + (": stands in the track and is hit" if info["role"] == "scenery" else ": only drawn") + " — click to place it"
 		ed.thumbs.request("prefab:" + type, func() -> Node3D: return DesignPrefabs.make(type, ""), _set_icon.bind(pb))
-		flow.add_child(pb)
+		if choices.is_empty():
+			flow.add_child(pb)
+			continue
+		# (a prefab with textures: the texture to place it with, under its tile)
+		var cell := VBoxContainer.new()
+		cell.add_theme_constant_override("separation", 1)
+		cell.add_child(pb)
+		var pick := OptionButton.new()
+		for t in choices:
+			pick.add_item(str(t))
+		pick.tooltip_text = "The texture of the " + str(info["label"]).to_lower()
+		pick.add_theme_font_size_override("font_size", 11)
+		pick.item_selected.connect(func(i: int): tex[0] = str(choices[i]))
+		cell.add_child(pick)
+		flow.add_child(cell)
 	pre.add_child(flow)
 	b.add_child(pre)
 	var list := VBoxContainer.new()
@@ -773,7 +806,12 @@ static func _gate_at_start(ed: TrackEditor) -> void:
 	ed.changed()
 
 
-static func _auto_gates(ed: TrackEditor) -> void:
+static func _auto_gates(ed: TrackEditor, asked := false) -> void:
+	if not ed.gates.is_empty() and not asked:
+		var n := clampi(int(ed.ui["gatesCount"].value), 2, 40)
+		ask(ed, "Replace the gates?", "The %d gates that are there go; %d new ones come along the line." % [ed.gates.size(), n], "Replace",
+			func(): _auto_gates(ed, true))
+		return
 	var src := ed.line.line_source()
 	if src.size() < 10:
 		ed.status("Auto gates needs a racing line (draw one) or a road drawn with nodes.", "error")
@@ -836,6 +874,14 @@ static func _record_line(ed: TrackEditor) -> void:
 		go.call()
 
 
+## Asks first when it is so (a bulk replace or clear: track-editor.js clearOk and the questions of gridAuto, pitAuto, gatesAuto), else does it.
+static func confirm_if(ed: TrackEditor, cond: bool, title: String, text: String, ok: String, then: Callable) -> void:
+	if cond:
+		ask(ed, title, text, ok, then)
+	else:
+		then.call()
+
+
 static func _test_drive(ed: TrackEditor) -> void:
 	if ed.history.unsaved() or ed.existing_id == "":
 		if not TrackEditorIO.save(ed):
@@ -870,6 +916,102 @@ static func _pick_file(ed: TrackEditor, filters: Array, done: Callable) -> void:
 	dlg.canceled.connect(dlg.queue_free)
 	ed.add_child(dlg)
 	dlg.popup_centered_ratio(0.6)
+
+
+## At the start (track-editor.js startDialog): open the track of last time again, open a track (the picker), make one from a height
+## map, or a new track.
+static func start_dialog(ed: TrackEditor) -> void:
+	var dlg := AcceptDialog.new()
+	dlg.title = "Track editor"
+	dlg.ok_button_text = "New track"
+	var v := VBoxContainer.new()
+	v.custom_minimum_size.x = 440
+	v.add_theme_constant_override("separation", 8)
+	v.add_child(label("What do you want to do?", false, 13))
+	var choice := func(title: String, hint: String, action: Callable) -> void:
+		var b := Button.new()
+		b.text = title + "\n" + hint
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.custom_minimum_size.y = 52
+		b.pressed.connect(func():
+			dlg.hide()
+			dlg.queue_free()
+			action.call())
+		v.add_child(b)
+	var last_id := str(Settings.get_value("editor_last_track"))
+	var last: Array = ed.tracks.filter(func(t: Dictionary) -> bool: return t["id"] == last_id)
+	if not last.is_empty():
+		choice.call("Open “%s” again" % last[0].get("name", last_id), "The track you opened last", func(): TrackEditorIO.open(ed, last_id))
+	choice.call("Open track", "%d tracks to change" % ed.tracks.size() if not ed.tracks.is_empty() else "There are no tracks yet", func():
+		if not ed.tracks.is_empty():
+			track_picker(ed))
+	choice.call("Import height map", "A track from a height map (16 bit grey PNG) and a colour map", func(): _height_dialog(ed))
+	choice.call("New track", "Start empty: import a model, or draw the road with nodes", func(): pass)
+	dlg.add_child(v)
+	dlg.confirmed.connect(dlg.queue_free)
+	dlg.canceled.connect(dlg.queue_free)
+	ed.add_child(dlg)
+	dlg.popup_centered()
+
+
+## Open track: every track a tile with its picture (preview.webp), a search by name or id; a click opens it.
+static func track_picker(ed: TrackEditor) -> void:
+	var dlg := AcceptDialog.new()
+	dlg.title = "Open a track"
+	dlg.ok_button_text = "Back"
+	var v := VBoxContainer.new()
+	v.custom_minimum_size = Vector2(640, 520)
+	var search := LineEdit.new()
+	search.placeholder_text = "Search by name or id"
+	search.clear_button_enabled = true
+	v.add_child(search)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	v.add_child(sc)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(grid)
+	var tiles: Array = []
+	var chosen := [false]
+	for t in ed.tracks:
+		var id: String = t["id"]
+		var b := Button.new()
+		b.text = "%s\n%s" % [t.get("name", id), id]
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.expand_icon = false
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(300, 0)
+		var pic := Content.path("tracks/%s/preview.webp" % id)
+		var img := Image.load_from_file(pic) if FileAccess.file_exists(pic) else null
+		if img != null and not img.is_empty():
+			img.resize(288, 162, Image.INTERPOLATE_BILINEAR)
+			b.icon = ImageTexture.create_from_image(img)
+		b.set_meta("find", ("%s %s" % [t.get("name", ""), id]).to_lower())
+		b.pressed.connect(func():
+			chosen[0] = true
+			dlg.hide()
+			dlg.queue_free()
+			TrackEditorIO.open(ed, id))
+		grid.add_child(b)
+		tiles.append(b)
+	search.text_changed.connect(func(q: String):
+		for b in tiles:
+			(b as Button).visible = q.strip_edges() == "" or str((b as Button).get_meta("find")).contains(q.strip_edges().to_lower()))
+	dlg.add_child(v)
+	dlg.confirmed.connect(func():
+		dlg.queue_free()
+		start_dialog(ed))
+	dlg.canceled.connect(func():
+		dlg.queue_free()
+		if not chosen[0]:
+			start_dialog(ed))
+	ed.add_child(dlg)
+	dlg.popup_centered()
+	search.grab_focus.call_deferred()
 
 
 static func _height_dialog(ed: TrackEditor) -> void:
@@ -924,6 +1066,31 @@ static func ask(ed: TrackEditor, title: String, text: String, ok: String, then: 
 			otherwise.call())
 	ed.add_child(dlg)
 	dlg.popup_centered()
+
+
+## A line of text asked for (the browser's prompt): then.call(text), "" when it was cancelled.
+static func ask_text(ed: TrackEditor, title: String, text: String, then: Callable) -> void:
+	var dlg := ConfirmationDialog.new()
+	dlg.title = title
+	var v := VBoxContainer.new()
+	v.add_child(label(text, true))
+	v.custom_minimum_size.x = 420
+	var edit := LineEdit.new()
+	v.add_child(edit)
+	dlg.add_child(v)
+	var done := [false]
+	var finish := func(answer: String):
+		if done[0]:
+			return
+		done[0] = true
+		dlg.queue_free()
+		then.call(answer)
+	dlg.confirmed.connect(func(): finish.call(edit.text.strip_edges()))
+	edit.text_submitted.connect(func(t: String): finish.call(t.strip_edges()))
+	dlg.canceled.connect(func(): finish.call(""))
+	ed.add_child(dlg)
+	dlg.popup_centered()
+	edit.grab_focus.call_deferred()
 
 
 static func ask_number(ed: TrackEditor, title: String, text: String, value: float, then: Callable) -> void:
@@ -992,6 +1159,8 @@ static func refresh(ed: TrackEditor) -> void:
 	ed.ui["gateNote"].text = "%d boxes, %d gates" % [ed.grid.size(), ed.gates.size()]
 	ed.ui["pitNote"].text = "%d boxes%s" % [ed.pit_boxes.size(), ", a pit line" if ed.pit_line.size() >= 2 else ""]
 	ed.ui["pitLineNote"].text = "%d points" % ed.pit_line.size() if not ed.pit_line.is_empty() else "No pit line."
+	ed.ui["oldPit"].visible = not ed.pit_polygon.is_empty()
+	ed.ui["oldPitText"].text = "The old pit area (%d points) is still in the track" % ed.pit_polygon.size()
 	ed.ui["cameraNote"].text = "%d" % ed.cameras.size() if not ed.cameras.is_empty() else "none"
 	ed.ui["objectNote"].text = "%d placed" % ed.objects.size() if not ed.objects.is_empty() else ("%d models" % ed.models.size() if not ed.models.is_empty() else "none")
 	ed.ui["curbNote"].text = "%d curb%s" % [ed.curbs.size(), "" if ed.curbs.size() == 1 else "s"] if not ed.curbs.is_empty() else "none"
@@ -1126,21 +1295,27 @@ static func _object_model(ed: TrackEditor) -> void:
 	var kinds := ["rigid", "static", "decor"]
 	var kind := options(["Rigid", "Static", "Decor"], maxi(0, kinds.find(m["kind"])), func(i: int):
 		m["kind"] = kinds[i]
+		TrackEditorIO.remember_in_library(ed, m)
 		ed.changed())
 	var origin := options(["Origin: middle of the base", "Origin: as in the file"], 0 if m.get("pivot") != null else 1, func(i: int):
 		m["pivot"] = m["base"] if i == 0 else null
 		ed.parts_kit.show_objects()
 		ed.changed())
-	var mass := number(float(m.get("mass", 0)), 0, 1e6, 5, func(v: float): m["mass"] = v)
+	var mass := number(float(m.get("mass", 0)), 0, 1e6, 5, func(v: float):
+		m["mass"] = v
+		TrackEditorIO.remember_in_library(ed, m))
 	mass.tooltip_text = "kg (0: from its size)"
 	box.add_child(hbox([origin, kind, mass]))
 	box.add_child(hbox([button("Place", func(): ed.set_mode("object")), button("Remove from the track", func():
-		ed.models.erase(ed.object_model)
-		ed.objects = ed.objects.filter(func(o: Dictionary) -> bool: return o["model"] != ed.object_model)
-		ed.object_model = ""
-		ed.parts_kit.show_objects()
-		ed.select("")
-		ed.changed())]))
+		var name := ed.object_model
+		confirm_if(ed, ed.objects.any(func(o: Dictionary) -> bool: return o["model"] == name), "Remove this model?",
+			"The objects that stand in the track go too.", "Remove", func():
+				ed.models.erase(name)
+				ed.objects = ed.objects.filter(func(o: Dictionary) -> bool: return o["model"] != name)
+				ed.object_model = ""
+				ed.parts_kit.show_objects()
+				ed.select("")
+				ed.changed()))]))
 
 
 static func _library(ed: TrackEditor) -> void:
@@ -1170,6 +1345,18 @@ static func _library(ed: TrackEditor) -> void:
 			ed.thumbs.request(path, func() -> Node3D: return ModelThumbs.load_glb(path), _set_icon.bind(b))
 		if ed.object_model == file:
 			b.add_theme_color_override("font_color", Color("ffd04d"))
+		if TrackEditorIO.library_writable(e["path"]):
+			var x := Button.new()
+			x.text = "×"
+			x.flat = true
+			x.tooltip_text = "Take it out of the library (the tracks that use it keep their copy)"
+			x.pressed.connect(func():
+				ask(ed, "Take “%s” out of the library?" % e["name"], "The tracks that use it keep their own copy.", "Remove", func():
+					TrackEditorIO.remove_from_library(ed, e)
+					refresh(ed)))
+			b.add_child(x)
+			x.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+			x.position = Vector2(-22, 0)
 		flow.add_child(b)
 	# the models of this track that the library has not got
 	for name in ed.models:
@@ -1179,6 +1366,18 @@ static func _library(ed: TrackEditor) -> void:
 			ed.object_model = name
 			ed.set_mode("object"))
 		_tile(b)
+		b.tooltip_text = "A model of this track: click to place it. + keeps it in the library."
+		var keep := Button.new()
+		keep.text = "+"
+		keep.flat = true
+		keep.tooltip_text = "Keep it in the library"
+		keep.pressed.connect(func():
+			if TrackEditorIO.keep_in_library(ed, name):
+				ed.status("Kept in the library.", "ok")
+				refresh(ed))
+		b.add_child(keep)
+		keep.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		keep.position = Vector2(-22, 0)
 		var m: Dictionary = ed.models[name]
 		if m.get("scene") is Node3D:
 			ed.thumbs.request("track:%s:%s" % [name, m.get("source", "")], func() -> Node3D: return (m["scene"] as Node3D).duplicate(), _set_icon.bind(b))

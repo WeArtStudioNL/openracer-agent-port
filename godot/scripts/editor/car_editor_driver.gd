@@ -448,6 +448,8 @@ func _install(scene: Node3D, config: Dictionary, fresh: bool) -> void:
 		d.place()
 		d.turned_round = true
 	driver = d
+	for m in d.root.find_children("*", "MeshInstance3D", true, false):
+		(m as MeshInstance3D).layers = CarEditorView.DRIVER_LAYER
 	_ring_from_config()
 	_sync_targets()
 	_fill_bones()

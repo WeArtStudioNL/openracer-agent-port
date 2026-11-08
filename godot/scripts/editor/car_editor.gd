@@ -115,6 +115,8 @@ func _ready() -> void:
 	engine.build_test_bar()
 	layers.build_view_tools()
 	_refresh_list()
+	# a .glb or .gltf dropped on the window is the model (car-editor.js: the drop on the page)
+	get_window().files_dropped.connect(_files_dropped)
 	var wanted := Content.arg("editor-car")
 	if wanted != "" and _has_car(wanted):
 		load_existing(wanted)
@@ -591,6 +593,17 @@ func _set_root(root: Node3D) -> void:
 
 
 ## Files picked in the dialog (a .glb, or a .gltf with its .bin and textures).
+func _files_dropped(files: PackedStringArray) -> void:
+	if not is_visible_in_tree():
+		return
+	var models := Array(files).filter(func(f: String) -> bool: return f.get_extension().to_lower() in ["glb", "gltf"])
+	if models.is_empty():
+		status("Drop a .glb (or a .gltf with its files) to load it as the model.", "error")
+		return
+	# (a .gltf comes with its .bin and pictures: the files dropped with it)
+	load_model_files(files if models[0].get_extension().to_lower() == "gltf" else PackedStringArray([models[0]]))
+
+
 func load_model_files(paths: PackedStringArray) -> void:
 	var main := ""
 	for p in paths:
@@ -874,7 +887,7 @@ func update_helpers() -> void:
 		view.grid.position.y = -radius
 	engine.update_speed_info()
 	var box := CarEditorView.bounds_of(view.pivot)
-	view.hud.text = "Import a .glb model to make a car (Model card)" if model_root == null else (
+	view.hud.text = "Drop a .glb file here, or import one (Model card), to make a car" if model_root == null else (
 		"Blue arrow: forward. The axes are the origin: it has to be at the height of the " +
 		"wheel axles, between the axles.\nModel %.2f x %.2f x %.2f m (width x height x length)" % [box.size.x, box.size.y, box.size.z])
 	layers.update_camera_markers()

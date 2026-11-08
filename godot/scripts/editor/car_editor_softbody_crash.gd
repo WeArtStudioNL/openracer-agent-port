@@ -203,6 +203,7 @@ func start() -> void:
 	ed.view.camera.position = c.global_position + Vector3(-10.5, 4.0, -3.0)
 	ed.view.camera.look_at(ed.view.target)
 	ed.engine.show_test_bar(false)
+	ed.view.hide_chrome(true)
 	_bar.visible = true
 	if ed.view.gizmo.target != null:
 		ed.view.gizmo.detach()
@@ -219,6 +220,7 @@ func _clear_wall() -> void:
 		wall.queue_free()
 		wall = null
 	run = {}
+	ed.view.hide_chrome(false)
 
 
 ## Stop crash test: the wall goes, the bench stops and the editor is back at the model; the camera where it was.

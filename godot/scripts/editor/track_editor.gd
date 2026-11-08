@@ -129,6 +129,9 @@ func _ready() -> void:
 		TrackEditorIO.open(self, want)
 	else:
 		TrackEditorIO.new_track(self)
+		# (opened from the menu without a track: what to do; not for the tests, which give their folder)
+		if want == "" and not has_meta("out") and Content.arg("editor-out") == "" and Content.arg("shot") == "":
+			TrackEditorUI.start_dialog.call_deferred(self)
 	history.offer_draft.call_deferred()
 	# back from recording the racing line: what came of it
 	match str(get_meta("line_result", "")):

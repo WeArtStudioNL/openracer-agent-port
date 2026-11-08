@@ -70,6 +70,7 @@ const DEFAULTS := {
 	"controls": {},               # the bindings that the player set (Controls)
 	"tunes": {},                  # car -> the tune in use (its file)
 	"editor_test_track": "testtrack",   # the track of Save and test of the car editor, the last one chosen
+	"editor_last_track": "",      # the track that the track editor opened last (its start dialog offers it)
 	# the graphics (Graphics, the Graphics page of web/js/Graphics.js): a preset is a set of these
 	"gfx_preset": "high",
 	"gfx_resolution": "native",   # "native" or the height of the picture in pixels (720, 1080, 1440, 2160)

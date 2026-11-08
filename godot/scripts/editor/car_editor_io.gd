@@ -609,7 +609,24 @@ func _write(dir: String, plan: Dictionary) -> String:
 		OS.move_to_trash(old_path)
 	if repo_web() != "" and dir.begins_with(repo_web()):
 		write_index(repo_web().path_join("cars"))
+	_new_picture(dir)
 	return ""
+
+
+## The picture in the menu is made again from the car as it is now (car-editor.js: preview.webp deleted after a save):
+## the old preview.webp of the folder goes to the Trash, and the picture the menu drew of the car before is forgotten.
+func _new_picture(dir: String) -> void:
+	var id := dir.get_file()
+	if FileAccess.file_exists(dir.path_join("preview.webp")):
+		OS.move_to_trash(dir.path_join("preview.webp"))
+	CarInfo._textures.erase(dir.path_join("preview.webp"))
+	if ed.save_root_override != "":
+		return                       # (a test: nothing of the player's)
+	var drawn := Settings.path("previews/%s.png" % id)
+	CarInfo._textures.erase(drawn)
+	CarInfo._rendering.erase(id)
+	if FileAccess.file_exists(drawn):
+		DirAccess.remove_absolute(drawn)
 
 
 func _saved(id: String, dir: String, c: Dictionary) -> void:
