@@ -84,6 +84,7 @@ var _tick := 0.0
 
 func _ready() -> void:
 	name = "CarEditor"
+	get_tree().node_added.connect(_no_wheel_on_sliders)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	theme = EditorStyle.make_theme()
 	io = CarEditorIO.new(self)
@@ -514,6 +515,12 @@ func new_car(kind := "car") -> void:
 		EditorStyle.select_value(existing_pick, "")
 	set_dirty(false)
 	status("")
+
+
+## The mouse wheel scrolls the cards: a slider only changes by dragging it (or by the number in its field).
+func _no_wheel_on_sliders(node: Node) -> void:
+	if node is Slider:
+		(node as Slider).scrollable = false
 
 
 ## A car of the list into the form: always the car as made (Default), whatever tune the game has chosen for it.
