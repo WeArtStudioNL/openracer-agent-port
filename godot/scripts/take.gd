@@ -59,8 +59,9 @@ func _replay() -> Replay:
 	return world.get("replay") as Replay if world != null else null
 
 
-func _unhandled_key_input(event: InputEvent) -> void:
-	if event.pressed and not event.echo and event.physical_keycode == KEY_5:
+func _unhandled_input(event: InputEvent) -> void:
+	# (the key of Settings, Controls, 5 as it comes; the Record button of the touch controls is the same action)
+	if event.is_action_pressed("take") and not event.is_echo():
 		toggle()
 		get_viewport().set_input_as_handled()
 

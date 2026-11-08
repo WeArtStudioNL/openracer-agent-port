@@ -107,6 +107,8 @@ func step(state: PhysicsDirectBodyState3D) -> void:
 	var touching := _build_node_tris() or pusher.is_valid()
 	if (sb.quiet and not touching) or skip:
 		return
+	# (an AI car: the fewest small steps of Settings, Simulation, "AI cars: soft body detail", as Opponent.js minSteps)
+	sb.min_steps = 3 if car.player_tyres else clampi(int(Settings.get_value("sim_ai_steps")), 1, 3)
 	var t0 := Time.get_ticks_usec()
 	sb.step(dt, _contacts)
 	step_usec = Time.get_ticks_usec() - t0

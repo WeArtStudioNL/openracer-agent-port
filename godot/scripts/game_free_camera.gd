@@ -24,7 +24,9 @@ const ROLL_RANGE := [0.1, 3.0]
 const TILT_RANGE := [1.0, 40.0]
 const LOOK_RANGE := [1.0, 60.0]
 const TAKEN := [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Z, KEY_SPACE, KEY_X, KEY_ALT, KEY_3, KEY_4, KEY_7, KEY_8, KEY_Q, KEY_E,
-	KEY_BRACKETLEFT, KEY_BRACKETRIGHT, KEY_I, KEY_P, KEY_O]
+	KEY_BRACKETLEFT, KEY_BRACKETRIGHT, KEY_I]
+## The actions of this camera (Settings, Controls; P and O as they come): their keys are taken from the others too.
+const OWN := ["free_cam_aim", "free_cam_follow"]
 
 var active := false
 var car: Car
@@ -106,11 +108,17 @@ func leave() -> void:
 
 ## The keys of this camera are taken from the actions of the game while it is on (they do not drive the car).
 func _take_keys() -> void:
+	var taken := TAKEN.duplicate()
+	for own in OWN:
+		if InputMap.has_action(own):
+			for ev in InputMap.action_get_events(own):
+				if ev is InputEventKey:
+					taken.append((ev as InputEventKey).physical_keycode)
 	for action in InputMap.get_actions():
-		if str(action).begins_with("ui_"):
+		if str(action).begins_with("ui_") or str(action) in OWN:
 			continue
 		for ev in InputMap.action_get_events(action):
-			if ev is InputEventKey and (ev as InputEventKey).physical_keycode in TAKEN:
+			if ev is InputEventKey and (ev as InputEventKey).physical_keycode in taken:
 				InputMap.action_erase_event(action, ev)
 
 
@@ -132,13 +140,12 @@ func _input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo:
-		match event.physical_keycode:
-			KEY_P:
-				toggle_aim()
-			KEY_O:
-				toggle_follow()
-			KEY_I:
-				toggle_fixed()
+		if event.is_action("free_cam_aim"):
+			toggle_aim()
+		elif event.is_action("free_cam_follow"):
+			toggle_follow()
+		elif event.physical_keycode == KEY_I:
+			toggle_fixed()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -472,14 +479,20 @@ func _sync_sliders() -> void:
 
 
 func _refresh() -> void:
-	_buttons["aim"].text = "Looking at the car (P)" if aim else "Look at the car (P)"
-	_buttons["follow"].text = "Moving with the car (O)" if follow else "Move with the car (O)"
+	var ka := Controls.key_name("free_cam_aim")
+	var kf := Controls.key_name("free_cam_follow")
+	var kt := Controls.key_name("take")
+	ka = " (%s)" % ka if ka != "" else ""
+	kf = " (%s)" % kf if kf != "" else ""
+	kt = " (%s key)" % kt if kt != "" else ""
+	_buttons["aim"].text = ("Looking at the car" if aim else "Look at the car") + ka
+	_buttons["follow"].text = ("Moving with the car" if follow else "Move with the car") + kf
 	_buttons["fixed"].text = "Fixed to the car (I)" if fixed else "Fix to the car (I)"
 	for k in ["aim", "follow", "fixed"]:
 		var on: bool = {"aim": aim, "follow": follow, "fixed": fixed}[k]
 		_buttons[k].modulate = Color(1.0, 0.65, 0.45) if on else Color.WHITE
 	var st: String = take.call("state") if take != null else "idle"
-	_buttons["record"].text = "Cancel (5 key)" if st == "counting" else ("Stop recording (5 key)" if st == "taking" else "Record (5 key)")
+	_buttons["record"].text = ("Cancel" if st == "counting" else ("Stop recording" if st == "taking" else "Record")) + kt
 	_buttons["record"].modulate = Color(1.0, 0.45, 0.4) if st in ["counting", "taking"] else Color.WHITE
 	_sync_sliders()
 
