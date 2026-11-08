@@ -7,6 +7,7 @@ extends Node
 var world: World
 var drag: DragStrip
 var _time := 0.0
+var _ending := false
 
 
 func _ready() -> void:
@@ -49,8 +50,19 @@ func _physics_process(dt: float) -> void:
 		var f := car.to_global(car.wheels[0].hub)
 		print("%.1f s  %s  s %.2f  %.1f km/h  thr %.2f brk %.2f gear %d frozen %s" % [_time, drag.state, (f - drag.origin).dot(drag.dir), car.speed * 3.6,
 			car.throttle_input, car.brake_input, car.gear, car.freeze])
-	if drag.state == "finished" or _time > 60.0:
+	if (drag.state == "finished" or _time > 60.0) and not _ending:
+		_ending = true
 		print("drag test: %s after %.1f s" % [drag.state, _time])
 		for r in drag.results:
 			print("  %s  %.3f s  %.1f km/h" % [r["label"], r["time"], r["speed"] * 3.6])
+		if drag.state == "finished":
+			print("the time slip:\n  " + "\n  ".join(drag.slip_rows.map(func(r: Array) -> String: return str(r[0]))))
+			# (--slip-dir=<folder>: the slip as a PNG there, as its Save PNG button does; --shot=<file>: the screen with the slip)
+			if Content.arg("shot") != "" and DisplayServer.get_name() != "headless":
+				await get_tree().create_timer(1.0).timeout
+				get_viewport().get_texture().get_image().save_png(Content.arg("shot"))
+				print("shot: " + Content.arg("shot"))
+			if Content.arg("slip-dir") != "":
+				var path := await drag.save_slip_png(Content.arg("slip-dir"))
+				print("the time slip as a PNG: %s" % (path if path != "" else "not saved (no renderer: headless)"))
 		get_tree().quit()

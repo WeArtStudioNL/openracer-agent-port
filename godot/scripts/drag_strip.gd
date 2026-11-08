@@ -16,9 +16,14 @@ const STAGE_MIN := -0.4
 const STAGE_MAX := 0.25
 const ROLLOUT := 0.3
 const AMBER := 0.5
+const SLIP_PAPER := Color("#f4f1e8")
+const SLIP_INK := Color("#1b1b1b")
 
 var car: Car
 var track_id := ""
+var track_name := ""
+var slip_rows: Array = []           # the rows of the last time slip: [text, centred] (the page and the PNG)
+var slip_date := ""                 # when that run was (UTC, for the name of the PNG)
 var state := "idle"
 var origin := Vector3.ZERO
 var dir := Vector3.FORWARD
@@ -56,6 +61,8 @@ static func make(c: Car, track: Node3D, cfg: Dictionary, id: String) -> DragStri
 func setup(c: Car, track: Node3D, ds: Dictionary, id: String) -> void:
 	car = c
 	track_id = id
+	var tc: Variant = track.get("config")
+	track_name = str((tc as Dictionary).get("name", id)) if tc is Dictionary else id
 	name = "DragStrip"
 	var h := float(ds.get("heading", 0.0))
 	dir = Vector3(cos(h), 0.0, sin(h))
@@ -345,30 +352,156 @@ func _save(run: Dictionary) -> bool:
 	return best
 
 
-func _time_slip(run: Dictionary, best: bool) -> void:
+## A label and its value with dots between, 26 wide (DragStrip.js pad).
+static func _pad(label: String, value: String) -> String:
+	var dots := " "
+	for n in range(label.length() + value.length(), 26):
+		dots += "."
+	return label + dots + " " + value
+
+
+## A time as the slip has it: .987 below a second, 12.345 above.
+static func _plain(t: float) -> String:
+	var s := "%.3f" % t
+	return s.substr(1) if t < 1.0 and s.begins_with("0") else s
+
+
+## The rows of the time slip of a run ([text, centred]), as DragStrip.js ticket makes them: the page and the PNG are
+## both drawn from these. now: Time.get_datetime_dict_from_system() of the run.
+static func ticket_rows(track: String, car_name: String, reaction: float, marks: Array, now: Dictionary, imperial: bool) -> Array:
+	var rows: Array = []
+	for t in ["WELCOME TO THE", track.to_upper().substr(0, 28), "DRAG STRIP", "HAVE A SAFE AND", "FUN DAY OF RACING!"]:
+		rows.append([t, true])
+	rows.append(["", false])
+	var hour := int(now["hour"])
+	rows.append(["%d:%02d %s" % [hour % 12 if hour % 12 != 0 else 12, int(now["minute"]), "AM" if hour < 12 else "PM"], false])
+	rows.append(["%02d/%02d/%d" % [int(now["month"]), int(now["day"]), int(now["year"])], false])
+	rows.append(["", false])
+	rows.append(["TIME SLIP", true])
+	rows.append(["", false])
+	rows.append([_pad("CAR", car_name.to_upper().substr(0, 18)), false])
+	rows.append(["", false])
+	rows.append([_pad("R/T", _plain(reaction)), false])
+	for r: Dictionary in marks:
+		var label := str(r["label"]).to_upper().replace(" MILE", "").replace(" FT", "")
+		rows.append([_pad(label, _plain(float(r["time"]))), false])
+		if r.get("finish", false) or r["label"] == "1/8 mile":
+			var v := float(r["speed"]) * (2.2369362920544 if imperial else 3.6)
+			rows.append([_pad("MPH" if imperial else "KM/H", "%.2f" % v), false])
+	rows.append(["", false])
+	rows.append(["COMPLETED RUN", false])
+	return rows
+
+
+func _time_slip(_run: Dictionary, best: bool) -> void:
 	if _slip != null:
 		_slip.queue_free()
+	var marks := results.filter(func(r: Dictionary) -> bool: return float(r["time"]) >= 0.0)
+	slip_rows = ticket_rows(track_name, str(car.config.get("name", car.car_id)), _reaction, marks,
+		Time.get_datetime_dict_from_system(), str(Settings.get_value("units")) == "imperial")
+	slip_date = Time.get_datetime_string_from_system(true)
+	if best:
+		_note("Best run of the track", Color(1.0, 0.85, 0.3))
+	# the slip: paper, a typewriter, from the rows (DragStrip.js #dragSlip)
 	_slip = PanelContainer.new()
+	var paper := StyleBoxFlat.new()
+	paper.bg_color = SLIP_PAPER
+	paper.content_margin_left = 18
+	paper.content_margin_right = 18
+	paper.content_margin_top = 18
+	paper.content_margin_bottom = 26
+	paper.shadow_color = Color(0, 0, 0, 0.55)
+	paper.shadow_size = 14
+	_slip.add_theme_stylebox_override("panel", paper)
 	_slip.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_slip.position = Vector2(-330, 20)
-	_slip.custom_minimum_size = Vector2(310, 0)
+	_slip.position = Vector2(-352, 14)
+	_slip.custom_minimum_size = Vector2(330, 0)
 	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 0)
 	_slip.add_child(box)
-	var lines := ["TIME SLIP%s" % ("  ·  BEST" if best else ""), str(run["car"]), "R/T  %.3f s" % run["rt"]]
-	for sp in run["splits"]:
-		lines.append("%s  %.3f s  %.1f km/h" % [sp[0], sp[1], float(sp[2]) * 3.6])
-	lines.append("Top speed  %.1f km/h" % (float(run["top"]) * 3.6))
-	for t in lines:
-		var l := Label.new()
-		l.text = t
-		l.add_theme_font_size_override("font_size", 18)
-		box.add_child(l)
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_END
+	var save := Button.new()
+	save.text = "Save PNG"
+	save.tooltip_text = "Save the time slip as a PNG (in Downloads)"
+	save.pressed.connect(func():
+		var path := await save_slip_png()
+		_note("Saved: " + path.get_file() if path != "" else "The time slip could not be saved", Color.WHITE))
 	var close := Button.new()
-	close.text = "Close"
+	close.text = "×"
+	close.tooltip_text = "Close"
 	close.pressed.connect(_slip.queue_free)
-	box.add_child(close)
+	buttons.add_child(save)
+	buttons.add_child(close)
+	box.add_child(buttons)
+	for l in _slip_labels(1.0):
+		box.add_child(l)
 	_ui.add_child(_slip)
 	get_tree().create_timer(20.0).timeout.connect(_close_slip.bind(_slip))
+
+
+## The rows of the slip as labels, in a typewriter font, at a scale (the PNG: twice).
+func _slip_labels(scale: float) -> Array[Label]:
+	var font := SystemFont.new()
+	font.font_names = PackedStringArray(["Courier New", "Courier", "Liberation Mono", "DejaVu Sans Mono", "monospace"])
+	var out: Array[Label] = []
+	for r: Array in slip_rows:
+		var l := Label.new()
+		l.text = str(r[0]) if str(r[0]) != "" else " "
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if r[1] else HORIZONTAL_ALIGNMENT_LEFT
+		l.add_theme_font_override("font", font)
+		l.add_theme_font_size_override("font_size", roundi(14.0 * scale))
+		l.add_theme_color_override("font_color", SLIP_INK)
+		l.add_theme_constant_override("line_spacing", 0)
+		l.custom_minimum_size = Vector2(0, 14.0 * 1.45 * scale)
+		out.append(l)
+	return out
+
+
+## The time slip as a PNG (DragStrip.js downloadSlip): the rows on paper at twice the size, for a sharp picture;
+## in Downloads (the web version: a download of the browser; --slip-dir=<folder> for the tests). The path, or "".
+func save_slip_png(folder := "") -> String:
+	if slip_rows.is_empty():
+		return ""
+	const SCALE := 2.0
+	var inset := 18.0 * SCALE
+	var line_h := 14.0 * 1.45 * SCALE
+	var vp := SubViewport.new()
+	vp.size = Vector2i(roundi(330.0 * SCALE), roundi(inset + slip_rows.size() * line_h + 30.0 * SCALE))
+	vp.transparent_bg = false
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var bg := ColorRect.new()
+	bg.color = SLIP_PAPER
+	bg.size = Vector2(vp.size)
+	vp.add_child(bg)
+	var labels := _slip_labels(SCALE)
+	for n in labels.size():
+		var l := labels[n]
+		l.position = Vector2(inset, inset + n * line_h)
+		l.size = Vector2(vp.size.x - 2.0 * inset, line_h)
+		vp.add_child(l)
+	add_child(vp)
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var img := vp.get_texture().get_image()
+	vp.queue_free()
+	if img == null or img.is_empty():
+		return ""
+	var slug := track_name.to_lower()
+	var re := RegEx.create_from_string("[^a-z0-9]+")
+	slug = re.sub(slug, "-", true).trim_prefix("-").trim_suffix("-")
+	var file := "time-slip-%s-%s.png" % [slug if slug != "" else "run", slip_date.substr(0, 16).replace(":", "-").replace("T", "-")]
+	if OS.has_feature("web"):
+		JavaScriptBridge.download_buffer(img.save_png_to_buffer(), file, "image/png")
+		return file
+	var dir := folder if folder != "" else (Content.arg("slip-dir") if Content.arg("slip-dir") != "" else OS.get_system_dir(OS.SYSTEM_DIR_DOWNLOADS))
+	if dir == "":
+		dir = OS.get_user_data_dir()
+	var path := dir.path_join(file)
+	if img.save_png(path) != OK:
+		return ""
+	RunLog.event("time slip saved: " + path)
+	return path
 
 
 func _close_slip(slip: PanelContainer) -> void:
