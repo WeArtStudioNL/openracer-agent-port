@@ -71,7 +71,7 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	effects = TyreEffects.new()
 	effects.setup(car)
 	add_child(effects)
-	for fx: Node in [RigidObjects.make(track), Marbles.new(), Debris.make(car)]:     # (the objects, the marbles, the debris)
+	for fx: Node in [RigidObjects.make(track), Marbles.new(), Debris.make(car), ShellView.make(car)]:     # (the objects, marbles, debris, F7)
 		add_child(fx)
 	var flames := ExhaustFlames.new()
 	flames.setup(car)

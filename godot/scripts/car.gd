@@ -242,6 +242,7 @@ func setup(id: String, cfg: Dictionary) -> void:
 	add_child(col)
 	_box = col
 	_build_visual()
+	SuspensionRig.attach(self)        # (the parts of the suspension that move, and the parts library of car.json)
 	_make_shell()
 	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
 		parts = CarParts.new(self)

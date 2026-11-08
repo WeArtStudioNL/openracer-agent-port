@@ -199,8 +199,17 @@ func _lose(i: int) -> void:
 	RunLog.event("wheel %s of %s torn off" % [w.slot, car.name])
 	if w.hub_node == null or not car.is_inside_tree() or car.get_parent() == null:
 		return
-	# the wheel as it is seen, as a body that keeps the speed and the spin it had
+	# (the body is made after the step of the physics: this can be in the middle of one)
 	var gx := w.spin_node.global_transform
+	var r := gx.origin - car.global_transform * car.center_of_mass
+	_spawn.call_deferred(i, gx, car.linear_velocity + car.angular_velocity.cross(r), car.angular_velocity + gx.basis.x.normalized() * spin)
+
+
+## The wheel as it is seen, as a body that keeps the speed and the spin it had.
+func _spawn(i: int, gx: Transform3D, lin: Vector3, ang: Vector3) -> void:
+	var w := car.wheels[i]
+	if not lost[i] or not is_instance_valid(car) or not car.is_inside_tree():
+		return
 	var body := RigidBody3D.new()
 	body.name = "Wheel %s" % w.slot
 	body.mass = clampf(20.0 * pow(w.radius / 0.33, 2.0), 3.0, 40.0)
@@ -225,9 +234,8 @@ func _lose(i: int) -> void:
 	body.add_collision_exception_with(car)
 	car.get_parent().add_child(body)
 	body.global_transform = gx.orthonormalized()
-	var r := gx.origin - car.global_transform * car.center_of_mass
-	body.linear_velocity = car.linear_velocity + car.angular_velocity.cross(r)
-	body.angular_velocity = car.angular_velocity + gx.basis.x.normalized() * spin
+	body.linear_velocity = lin
+	body.angular_velocity = ang
 	w.hub_node.visible = false
 	bodies[i] = body
 	_grace[i] = GRACE

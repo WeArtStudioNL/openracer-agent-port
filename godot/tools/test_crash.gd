@@ -97,6 +97,7 @@ func _ready() -> void:
 	cam = Camera3D.new()
 	add_child(cam)
 	cam.make_current()
+	add_child(ShellView.make(car))
 	if Content.arg("replay") != "":
 		_replay = Replay.new()
 		_replay.setup(self, [car])
