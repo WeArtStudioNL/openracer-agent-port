@@ -104,6 +104,7 @@ const DEFAULTS := {
 	"mirror_centre_yaw": 0.0, "mirror_centre_tilt": 0.0, "mirror_centre_real": false,
 	# the simulation (Settings.js, the Simulation tab)
 	"sim_tyre_detail": "full",
+	"sim_player_tyres": "shell",  # the tyres of my car: the shell of nodes (as the browser game) or the simple tyre of the AI cars (Godot)
 	"sim_ai_damage": "near",
 	"sim_ai_range": 60.0,
 	"sim_ai_steps": 3,

@@ -216,8 +216,11 @@ func graphics_page(page: VBoxContainer) -> void:
 func simulation_page(page: VBoxContainer) -> void:
 	R.note(page, "What the computer calculates. With many AI cars with damage the physics is the biggest cost: these settings trade a "
 		+ "little realism for frames.")
-	R.pick_key(page, "Tyres of cars: detail (the tyres of nodes, most of the work of the physics)", "sim_tyre_detail",
-		[["full", "Full (as the car is made)"], ["medium", "Medium (2 rings of nodes)"], ["low", "Low (1 ring of 12)"]])
+	R.pick_key(page, "Tyres of my car (the shell of nodes is the tyre of the browser game; the simple one is that of the AI cars)",
+		"sim_player_tyres", [["shell", "Shell of nodes (as the browser game)"], ["simple", "Simple (ray and slip curve)"]])
+	R.pick_key(page, "Tyres of cars: detail (the tyres of nodes, most of the work of the physics; a motorcycle and a kart keep their own)",
+		"sim_tyre_detail", [["full", "Full (as the car is made)"], ["medium", "Medium (2 rings of nodes: a third less work)"],
+		["low", "Low (1 ring of 12: half to two thirds less)"]])
 	R.pick_key(page, "AI cars: damage (soft body)", "sim_ai_damage", [["full", "Always (most realistic)"], ["near", "Only near my car"],
 		["off", "Off (rigid AI cars)"]])
 	R.slider(page, "AI cars: damage range around my car (when 'Only near my car')", "sim_ai_range", 20, 300, 10,

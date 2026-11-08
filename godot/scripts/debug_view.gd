@@ -3,11 +3,11 @@ extends Node3D
 ## What the physics sees (web/js/DebugView.js), on and off with the key 0: the triangles of the track near the car
 ## (green: road that is driven on, orange: walls, blue-grey: the rest), the nodes and the beams of the shell (yellow; a
 ## node that is bent or torn off is red; a broken beam is not drawn), the engine bay and the radiator as rings (magenta
-## and white, red as they are hurt), the contact of every wheel and its normal (cyan), a red cross at the hub of a wheel
-## that has no contact; a motorcycle: the rider as an orange block where his posture puts him. The key - hides the model
-## of the car while the view is on. It is drawn over everything and costs nothing while it is off. A panel at the top
-## right has the weather, the time of day and the box that leaves out the nodes, the beams and the triangles.
-## (--debug-view turns it on at the start)
+## and white, red as they are hurt), the nodes and beams of the shell tyres (ShellTyres), the contact of every wheel
+## and its normal (cyan), a red cross at the hub of a wheel that has no contact; a motorcycle: the rider as an orange
+## block where his posture puts him. The key - hides the model of the car while the view is on. It is drawn over
+## everything and costs nothing while it is off. A panel at the top right has the weather, the time of day and the
+## box that leaves out the nodes, the beams and the triangles. (--debug-view turns it on at the start)
 
 const RADIUS := 14.0
 const MAX_TRIANGLES := 5000
@@ -255,6 +255,15 @@ func _ring(xf: Transform3D, c: Vector3, r: float, plane: int, col: Color) -> voi
 
 
 func _wheels(car: Car) -> void:
+	# the shell tyre (ShellTyres): the nodes and the beams of every wheel; green where a node holds, red where it slides
+	if car.shell_tyres != null and bool(Settings.get_value("debug_show_shell")):
+		var pts := []
+		var cols := []
+		for i in 4:
+			if car.shell_tyres.touched[i] or not car.shell_tyres.results[i].is_empty():
+				ShellTyres.shell_lines(car.shell_tyres.tyres[i].call("shells"), pts, cols)
+		for k in range(0, pts.size() - 1, 2):
+			_line(pts[k], pts[k + 1], cols[k])
 	for w in car.wheels:
 		if w.contact:
 			_line(w.point, w.point + w.normal * 0.5, CYAN)
