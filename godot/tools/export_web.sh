@@ -11,6 +11,8 @@
 # require-corp (threads): python3 godot/tools/serve_web.py serves it with them, on http://localhost:8060.
 set -e
 cd "$(dirname "$0")/.."
+# (Godot must not import what is built: godot/build is inside the project)
+mkdir -p build && touch build/.gdignore
 GODOT=${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}
 MODE=--export-release
 [ "$1" = "--debug" ] && MODE=--export-debug

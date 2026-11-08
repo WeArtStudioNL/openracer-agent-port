@@ -7,6 +7,8 @@
 # target=template_release arch=universal).
 set -e
 cd "$(dirname "$0")/.."
+# (Godot must not import what is built: godot/build is inside the project)
+mkdir -p build && touch build/.gdignore
 GODOT=${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}
 MODE=--export-release
 [ "$1" = "--debug" ] && MODE=--export-debug
@@ -16,7 +18,7 @@ rm -rf build/macos/O-Racer.app
 RES=build/macos/O-Racer.app/Contents/Resources/web
 mkdir -p "$RES"
 for d in cars tracks wheels sounds; do
-	[ -d ../web/$d ] && rsync -a --delete --exclude '.DS_Store' ../web/$d/ "$RES/$d/"
+	[ -d ../web/$d ] && rsync -a --delete --exclude '.DS_Store' --exclude '*.import' --exclude '*.zip' --exclude '*.py' ../web/$d/ "$RES/$d/"
 done
 # (the content changed the bundle: sign it again, ad hoc)
 codesign --force --deep -s - build/macos/O-Racer.app

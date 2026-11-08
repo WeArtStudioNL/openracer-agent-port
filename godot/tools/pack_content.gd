@@ -6,7 +6,7 @@ extends SceneTree
 
 const KINDS := ["cars", "tracks", "wheels", "sounds"]
 ## What the game does not read (sources, archives, notes)
-const SKIP_EXT := ["zip", "py", "md", "blend", "blend1"]
+const SKIP_EXT := ["zip", "py", "md", "blend", "blend1", "import"]
 
 
 func _init() -> void:

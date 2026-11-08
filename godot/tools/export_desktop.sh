@@ -8,6 +8,8 @@
 # see the README).
 set -e
 cd "$(dirname "$0")/.."
+# (Godot must not import what is built: godot/build is inside the project)
+mkdir -p build && touch build/.gdignore
 GODOT=${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}
 for p in windows linux; do
 	rm -rf build/$p
@@ -17,7 +19,7 @@ done
 "$GODOT" --headless --path . --export-release "Linux" build/linux/O-Racer.x86_64
 for p in windows linux; do
 	for d in cars tracks wheels sounds; do
-		[ -d ../web/$d ] && rsync -a --delete --exclude '.DS_Store' ../web/$d/ build/$p/web/$d/
+		[ -d ../web/$d ] && rsync -a --delete --exclude '.DS_Store' --exclude '*.import' --exclude '*.zip' --exclude '*.py' ../web/$d/ build/$p/web/$d/
 	done
 	(cd build && rm -f O-Racer-$p.zip && zip -qr O-Racer-$p.zip $p)
 done
