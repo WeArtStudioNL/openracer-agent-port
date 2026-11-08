@@ -557,13 +557,7 @@ func update_library_preview() -> void:
 	else:
 		_lib_info.text = ""
 	if ed.model_root != null:
-		CarModel.paint(ed.view.lib_preview, _colour("colors.body"), str(Tuning.read(ed.cfg, "colors.bodyFinish") if Tuning.read(ed.cfg, "colors.bodyFinish") else "gloss"),
-			_colour("colors.rim"), str(Tuning.read(ed.cfg, "colors.rimFinish") if Tuning.read(ed.cfg, "colors.rimFinish") else "metallic"))
-
-
-func _colour(path: String) -> Variant:
-	var v: Variant = Tuning.read(ed.cfg, path)
-	return Color(str(v)) if v is String and str(v) != "" else null
+		CarPaint.paint(ed.view.lib_preview, CarPaint.colors_of(ed.cfg.get("colors")))
 
 
 ## The parts of the wheels found by their names and places (guessWheels).

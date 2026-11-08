@@ -629,6 +629,9 @@ func _build_visual() -> void:
 		_library_wheel(w, lib.get("front" if w.front else "rear", {}))
 	if bike != null:
 		bike_model = MotorcycleModel.new(self, body)
+	else:
+		CarDriver.attach(self, body)       # the steering wheel of the model turns, the driver of car.json sits in the car (car_driver.gd)
+	add_child(CarVisuals.new(self, body))     # the suspension rig, the paint and materials, the mirrors (car_visuals.gd)
 
 
 func _library_wheel(w: Wheel, axle: Dictionary) -> void:

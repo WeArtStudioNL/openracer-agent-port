@@ -22,6 +22,7 @@ var hit := 0.0                      # the biggest force on a node in the last st
 var car_contacts := 0
 var steps := 0                      # the steps of the shell that were worked out (not quiet)
 var step_usec := 0                  # the time of the last of them
+var pusher := Callable()            # (Apply force of the car editor) more forces on the nodes in every small step: pusher.call(h)
 # the state of the car in this step (also what the other cars read)
 var xf := Transform3D.IDENTITY
 var lin_v := Vector3.ZERO
@@ -65,6 +66,13 @@ func repair() -> void:
 	_logged = 0.0
 
 
+## Other walls than those of the track (the wall of the crash test of the car editor).
+func use_walls(grid: WallGrid) -> void:
+	walls = grid
+	_cand = PackedInt32Array()
+	_cand_at = Vector3(1e9, 1e9, 1e9)
+
+
 ## One step of the physics: the contacts of the nodes in the small steps of the shell, and the reaction of the
 ## anchors on the body.
 func step(state: PhysicsDirectBodyState3D) -> void:
@@ -83,7 +91,7 @@ func step(state: PhysicsDirectBodyState3D) -> void:
 		_cand_at = xf.origin
 		_cand = _walls_near()
 	_build_pairs()
-	var touching := _build_node_tris()
+	var touching := _build_node_tris() or pusher.is_valid()
 	if sb.quiet and not touching:
 		return
 	var t0 := Time.get_ticks_usec()
@@ -235,6 +243,8 @@ func _contacts(h: float) -> void:
 				car_contacts += over.size()
 		if fsum != Vector3.ZERO:
 			sb.force[k] += inv * fsum
+	if pusher.is_valid():
+		pusher.call(h)
 
 
 ## A penalty spring with a damper along n and friction across it, from the speed vel of the node against the other

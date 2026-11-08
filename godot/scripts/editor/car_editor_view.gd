@@ -30,6 +30,7 @@ var thumb_camera: Camera3D
 var hud: Label
 var toast: Label
 var overlay: Control                 # the floating bars are put here (over the view)
+var input_hook := Callable()          # (a card that takes the mouse first: the lasso of the Soft body) true when it took the event
 
 var _ortho_half := 2.0
 var _down := Vector2.ZERO
@@ -367,6 +368,9 @@ func _zoom(mouse: Vector2, steps: float) -> void:
 
 
 func _on_input(event: InputEvent) -> void:
+	if input_hook.is_valid() and input_hook.call(event):
+		accept_event()
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
@@ -474,7 +478,7 @@ func pick_mesh(mouse: Vector2, root: Node3D) -> Variant:
 		var aabb: AABB = mi.global_transform * mi.mesh.get_aabb()
 		if aabb.grow(0.01).intersects_ray(from, dir) == null:
 			continue
-		var key := mi.get_instance_id()
+		var key := "%d/%d" % [mi.get_instance_id(), mi.mesh.get_rid().get_id()]      # (the soft body gives a mesh a new one: its triangles)
 		if not _tri_cache.has(key):
 			_tri_cache[key] = mi.mesh.generate_triangle_mesh()
 		var tm: TriangleMesh = _tri_cache[key]

@@ -77,8 +77,6 @@ func drop(height: float, tilt: float) -> void:
 	car = Car.new()
 	car.setup("editor-bench", c)
 	ed.view.viewport.add_child(car)
-	CarModel.paint(car, ed.mats.colour_of("colors.body"), str(Tuning.read(c, "colors.bodyFinish") if Tuning.read(c, "colors.bodyFinish") else "gloss"),
-		ed.mats.colour_of("colors.rim"), str(Tuning.read(c, "colors.rimFinish") if Tuning.read(c, "colors.rimFinish") else "metallic"))
 	_place()
 	for n in [ed.view.pivot, ed.view.helpers, ed.view.lib_preview, ed.view.extras]:
 		(n as Node3D).visible = false

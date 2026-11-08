@@ -62,6 +62,13 @@ func car_page(page: VBoxContainer) -> void:
 	R.slider(page, "Tyre temperature and wear (0: off; the fuel with it)", "tyre_wear", 0.0, 5.0, 0.5,
 		func(v: float) -> String: return "off" if v <= 0.0 else "%.1f×" % v)
 	R.check(page, "Damage: the cars dent and lose parts (from the next start of a drive)", "damage")
+	# the mirrors of the car (CarMirrors, Mirrors.js; the Car page of the browser's settings)
+	R.section(page, "Mirrors")
+	var deg := func(v: float) -> String: return "%d°" % roundi(v)
+	for side in [["left", "Left mirror", "outwards"], ["right", "Right mirror", "outwards"], ["centre", "Mirror inside", "to the left"]]:
+		R.slider(page, "%s: turn (positive %s)" % [side[1], side[2]], "mirror_%s_yaw" % side[0], -25.0, 25.0, 1.0, deg)
+		R.slider(page, "%s: tilt (positive up)" % side[1], "mirror_%s_tilt" % side[0], -25.0, 25.0, 1.0, deg)
+		R.check(page, "%s: a real mirror (shows what is behind, from the cockpit and the bonnet)" % side[1], "mirror_%s_real" % side[0])
 
 
 func keyboard_page(page: VBoxContainer) -> void:

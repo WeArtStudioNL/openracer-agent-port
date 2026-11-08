@@ -776,7 +776,7 @@ func _cam() -> Dictionary:
 	if c == null:
 		return {}
 	return {"distance": c.distance, "height": c.height, "look_height": c.look_height, "smoothing": c.smoothing, "fov_standing": c.fov_standing,
-		"fov_fast": c.fov_fast, "cockpit": c.cockpit - (car.model_root.position if car.model_root != null else Vector3.ZERO), "cockpit_fov": c.cockpit_fov}
+		"fov_fast": c.fov_fast, "cockpit": c.cockpit, "cockpit_fov": c.cockpit_fov}
 
 
 func _change(key: String, value: Variant) -> void:
