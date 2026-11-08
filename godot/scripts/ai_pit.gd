@@ -184,7 +184,9 @@ func update(dt: float, i: int, speed: float) -> Dictionary:
 				_pit_idx = _path_nearest(p.x, p.z, -1)
 		if phase >= 1.0:
 			_pit_idx = _path_nearest(p.x, p.z, _pit_idx)
-			var look := clampf(2.0 + speed * 0.55, 4.0, 12.0)
+			# (at least 7 m ahead: 4 m at a crawl had a car with a welded axle swing from full lock to full lock all the
+			# way down the pit lane at 4 m/s)
+			var look := clampf(3.0 + speed * 0.6, 7.0, 14.0)
 			out["target"] = _path_point(mini(path.size() - 1, _pit_idx + roundi(look)))
 			var dist_stop := float(_stop_idx - _pit_idx)
 			# the last metres to the stop along the axis of the box: the pit line may pass a metre beside its middle,

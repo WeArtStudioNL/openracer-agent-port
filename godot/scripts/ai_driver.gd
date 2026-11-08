@@ -45,8 +45,6 @@ var _ignore_blocker: Car = null   # one it waited behind for six seconds: passed
 var _ignore_until := 0.0
 var _clock := 0.0
 var _ray_exclude: Array[RID] = []
-var _dbg_t := 0.0
-var _dbg := ""
 var _speeds_grip := 1.2           # the grip of the road that the speeds were made for (Ground: the wet and the snow)
 
 
@@ -72,8 +70,9 @@ func setup(c: Car, l: RacingLine, p := -1.0) -> void:
 	_braking = braking
 	_make_speeds()
 	# what an AI with this car learned on this track before (where it ran off the road), as factors on the speeds
+	# (--ai-learned=0: a test of the line as it is, without what was learned before, and nothing kept)
 	var f := _learned_path()
-	if FileAccess.file_exists(f):
+	if FileAccess.file_exists(f) and Content.arg("ai-learned") != "0":
 		var factors: Variant = bytes_to_var(FileAccess.get_file_as_bytes(f))
 		if factors is PackedFloat32Array and factors.size() == _speeds.size():
 			for i in _speeds.size():
@@ -101,7 +100,7 @@ func _make_speeds() -> void:
 
 ## Keeps what it learned (the speeds as factors of those of the line) for the next time.
 func save_learned() -> void:
-	if _speeds.is_empty() or car == null:
+	if _speeds.is_empty() or car == null or Content.arg("ai-learned") == "0":
 		return
 	var factors := PackedFloat32Array()
 	factors.resize(_speeds.size())
@@ -231,10 +230,6 @@ func drive(dt: float) -> void:
 		car.throttle_input = _rolled
 	car.brake_input = clampf(-u * 0.5, 0.0, 1.0) if err < -1.0 else 0.0
 	car.handbrake_input = 0.0
-	_dbg_t += dt
-	if _dbg_t > 0.25 and Content.arg("ai-debug") != "" and (Content.arg("ai-debug") == "all" or car.name == Content.arg("ai-debug")):
-		_dbg_t = 0.0
-		RunLog.line("AIDBG %s i %d v %.1f want %.1f cap %.1f side %.2f lane %.2f steer %.2f thr %.2f brk %.2f gear %d rpm %d cl %.2f touch %d sl %.1f/%.1f/%.1f/%.1f %s" % [car.name, _index, v, want, cap, _side, _lane(_index, xf.origin), car.steer_input, car.throttle_input, car.brake_input, car.gear, car.engine.rpm(), car.clutch_engagement, car.get_contact_count(), car.wheels[0].s, car.wheels[1].s, car.wheels[2].s, car.wheels[3].s, _dbg + " LT%.0f hs%.2f ps%.2f bo%.2f full%.0f fuel%.1f B%.2f T%.2f Tu%.2f tcf%.2f lc%s la%.1f y %.2f " % [car.engine.last_torque, car.engine.health_scale, car.engine.power_scale, car.engine.boost, car.engine.full_torque(car.engine.rpm()), car.fuel, car.brake, car.throttle, car.engine.throttle_used, car.tc_factor, car.lc_armed, car.launching, car.global_position.y] + " ".join(car.wheels.map(func(w): return "%s%s%s%s fx%d L%d om%.1f" % [w.surface, "C" if w.contact else "-", "T" if w.tc else "", "E" if w.esc else "", w.fx, w.load, w.omega]))])
 	_recover(dt, v, cap, xf, not pits.is_empty())
 	if pit != null and pit.at_stop:
 		# in its box until the stop is done
@@ -275,7 +270,8 @@ func _recover(dt: float, v: float, cap: float, xf: Transform3D, in_pits: bool) -
 		_block_wait = 0.0
 	else:
 		_block_wait = 0.0
-	# pushing against something (a wall, a car across its nose): back up a moment, the wheels the other way
+	# pushing against something (a wall, a car across its nose, the wall of its pit box): back up a moment, the
+	# wheels the other way
 	if _reverse_for > 0.0:
 		_reverse_for -= dt
 		car.gear = -1
@@ -284,7 +280,7 @@ func _recover(dt: float, v: float, cap: float, xf: Transform3D, in_pits: bool) -
 		car.steer_input = -_reverse_steer
 		if _reverse_for <= 0.0:
 			car.gear = 1
-	elif v < 0.5 and car.throttle_input > 0.3 and not in_pits and car.bike == null:
+	elif v < 0.5 and car.throttle_input > 0.3 and car.bike == null and not (pit != null and pit.at_stop):
 		_stuck_t += dt
 		if _stuck_t > 2.5:
 			_stuck_t = 0.0
@@ -415,6 +411,7 @@ func _traffic(xf: Transform3D, inv: Transform3D, v: float, dt: float) -> float:
 	var blocker_len := 4.5
 	_blocker = null
 	var my_lane := _lane(_index, xf.origin)
+	var my_w := float(car.config.get("dimensions", {}).get("width", 1.9))
 	var fwd := xf.basis.z
 	var reach := maxf(25.0, v * 1.5)
 	for o in others:
@@ -435,7 +432,10 @@ func _traffic(xf: Transform3D, inv: Transform3D, v: float, dt: float) -> float:
 			continue
 		var closing := maxf(0.0, o.linear_velocity.dot(fwd))
 		var o_len := float(o.config.get("dimensions", {}).get("length", 4.2))
-		if along > 1.5 and along < 10.0 and absf(across) < 2.2:
+		# (in its path: overlapping sideways, by the half widths of both and a little; 2.2 m as Opponent.js at most.
+		# Two motorcycles 1.4 m apart pass each other, and one that moved aside to pass still held back for it)
+		var overlap := minf(2.2, (my_w + float(o.config.get("dimensions", {}).get("width", 1.9))) / 2.0 + 0.4)
+		if along > 1.5 and along < 10.0 and absf(across) < overlap:
 			if along < blocker_along:
 				blocker_along = along
 				blocker_speed = closing
@@ -444,7 +444,7 @@ func _traffic(xf: Transform3D, inv: Transform3D, v: float, dt: float) -> float:
 		elif along > 0.0 and rel.length() < reach + 5.0:
 			var oi := line.nearest(o.global_position, _index)
 			var on_line := posmod(oi - _index, line.count()) * RacingLine.STEP
-			if on_line > 1.5 and on_line < reach and absf(_lane(oi, o.global_position) - my_lane) < 2.2 and on_line < blocker_along:
+			if on_line > 1.5 and on_line < reach and absf(_lane(oi, o.global_position) - my_lane) < overlap and on_line < blocker_along:
 				blocker_along = on_line
 				# (its speed along the line there: in the bend ahead its speed along our heading is less than it goes)
 				var lp := line.point(oi)
@@ -459,7 +459,7 @@ func _traffic(xf: Transform3D, inv: Transform3D, v: float, dt: float) -> float:
 	var side_want := 0.0
 	if ahead != null:
 		var ahead_lane := _lane(line.nearest(ahead.global_position, _index), ahead.global_position)
-		var gap := (float(car.config.get("dimensions", {}).get("width", 1.9)) + float(ahead.config.get("dimensions", {}).get("width", 1.9))) / 2.0 + 0.6
+		var gap := maxf(1.8, (my_w + float(ahead.config.get("dimensions", {}).get("width", 1.9))) / 2.0 + 0.6)
 		if ahead != _passing or _pass_side == 0.0:
 			_passing = ahead
 			_pass_side = -1.0 if ahead_across > 0.0 else 1.0
@@ -480,7 +480,6 @@ func _traffic(xf: Transform3D, inv: Transform3D, v: float, dt: float) -> float:
 	if side_want != 0.0:
 		side_want = _room(side_want, v)
 	_side = move_toward(_side, side_want, dt * 1.5)
-	_dbg = "ahead %s blk %.1f@%.1f" % [ahead.name if ahead != null else "-", blocker_along, blocker_speed]
 	if blocker_along == INF:
 		return INF
 	var my_len := float(car.config.get("dimensions", {}).get("length", 4.2))

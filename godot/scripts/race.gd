@@ -206,6 +206,7 @@ func _physics_process(dt: float) -> void:
 				now.append(b)
 				if not e.touching.has(b) and not is_held():
 					e.knocks += 1
+					RunLog.line("race: %s touches %s at %.0f km/h" % [e.car.name, (b as Car).name, absf(e.car.speed) * 3.6])
 		e.touching = now
 		if e.driver == null:
 			continue
