@@ -77,15 +77,17 @@ static func tyre_mesh(outer_r: float, inner_r: float, width: float, segments := 
 	return mesh
 
 
-## The objects of a model that are the wheel of a corner by their names (wheel_FL, wheel_FL_rim, wheel_FL_disc; capitals
-## and separators do not matter): these are used in place of the wheel library. [] when it has none.
+## The objects of a model that are the wheel of a corner by their names (wheel_FL, wheel_FL_rim, wheel_rim_FL, rim_FL, tyre_FL, and
+## anything after the corner: wheel_rim_FL.001; capitals and separators do not matter): these are used in place of the wheel
+## library. [] when it has none.
 static func named_wheel_parts(body: Node3D, slot: String) -> Array[Node3D]:
 	var out: Array[Node3D] = []
 	if body == null:
 		return out
-	var base := "wheel" + slot.to_lower()
+	var corner := RegEx.create_from_string("^(wheel)?(rim|disc|tyre|tire)?" + slot.to_lower() + "$")
 	for n in body.find_children("*", "Node3D", true, false):
-		if SuspensionRig.clean(str(n.name)) in [base, base + "rim", base + "disc"]:
+		var s := SuspensionRig.stem(str(n.name))
+		if s != slot.to_lower() and corner.search(s) != null:
 			out.append(n as Node3D)
 	return out
 
@@ -94,7 +96,9 @@ static func named_wheel_parts(body: Node3D, slot: String) -> Array[Node3D]:
 static func has_named_tyre(parts: Array[Node3D], slot: String) -> bool:
 	var base := "wheel" + slot.to_lower()
 	for p in parts:
-		if SuspensionRig.clean(str(p.name)) == base:
+		var s := SuspensionRig.stem(str(p.name))
+		var after := SuspensionRig.clean(str(p.name)).trim_prefix(s)
+		if s.contains("tyre") or s.contains("tire") or (s == base and (after.is_valid_int() or after == "" or after.contains("tyre") or after.contains("tire"))):
 			return true
 	return false
 

@@ -13,7 +13,7 @@ const DIFF_INFO := {
 const GEARBOXES := [["gears", "Manual (a clutch pedal)"], ["imt", "Manual with an automatic clutch (IMT)"], ["amt", "Automated manual (AMT)"],
 	["dct", "Dual clutch (DCT)"], ["torque-converter", "Automatic with a torque converter"], ["cvt", "CVT (continuously variable)"]]
 const RIG_NAME := "^(susp(upperarm|lowerarm|arm|wishbone|link|trailingarm|trailing|upright|hub|knuckle|spring|damper|strut|shock|coilover|driveshaft|halfshaft|shaft|toelink)" + \
-	"[a-z]*(fl|fr|rl|rr)|steertierod[a-z]*(fl|fr|rl|rr)|steerrack|susprack|susp(axle|panhard|watt)[a-z]*(rear|front|back)?|[a-z]*trailing[a-z]*(fl|fr|rl|rr)|" + \
+	"[a-z]*(fl|fr|rl|rr)|steertierod[a-z]*(fl|fr|rl|rr)|steerrack|susprack|susp(axle|panhard|watt)[a-z]*(rear|front|back)?|susp(propshaft|cardan)[a-z0-9]*|[a-z]*trailing[a-z]*(fl|fr|rl|rr)|" + \
 	"(coilover|damper|shock|strut|spring)cylinder[a-z]*(fl|fr|rl|rr)|(rear|front|back)?solid[a-z]*|[a-z]*(solid|live)axle[a-z]*|axle[a-z]*)$"
 
 var ed: CarEditor
@@ -774,25 +774,25 @@ func model_warnings() -> Array:
 	var out := []
 	var rig := RegEx.create_from_string(RIG_NAME)
 	var middle := CarEditorView.bounds_of(ed.view.pivot).get_center().z if ed.model_root != null else 0.0
-	var corner_re := RegEx.create_from_string("(fl|fr|rl|rr)\\d{3}$")
 	for n in ed.nodes:
-		var plain := _plain(str(n["name"]))
+		var plain := SuspensionRig.stem(str(n["name"]))
 		if plain.contains("trierod"):
 			out.append("“%s”: tierod, not trierod" % n["name"])
 		elif (plain.begins_with("susp") or (plain.begins_with("steer") and not plain.begins_with("steering") and not plain.begins_with("steerwheel"))) \
 				and rig.search(plain) == null:
 			out.append("“%s” is not a part the suspension knows" % n["name"])
-		if corner_re.search(plain) != null and (plain.begins_with("wheel") or plain.begins_with("susp") or plain.begins_with("steer") or plain.begins_with("brake")):
-			out.append("“%s” ends in .001: give it a corner (FL, FR, RL, RR)" % n["name"])
-		var corner := plain.right(2) if (plain.contains("caliper") or plain.contains("brake")) and not (plain.contains("disc") or plain.contains("disk")
-			or plain.contains("rotor")) else ""
+		var corner := plain.right(2) if RegEx.create_from_string("^(susp|steer|ball|brake|coilover|wheel|rim|tyre|tire)").search(plain) != null else ""
 		if corner in ["fl", "fr", "rl", "rr"]:
 			var box := CarEditorView.bounds_of(n["node"])
 			if box.size != Vector3.ZERO:
 				var front := box.get_center().z > middle
+				var left := box.get_center().x > 0.0
 				if front != (corner[0] == "f"):
 					out.append("“%s” sits at the %s but is named for the %s (it would follow that wheel)" % [n["name"], "front" if front else "rear",
 						"front" if corner[0] == "f" else "rear"])
+				elif absf(box.get_center().x) > 0.05 and left != (corner[1] == "l"):
+					out.append("“%s” sits on the %s but is named for the %s (it would follow that wheel)" % [n["name"], "left" if left else "right",
+						"left" if corner[1] == "l" else "right"])
 	_warn_found = out.slice(0, 8)
 	return _warn_found
 

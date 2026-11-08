@@ -96,9 +96,20 @@ static func clean(n: String) -> String:
 	return out
 
 
+## The clean name of a part up to and with its corner: what comes after the corner is not part of the name (brake_caliper_FL_001,
+## susp_lowerarm_FL.002 and wheel_rim_FL_bolts are brakecaliperfl, susplowerarmfl and wheelrimfl).
+static func stem(n: String) -> String:
+	var m := _re("(?i)^(.*?[-_. ](?:fl|fr|rl|rr))(?:[-_. 0-9].*)?$").search(n)
+	if m != null:
+		return clean(m.get_string(1))
+	var c := clean(n)
+	var digits := _re("^(.*(?:fl|fr|rl|rr))[0-9]+$").search(c)
+	return digits.get_string(1) if digits != null else c
+
+
 ## What a part is, from its name: { kind, wheel, rear } or {} (SuspensionRig.js classify).
 static func classify(node_name: String) -> Dictionary:
-	var n := clean(node_name)
+	var n := stem(node_name)
 	if n == "":
 		return {}
 	if n.begins_with("susppropshaft") and (n.contains("rear") or n.contains("front") or n.contains("back")):
@@ -248,8 +259,22 @@ func _find(roots: Array[Node3D]) -> void:
 	var has_rack := false
 	for p in top:
 		has_rack = has_rack or p["what"]["kind"] == "rack"
+	var main := {}                                         # (more objects of one part, susp_lowerarm_FL and susp_lowerarm_FL.001: the shortest name is the part, the others are bolted to it)
 	for p in top:
-		_add_part(p["node"], p["what"], has_rack)
+		var key := "%s/%s" % [p["what"]["kind"], stem(str(p["node"].name))]
+		if not main.has(key) or str(p["node"].name).length() < str(main[key]["node"].name).length():
+			main[key] = p
+	var extra: Array[Dictionary] = []
+	for p in top:
+		var key := "%s/%s" % [p["what"]["kind"], stem(str(p["node"].name))]
+		if p["what"]["wheel"] >= 0 and main[key] != p:
+			extra.append({"node": p["node"], "main": main[key]["node"], "wheel": p["what"]["wheel"]})
+		else:
+			_add_part(p["node"], p["what"], has_rack)
+	for x in extra:
+		for e in parts:
+			if e["node"] == x["main"]:
+				_bolt(x["node"], x["wheel"], e["holder"])
 	_seat_parts()
 	_find_corners()
 	_attach_calipers(roots)
@@ -262,14 +287,14 @@ func _find_balls(roots: Array[Node3D]) -> void:
 	_balls = {}
 	for r in roots:
 		for n in r.find_children("*", "Node3D", true, false):
-			var c := clean(str(n.name))
-			if c.begins_with("ball") and CORNERS.has(c.right(2)):
+			var c := stem(str(n.name))
+			if c.begins_with("ball") and CORNERS.has(c.right(2)) and (not _balls.has(c) or clean(str(n.name)) == c):      # (the one without anything after its corner wins)
 				_balls[c] = CarModel.relative(n as Node3D, car).origin
 
 
 ## The empty of the ball joint of an arm or a tie rod, or null.
 func _ball_of(node: Node3D, kind: String) -> Variant:
-	var n := clean(str(node.name))
+	var n := stem(str(node.name))
 	var part := ("toelink" if n.contains("toelink") else "tierod") if kind == "tierod" else ("upperarm" if n.contains("upper") else "lowerarm")
 	return _balls.get("ball" + part + n.right(2))
 
@@ -291,7 +316,9 @@ func _gather_coilovers(roots: Array[Node3D]) -> void:
 	var all := {}
 	for r in roots:
 		for n in r.find_children("*", "Node3D", true, false):
-			all[clean(str(n.name))] = n
+			var k := stem(str(n.name))
+			if not all.has(k) or clean(str(n.name)) == k:
+				all[k] = n
 	for key: String in all:
 		if not key.begins_with("coilovercylinder"):
 			continue
@@ -357,7 +384,7 @@ func _attach_calipers(roots: Array[Node3D]) -> void:
 	for r in roots:
 		list.append_array(r.find_children("*", "Node3D", true, false))
 	for n in list:
-		var c := clean(str(n.name))
+		var c := stem(str(n.name))
 		var wheel: int = CORNERS.get(c.right(2), -1)
 		var joint := _re("^ball(lowerarm|upperarm|tierod|toelink(?!mount))").search(c) != null        # (a ball joint is bolted to the upright: it goes with it, not with its arm)
 		var mount := c.begins_with("balltierodmount")                                 # (but this one is on the rack, at the inner end of the rod)
@@ -370,13 +397,18 @@ func _attach_calipers(roots: Array[Node3D]) -> void:
 			target = Node3D.new()
 			target.name = "rig-" + str(node.name)
 			root.add_child(target)
-		parts.append({"kind": "mount" if mount else "caliper", "wheel": wheel, "rear": wheel >= 2, "node": node, "parent": node.get_parent(), "rest_transform": node.transform,
-			"library": false, "origin": Vector3.ZERO, "holder": target})
-		var xf := CarModel.relative(node, car)
-		node.owner = null
-		node.get_parent().remove_child(node)
-		target.add_child(node)
-		node.transform = CarModel.relative(target, car).affine_inverse() * xf
+		_bolt(node, wheel, target, "mount" if mount else "caliper")
+
+
+## A part goes with a holder, and keeps its place.
+func _bolt(node: Node3D, wheel: int, target: Node3D, kind := "caliper") -> void:
+	parts.append({"kind": kind, "wheel": wheel, "rear": wheel >= 2, "node": node, "parent": node.get_parent(), "rest_transform": node.transform,
+		"library": false, "origin": Vector3.ZERO, "holder": target})
+	var xf := CarModel.relative(node, car)
+	node.owner = null
+	node.get_parent().remove_child(node)
+	target.add_child(node)
+	node.transform = CarModel.relative(target, car).affine_inverse() * xf
 
 
 func _add_part(node: Node3D, what: Dictionary, has_rack: bool) -> void:

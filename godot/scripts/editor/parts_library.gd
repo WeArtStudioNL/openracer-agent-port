@@ -483,7 +483,7 @@ static func model_parts(names: Array) -> Array:
 	for n in names:
 		var what := SuspensionRig.classify(str(n))
 		if not what.is_empty():
-			out.append([SuspensionRig.clean(str(n)), what])
+			out.append([SuspensionRig.stem(str(n)), what])
 	return out
 
 
@@ -494,7 +494,7 @@ static func in_model(node_name: String, file: String, t: String, model: Array) -
 	if model.is_empty():
 		return false
 	var want := SuspensionRig.classify(node_name)
-	var clean_name := SuspensionRig.clean(node_name)
+	var clean_name := SuspensionRig.stem(node_name)
 	for m in model:
 		if m[0] == clean_name:
 			return true
