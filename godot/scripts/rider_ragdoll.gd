@@ -247,6 +247,13 @@ func _bike_contact(i: int, first: bool) -> void:
 		# gently after 0.4 s, 2 cm an iteration: the bike that falls onto him does not lie in him)
 		push = minf(depth, 0.02) if inside[i] else depth
 		n = _out
+		if n.y < 0.0 and p[i].y <= floor_y[i] + 0.002:
+			# (never into the road: a limb under the bike that lies on it is pushed out along the road; down into it,
+			# the road and the bike fought over it and the sticks were stretched)
+			n.y = 0.0
+			if n.length_squared() < 1e-6:
+				return
+			n = n.normalized()
 	var vel := p[i] - q[i] - sv * H
 	if push > 0.0:
 		p[i] += n * push
