@@ -30,6 +30,7 @@ var ed: CarEditor
 var dyno_best_hp := 0.0
 var top_kmh := 0
 var build_result: Dictionary = {}
+var crash_pane: VBoxContainer       # the tab Crash test of the test bar (the Soft body card fills it)
 var _block: OptionButton
 var _exhaust: OptionButton
 var _info: Label
@@ -702,9 +703,18 @@ func build_test_bar() -> void:
 	_test_bar.position.y = -14
 	_test_bar.visible = false
 	ed.view.overlay.add_child(_test_bar)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	_test_bar.add_child(col)
+	var tabs := HBoxContainer.new()
+	col.add_child(tabs)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
-	_test_bar.add_child(row)
+	col.add_child(row)
+	crash_pane = VBoxContainer.new()
+	crash_pane.visible = false
+	col.add_child(crash_pane)
+	_build_tabs(tabs, row)
 	_play = EditorStyle.button("Play", "accent", "Play the engine sound of the form")
 	_play.pressed.connect(func():
 		if _playing:
@@ -774,9 +784,41 @@ func build_test_bar() -> void:
 	var back := EditorStyle.button("↺", "small ghost", "Stop the test: back to the model as it is")
 	back.pressed.connect(func():
 		ed.bench.stop()
+		ed._hook_call("bench_stopped")
 		drive.text = "Drive")
-	row.add_child(back)
+	tabs.add_child(back)
 	_labels()
+	ed._hook_call("crash_tab", [crash_pane])
+	tabs.get_child(0).visible = crash_pane.get_child_count() > 0
+	tabs.get_child(1).visible = crash_pane.get_child_count() > 0
+
+
+## The tabs of the test bar (the browser's Tests | Crash test), and the room for ↺ at their right.
+func _build_tabs(tabs: HBoxContainer, row: Control) -> void:
+	var buttons := []
+	for t in ["Tests", "Crash test"]:
+		var b := EditorStyle.button(t, "small accent" if t == "Tests" else "small ghost")
+		tabs.add_child(b)
+		buttons.append(b)
+	var show := func(crash: bool):
+		row.visible = not crash
+		crash_pane.visible = crash
+		EditorStyle.style_button(buttons[0], "small ghost" if crash else "small accent")
+		EditorStyle.style_button(buttons[1], "small accent" if crash else "small ghost")
+	(buttons[0] as Button).pressed.connect(show.bind(false))
+	(buttons[1] as Button).pressed.connect(show.bind(true))
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tabs.add_child(gap)
+
+
+## The test bar is shown or hidden (the crash test hides it while it runs).
+func show_test_bar(on: bool) -> void:
+	_test_bar.visible = on
+
+
+func test_bar_shown() -> bool:
+	return _test_bar.visible
 
 
 func toggle_test_bar() -> void:

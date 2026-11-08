@@ -291,15 +291,49 @@ cards of the browser editor in its order, the 3D view in the middle and the laye
   on the test bench the car of the game has its own. Not here: the rider of a motorcycle on its grips and pegs (the card
   places the figure and its bones; the game poses the rider), scaling the ring with the gizmo (its radius is a field).
 
-The Soft body card is ported apart: the editor loads `scripts/editor/car_editor_softbody.gd` and
+- **Soft body** (`scripts/editor/car_editor_softbody.gd`, softbody-editor.js; `_nodes.gd`, `_parts.gd` and `_crash.gd`
+  beside it): The car dents; Show the shell starts the bench and draws the nodes and beams of the car of the game over it
+  (green, yellow at the yield bend, red above it, grey torn, blue inside, orange of a part; the hinges in orange); a click
+  selects a node (Shift adds) or a beam, the middle mouse button draws a lasso, and yield and break (kN) are Set on them
+  (softbody.nodes, softbody.beams) or back to Default; the selected nodes have the gizmo (W), and the first move makes the
+  nodes a list of the car (softbody.layout, with layout_cg and layout_radius). Strengths… (a material preset, the shell
+  mass, the hardening, the anchors, beams and contacts, beams per node and the longest beam; the forces with a slider on a
+  scale of tenfolds that says the hit of a tonne that makes them), the most nodes, Scan with rays (rays from the six sides
+  of the model on a 10 cm grid; the nodes spread over the hits, the inside filled when ticked), Fill the inside, the
+  wheel strength, Edit nodes (a click on the model adds a node of the radius set, Delete removes the selected ones, Make
+  the nodes from the model again). Parts… (a window that stays beside the view): every part with its object (Pick on the
+  model), behaviour (hinge, loose, breakable), mass, break force and delay, the nodes that hold it and its own nodes (Set =
+  selected nodes), the hinge points A and B (a node or a point picked on the surface, each with its tear force), the
+  origin (the object, a node, a point) and the axis (A→B, X, Y, Z), the angles, spring, damper, latch and tear force; a
+  part chosen in the layers opens its row or offers to add it. With a tune chosen the card is shown but locked (the shell
+  and the parts belong to the car; Go to Default). Ctrl/Cmd+Z undoes the nodes too (they are in the form).
+- **Crash test** (the second tab of the test bar): Crash into the wall (speed, angle of the wall): a new car on the bench
+  drives on its own throttle, kept on its line, into a wall of 80 m (a StaticBody3D for the body, and the walls of the
+  shell: `CarShell.use_walls`, `WallGrid.add_body`); the camera goes with the car until the hit, a bar over the view shows
+  the speed and Stop crash test, and the card reports the peak deceleration, the bend, the energy taken up of the energy
+  of the car, the torn anchors and beams and the parts that came off. Apply force (km/h): an arrow on the surface under
+  the mouse, a click fires an invisible cube of a tonne and a metre at the car there (`CarShell.pusher`, a contact of
+  its face with the nodes under it, or the own nodes of the part that was hit), and the card says its peak force, how far
+  it went into the shell and what it did.
+
+The Soft body and the Driver cards are ported apart: the editor loads `scripts/editor/car_editor_softbody.gd` and
 `car_editor_driver.gd` when they are there (`CarEditor.CARD_HOOKS`): an object with `setup(editor, card_body)`,
 `fill(cfg)`, `read(cfg)` (writes its part into the car.json that is saved), and if it likes `frame(dt)`,
-`on_model(root)`, `picked(hit)` (a click on the model) and `open_part(name)` (a click on a part in the layers). Until
-then the car keeps what car.json has for them.
+`on_model(root)`, `picked(hit)` (a click on the model), `open_part(name)` (a click on a part in the layers), `click`,
+`key`, `crash_tab(pane)` and `bench_stopped`.
 
-Not ported: the crash test, Apply force and Full test of the bench, the flame test of the exhaust points, the nodes of the
+Not ported: the part window of the browser's Soft body card (a click on a loose object: pin points with free axes,
+limits per axis and a turn gizmo, Opens at, the shatter settings, Break it now, nodes added on the part with the rest
+faded; the Godot game has no swinging hinges and no shattering yet, so those settings of car.json are kept as they are but
+cannot be set here), Full test of the bench, the flame test of the exhaust points, the nodes of the
 tyre shells on the bench (the Godot physics have no tyre shells), the weather, time of day and ground of Save and test,
 Ship with the car of a tune, and the material field "reflection" (envMapIntensity) is saved but only approximated (the specular of the material).
+
+Test of the Soft body card: `Godot --headless --fixed-fps 120 --path godot res://tools/test_softbody_card.tscn` (the
+hatchback in and out of the card unchanged, the shell on the bench, the scan, a node and a beam set, a strength, a node
+added and removed, the lasso, the gizmo, the Parts window, the lock of a tune, the crash test and Apply force; nothing is
+saved). Pictures: `shot_car_editor.tscn -- --car=hatchback --open="Soft body" --scroll="Soft body" --shell=1|edit
+--sel=3,4`, `--window=Strengths|Parts`, `--crashtab=1`, `--crash=50 --angle=20 --wait=12`.
 
 Test of the Driver card and the driver: `Godot --headless --path godot res://tools/test_driver.tscn -- --out=/tmp/folder`
 (see "The driver"); pictures: `shot_car_editor.tscn -- --car=go-kart-250cc --open=Driver --scroll=Driver --driver=handL --steer=-90`.

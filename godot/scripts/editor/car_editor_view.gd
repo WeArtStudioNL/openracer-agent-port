@@ -30,6 +30,7 @@ var thumb_camera: Camera3D
 var hud: Label
 var toast: Label
 var overlay: Control                 # the floating bars are put here (over the view)
+var input_hook := Callable()          # (a card that takes the mouse first: the lasso of the Soft body) true when it took the event
 
 var _ortho_half := 2.0
 var _down := Vector2.ZERO
@@ -367,6 +368,9 @@ func _zoom(mouse: Vector2, steps: float) -> void:
 
 
 func _on_input(event: InputEvent) -> void:
+	if input_hook.is_valid() and input_hook.call(event):
+		accept_event()
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:

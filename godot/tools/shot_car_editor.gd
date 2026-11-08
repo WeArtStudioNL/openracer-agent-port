@@ -2,7 +2,8 @@ extends Node
 ## (with a window: Godot --path godot res://tools/shot_car_editor.tscn -- --car=hatchback --shot=/tmp/editor.png)
 ## Opens the car editor on a car, opens cards (--open=Wheels,Chassis), selects a layer (--select=follow, ex1, model), shows
 ## the test bar (--tests), edits the driver (--driver=edit|handL|model|wheel, --steer=-90), or opens a window
-## (--window=Cameras, Materials, Sound), waits and saves a picture of the window.
+## (--window=Cameras, Materials, Sound, Strengths, Parts), shows the shell of the Soft body card (--shell=1|edit, --sel=3,4),
+## runs its crash test (--crash=50 --angle=20) or shows the tab Crash test (--crashtab=1), waits and saves a picture of the window.
 ## Nothing is saved.
 
 
@@ -38,7 +39,30 @@ func _ready() -> void:
 		ed.bench.drop(float(Content.arg("drop")), 8.0)
 	if Content.arg("dyno") != "":
 		ed.engine.run_dyno()
+	var sbc: Object = ed.hooks.get("Soft body")
+	if sbc != null and Content.arg("shell") != "":
+		# (--shell=1: the Soft body card shows the shell; --shell=edit: and edits the nodes; --sel=3,4: those nodes are selected)
+		sbc.call("show_shell")
+		if Content.arg("shell") == "edit":
+			sbc.call("set_editing", true)
+		if Content.arg("sel") != "":
+			sbc.set("sel_nodes", Array(Content.arg("sel").split(",")).map(func(x: String) -> int: return int(x)))
+			sbc.call("show_selection")
+	if sbc != null and Content.arg("crash") != "":
+		# (--crash=50: the crash test of the test bar at 50 km/h, --angle=20; --crashtab=1: the tab Crash test of the test bar)
+		var cr: Object = sbc.get("crash")
+		(cr.get("ui")["speed"] as HSlider).value = float(Content.arg("crash"))
+		(cr.get("ui")["angle"] as HSlider).value = float(Content.arg("angle")) if Content.arg("angle") != "" else 0.0
+		cr.call("start")
+	if Content.arg("crashtab") != "":
+		ed.engine.show_test_bar(true)
+		var tabs := ed.engine.crash_pane.get_parent().get_child(0)
+		(tabs.get_child(1) as Button).pressed.emit()
 	match Content.arg("window"):
+		"Strengths":
+			sbc.call("open_strengths")
+		"Parts":
+			sbc.get("parts").call("toggle")
 		"Cameras":
 			(ed.form._cam_dialog["window"] as Window).popup_centered()
 		"Materials":
