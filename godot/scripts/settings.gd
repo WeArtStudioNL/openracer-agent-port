@@ -20,7 +20,7 @@ const DEFAULTS := {
 	"esc": true,                  # stability control (when the car has it)
 	"launch_control": false,      # brake and full throttle at a standstill hold the engine; the brake let go: a launch
 	"two_step": false,            # the clutch in at a standstill holds the engine at the two-step speed
-	"tyre_wear": 0.0,             # tyre temperature and wear: 0 off (the tyres at their best), else how fast they wear
+	"tyre_wear": 1.0,             # tyre temperature, wear and fuel: 0 off (the tyres at their best), else how fast they wear (on, as main.js)
 	"damage": true,               # the cars dent and lose parts (the soft body); off: rigid bodies, as main.js &damage=0
 	"auto_reverse": true,         # holding the brake at a standstill puts the car in reverse (the keys)
 	"auto_reverse_pedals": true,  # the same with the brake pedal of a wheel, a pad or the touch screen

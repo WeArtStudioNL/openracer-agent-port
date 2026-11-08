@@ -96,7 +96,7 @@ the AI go to `user://test-records.cfg`, not to the player's records.)
 The tyres have the kinds of Wheel.js (eco to drag slick, off-road, winter; a custom tyre has a rubber of 0 to 100
 between them, and a tread): grip, the stiffness across the tyre, the rolling resistance, what they do on loose
 ground. The pressure of car.json works on the grip (best at 2.2 bar), the stiffness and the rolling. With "Tyre
-temperature and wear" (Settings, Driving; off by default here, on in the browser game: see Parity) the tyres heat with the power
+temperature and wear" (Settings, Driving; on by default, as in the browser game) the tyres heat with the power
 of their slip and the flexing, grip less outside their window, and wear; the dashboard shows the temperature and
 what is left of each. Downforce per axle (chassis.downforce_front/rear) presses with the square of the speed.
 The torque converter of Vehicle.js (it multiplies the torque while it slips, creeps at idle, locks up at speed).
@@ -935,8 +935,6 @@ game (November 2026). What the Godot version still lacks or does otherwise, and 
   the Godot behaviour), settles it on the ground and turns it the way of the start; Godot reverses only a line of a
   designed road.
 - The grip measured on the skidpad (OpenRacer.SkidpadGrip) is not used by the AI.
-- Tyre wear and fuel are on by default in the browser (`wear=1`) and off here: the lap times of the tests and of the
-  player's records are with it off; switching the default is the player's choice (Settings, Driving).
 - "Save the replay?" is asked only from Main menu of the pause menu, not on Restart or Race again.
 - A car or a track that is missing: an error in the log, where the browser shows a dialog (`?missing=`).
 
