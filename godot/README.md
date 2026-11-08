@@ -9,14 +9,14 @@ a track made for the browser game drives here too.
 
 ## Building the native part
 
-The engine sound is C++ (a GDExtension in `native/`, built on godot-cpp, a git submodule). Build it once, and
-again after a change in `native/src/`:
+The engine sound and the shell tyre are C++ (a GDExtension in `native/`, built on godot-cpp, a git submodule). Build
+it once, and again after a change in `native/src/` (the shell tyre came with `native/src/tyre_shell.cpp`: build again):
 
     git submodule update --init
     cd godot && /Applications/Godot.app/Contents/MacOS/Godot --headless --dump-extension-api && mv extension_api.json native/
     cd native && scons            # makes godot/bin/liboracer.macos.template_debug.universal.dylib
 
-Without it the game runs, without the engine sound (a warning says so).
+Without it the game runs, without the engine sound (a warning says so) and on the simple tyre.
 
 ## Running
 
@@ -102,6 +102,62 @@ engine, the mass goes down with it, an empty tank stops the engine.
 
 `--set=tyre_wear:3.0,tc:false` changes settings for one run (the tests).
 
+## The shell tyre
+
+The tyre of the player's car in the browser game (TyreShell.js): two shells of nodes with beams between them. The
+inner shell is the rim, the outer shell the tread and the shoulder, nodes with a mass held by cables to the rim (the
+carcass, slack where the road pushes the node in), the belt between them, the pressure of the air, the shear of the
+tread against the rim, and the road: a stiff spring out of the nearest triangle and the bristles that hold a node on it
+(sliding past the friction of the road). The car gets the force of the beams on the rim. It is
+`native/src/tyre_shell.cpp` (TyreShell, and TyreGround: the triangles of the ground in a grid, the nearest point of a
+triangle), a port of TyreShell.js line for line, 14 small steps of a few hundred nodes and beams per wheel; around it
+`scripts/shell_tyres.gd` does the part of Vehicle.js: the wheel is a mass of its own (chassis.unsprung_mass, else 35 kg,
+a light car 2.85 % of its mass) between the spring and its digressive damper (solved implicitly, with the stops) and
+the shell; the body gets the spring at the mount, the friction of the nodes along the wheel at the contact (raised by
+the anti geometry) and across at the roll centre, the rolling resistance and the push of the nodes across the
+suspension at the hub; the shell turns the wheel itself in its small steps and the drivetrain gets the torque of that
+turn. Three steps of 1/360 s in a step of Godot (Vehicle.js steps at 1/300 s or less). A kart has no suspension: the
+shell is its spring. The ground is every static collision shape on layer 1 (the road, the curbs, the floor of the
+bench), made again when one comes or goes.
+
+When: as in the browser game the player's car (and the car of the bench of the car editor), on Settings, Simulation,
+"Tyres of my car" = Shell (the default; Simple is the ray and the slip curve of the AI cars). The AI cars, a
+motorcycle (its Godot model is the v2 of the browser game, on the simple tyre) and the AI test driver (`--ai`) drive on
+the simple tyre; `--tyres=shell|simple` sets it for one run. "Tyres of cars: detail" (Full, Medium: 2 rings, Low: 1
+ring of 12; not a kart) as in Settings.js. The tuning rows of the tyre (width front and rear, rings, nodes round the
+wheel, inner shell, carcass, the stiffness along and across, the height of the sidewall) work on it; a custom tyre of
+the wheel library brings its own shell (WheelLibrary.js customSpec), as does a tyre of the catalogue.
+
+The model of the wheel is pushed in as the outer nodes are (`scripts/tyre_deform.gd`, TyreDeform.js): the materials of
+the tyre (not the rim, which lies inside the inner shell) get a vertex shader with the table of the shell per ring and
+per place round the wheel. A StandardMaterial3D becomes a shader of the same look (colour, roughness, metal, normals and
+their textures: Godot does not give a script the code of a StandardMaterial3D); a ShaderMaterial keeps its own code. The
+debug view (0) draws the two shells and the beams (green where a node holds, red where it slides), the debug text (F3)
+the nodes and steps of a tyre and how far each is in, and the car editor draws them over the car of the bench while a
+tyre setting has the focus (without a test: the tyres of the library from their settings).
+
+Tests: `res://tools/test_tyre_shell.tscn -- --car=<id> --quick` is `node tools/tyre-bench.js <id> --quick` on the
+native tyre (the static curve, rolling, the slip sweeps, the relaxation, the cost); `res://tools/test_shell_car.tscn --
+--car=<id> [--tyres=simple] --set=tc:false,esc:false` the road test of `tools/physics-bench.js` (at rest, 0-100 km/h,
+100-0 km/h, the skidpad; `--shot=file.png --deform-gain=5`, not headless, a picture of the front wheel).
+
+The bench, browser (node) against Godot, the same tyre on a flat road:
+
+| | Muscle (3 x 12 nodes) browser | Godot | Kart (3 x 16) browser | Godot |
+|---|---|---|---|---|
+| deflection at static load (mm) | 12.88 | 13.28 | 0.63 | 0.63 |
+| vertical stiffness (N/mm) | 331 | 349 | 105 | 105 |
+| patch length (mm) | 514 | 513 | 167 | 167 |
+| rolling radius / radius | 0.929 | 0.929 | 0.956 | 0.956 |
+| rolling resistance (Crr) | 0.0284 | 0.0282 | 0.0352 | 0.0352 |
+| load noise on the roll (%) | 11.1 | 11.0 | 4.11 | 4.11 |
+| slip stiffness / Fz, peak mu x | 15.97, 0.946 | 15.86, 0.943 | 10.86, 0.957 | 10.86, 0.958 |
+| cornering stiffness / Fz, peak mu y | 15.59, 0.989 | 15.51, 0.990 | 7.52, 0.861 | 7.52, 0.863 |
+| relaxation length (m) | 0.09 | 0.09 | | 0.12 |
+| cost (ms a step of a tyre) | 1.09 | 0.09 | | 0.13 |
+
+ROADTEST
+
 ## Tuning
 
 **U** opens the tuning menu, as the browser game has it (web/js/Tuning.js, CarTuning.js): a panel at the right of
@@ -112,7 +168,7 @@ and a slider with the units, ranges and steps of CarTuning.js; a changed value i
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
 settings are folded apart, the systems and the extras have a tick that opens their settings. A setting that cannot do
 anything with the others is hidden (CarTuning.visible); one that the Godot physics do not use yet is grey with a
-tooltip (Tuning.NOT_IN_GODOT: the wheel library, the tyre shell and tread stiffness, heating and life,
+tooltip (Tuning.NOT_IN_GODOT: the wheel library, heating and life,
 tyre damage, the shift pattern, diff build-up, the centre differential, the parts library suspension and engine
 place, the steering wheel stops, look-ahead/fov-speed/dolly/hide-driver of the cameras, the boost gauge). A change
 works at once while the car drives (the cameras and the engine sound follow too); in a race the game waits while the
@@ -245,9 +301,7 @@ damage on, a hard hit on a tyre (more than five times its static load: a kerb, a
 it leaks 0.05 to 0.15 bar a second down to 0.15 bar, and its grip, its sidewall and (a kart) its spring follow. A
 repair makes the tyres whole. The crash test takes `--puncture=1`.
 
-Not yet from the browser game: the shell tyre (TyreShell.js, TyreDeform.js: the tyres of the player's car as rings of
-nodes; Godot has the ray and the slip curve of the simple tyre of the AI cars), the hit of a loose part of one car on
-another car, a wheel of the other car feeling a hit, the plate and the node grabber of the debug view, the fading of
+Not yet from the browser game: the hit of a loose part of one car on another car, a wheel of the other car feeling a hit, the plate and the node grabber of the debug view, the fading of
 the parts in the pit stop (they are put back at the end of the repair).
 
 ## Marbles, debris and the parts library
@@ -390,8 +444,7 @@ The Soft body and the Driver cards are ported apart: the editor loads `scripts/e
 Not ported: the part window of the browser's Soft body card (a click on a loose object: pin points with free axes,
 limits per axis and a turn gizmo, Opens at, the shatter settings, Break it now, nodes added on the part with the rest
 faded; the Godot game has no swinging hinges and no shattering yet, so those settings of car.json are kept as they are but
-cannot be set here), Full test of the bench, the flame test of the exhaust points, the nodes of the
-tyre shells on the bench (the Godot physics have no tyre shells), the weather, time of day and ground of Save and test,
+cannot be set here), Full test of the bench, the flame test of the exhaust points, the weather, time of day and ground of Save and test,
 Ship with the car of a tune, and the material field "reflection" (envMapIntensity) is saved but only approximated (the specular of the material).
 
 Test of the Soft body card: `Godot --headless --fixed-fps 120 --path godot res://tools/test_softbody_card.tscn` (the
@@ -719,6 +772,7 @@ editor), import from a link, the browser's storage notes; TextureBudget.js (the 
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
 | `scripts/main_menu.gd`, `menu/`, `settings_*.gd`, `pause_menu.gd`, `hud_*.gd` | the main menu, the settings, the pause menu, the gauge and the HUD editor |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
+| `native/src/tyre_shell.cpp`, `scripts/shell_tyres.gd`, `tyre_deform.gd` | the shell tyre: TyreShell.js in C++, the wheels on it (Vehicle.js), the tread of the model pushed in (TyreDeform.js) |
 | `scripts/engine_sim_params.gd`, `car_audio.gd` | the sound parameters of car.json; the engine and the tyre squeal of a car |
 | `scripts/tyre_effects.gd` | skid marks, tyre smoke and dust |
 | `scripts/soft_body.gd`, `car_shell.gd`, `collision_proxy.gd`, `wall_grid.gd`, `soft_body_mesh.gd`, `car_parts.gd` | the shell that dents, its contacts, its nodes, the walls of the track, the model that bends, the parts that come off |

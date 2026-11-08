@@ -68,6 +68,14 @@ func _run() -> void:
 		check(touching == 4 and bc.linear_velocity.length() < 0.3, "it stands on its four wheels (%d, %.2f m/s)" % [touching, bc.linear_velocity.length()])
 		check(absf(bc.global_position.y - ed.view.grid.position.y - ed.num("chassis.tire_diameter") / 2.0) < 0.25,
 			"at the height of its axles (%.2f m)" % bc.global_position.y)
+		# the nodes of the shell tyres over it while a tyre setting is changed (CarEditorTyreNodes)
+		ed.bench.tyre_nodes.show(true)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		var drawn: MeshInstance3D = ed.bench.tyre_nodes._lines
+		check(bc.shell_tyres == null or (drawn != null and drawn.mesh.get_surface_count() > 0), "the nodes of the tyres are drawn (%s)" % [
+			"no shell tyres" if bc.shell_tyres == null else "%d lines" % (drawn.mesh.surface_get_array_len(0) / 2 if drawn != null else 0)])
+		ed.bench.tyre_nodes.show(false)
 	ed.bench.stop()
 	check(ed.bench.car == null and ed.view.pivot.visible, "↺: back to the model")
 	print("2. change it as a user does")
