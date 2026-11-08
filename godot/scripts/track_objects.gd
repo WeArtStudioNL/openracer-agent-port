@@ -148,6 +148,7 @@ func _make_static(root: Node3D) -> void:
 		shape.backface_collision = true
 		var sb := StaticBody3D.new()
 		sb.set_meta("surface", "scenery")
+		sb.collision_layer = Track.SCENERY_LAYER
 		var col := CollisionShape3D.new()
 		col.shape = shape
 		sb.add_child(col)
@@ -263,7 +264,7 @@ func _body(mass: float) -> RigidBody3D:
 	var body := RigidBody3D.new()
 	body.mass = mass
 	body.collision_layer = LAYER_OBJECT
-	body.collision_mask = 1 | LAYER_OBJECT | LAYER_CAR
+	body.collision_mask = 1 | Track.SCENERY_LAYER | LAYER_OBJECT | LAYER_CAR
 	body.linear_damp = 0.1
 	body.angular_damp = 0.25
 	body.continuous_cd = true

@@ -241,6 +241,7 @@ func setup(id: String, cfg: Dictionary) -> void:
 	col.shape = shape
 	col.position = Vector3(0.0, bottom + shape.size.y / 2.0, 0.0)
 	add_child(col)
+	collision_mask = 1 | Track.SCENERY_LAYER       # (the road and the scenery of the track, Track)
 	_box = col
 	_build_visual()
 	_make_shell()

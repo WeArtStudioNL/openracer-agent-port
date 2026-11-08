@@ -166,7 +166,7 @@ func _come_off(p: Part, v: Vector3) -> void:
 	body.mass = maxf(0.2, p.mass)
 	body.continuous_cd = true
 	body.collision_layer = FREE_LAYER
-	body.collision_mask = 1 | FREE_LAYER
+	body.collision_mask = 1 | FREE_LAYER | Track.SCENERY_LAYER
 	body.linear_damp = 0.05
 	body.angular_damp = 0.4
 	var col := CollisionShape3D.new()
