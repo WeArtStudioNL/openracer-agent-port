@@ -178,6 +178,21 @@ func dispose() -> void:
 		bodies[i] = null
 
 
+## A hit on a tyre from outside (the debug view; Vehicle.js hitWheel): the damage of a hit of the wheel by its impulse
+## (N s) against the strength of the wheels (car.json softbody.wheel_strength, kN s, 25; 0: never); at 1 it is torn off.
+## True when it came off.
+func hit_wheel(i: int, impulse: float) -> bool:
+	var sbc: Variant = car.config.get("softbody", {})
+	var strength := float(sbc.get("wheel_strength", 25.0) if sbc is Dictionary else 25.0) * 1000.0
+	if not (strength > 0.0) or lost[i] or car.wheels[i].lost:
+		return false
+	damage[i] = minf(1.0, float(damage[i]) + impulse / strength)
+	if damage[i] >= 1.0:
+		tear_off(i)
+		return true
+	return false
+
+
 ## A wheel torn off from outside (a test, the debug of the car editor).
 func tear_off(i: int) -> void:
 	if lost[i] or car.wheels[i].lost:
@@ -233,6 +248,7 @@ func _spawn(i: int, gx: Transform3D, lin: Vector3, ang: Vector3) -> void:
 		body.add_child(child.duplicate())
 	body.add_collision_exception_with(car)
 	car.get_parent().add_child(body)
+	CarParts.keep_to_own(body, car)          # (not the other cars and their parts: Parts.js)
 	body.global_transform = gx.orthonormalized()
 	body.linear_velocity = lin
 	body.angular_velocity = ang

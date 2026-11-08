@@ -122,7 +122,7 @@ func _ready() -> void:
 		if a.begins_with("--user-dir="):
 			_dir = a.substr(11)
 			DirAccess.make_dir_recursive_absolute(_dir)
-	_values = DEFAULTS.duplicate(true)
+	_values = first_values()
 	if _config.load(path(FILE)) == OK:
 		for key in DEFAULTS:
 			if _config.has_section_key("settings", key):
@@ -135,6 +135,29 @@ func _ready() -> void:
 				if kv.size() == 2 and DEFAULTS.has(kv[0]):
 					var parsed: Variant = str_to_var(kv[1])
 					_overrides[kv[0]] = parsed if parsed != null else kv[1]       # (a word is a text: gfx_weather:rain)
+
+
+## The values of a first start: the defaults, and on a touch device (a phone or a tablet) the Low graphics (Settings.js
+## loadDefaults; what is chosen afterwards is kept).
+static func first_values() -> Dictionary:
+	var out := DEFAULTS.duplicate(true)
+	if touch_device():
+		out["gfx_preset"] = "low"
+		out.merge(Graphics.PRESETS["low"], true)
+	return out
+
+
+## A phone or a tablet (TextureBudget.js touchDevice): a touch screen, or --touch=1 (--touch=0: not).
+static func touch_device() -> bool:
+	for a in OS.get_cmdline_user_args():
+		if a == "--touch=1":
+			return true
+		if a == "--touch=0":
+			return false
+	# (a touch screen with a phone's or a tablet's system: a laptop with a touch screen has a mouse first, as the
+	# browser's coarse pointer says)
+	return DisplayServer.is_touchscreen_available() and (OS.has_feature("mobile") or OS.has_feature("web_android") \
+		or OS.has_feature("web_ios"))
 
 
 ## A file of the menus in the user folder (or in the folder of the tests, --user-dir).
@@ -163,8 +186,9 @@ func reset(keys: Array = []) -> void:
 		for k in DEFAULTS:
 			if k not in ["controls", "tunes", "garage_folder", "hud_layout", "panels", "settings_tab", "keys_shown"]:
 				keys.append(k)
+	var first := first_values()
 	for k in keys:
-		_values[k] = DEFAULTS[k].duplicate(true) if DEFAULTS[k] is Dictionary else DEFAULTS[k]
+		_values[k] = first[k].duplicate(true) if first[k] is Dictionary else first[k]
 	_save()
 	for k in keys:
 		changed.emit(k)

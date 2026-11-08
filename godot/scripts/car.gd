@@ -245,6 +245,7 @@ func setup(id: String, cfg: Dictionary) -> void:
 	car_id = id
 	config = cfg
 	name = "Car"
+	add_to_group("cars")             # (the loose parts of another car do not meet it: CarParts.keep_to_own)
 	_read_config()
 	# the body for knocks against walls and other things: from a little above the road to the roof
 	var dims: Dictionary = cfg.get("dimensions", {})
@@ -308,6 +309,55 @@ func _make_shell() -> void:
 	if shell != null:
 		RunLog.event("soft body %s: %d nodes, %d beams, a small step of %.2f ms is stable" % [car_id, shell.sb.count, shell.sb.beam_count,
 			shell.sb.safe_h * 1000.0])
+
+
+## The car built again for a configuration (Car.js rebuild; the tuning menu, when a row of the wheel library or the parts
+## library changes): the model, the wheels, the suspension rig, the driver, the shell and its parts; the car stays where
+## it is and keeps its speed. Not a motorcycle (its model and rider are built with the drive): false then.
+func rebuild(cfg: Dictionary) -> bool:
+	if bike != null or str(cfg.get("type", "car")) == "motorcycle":
+		return false
+	if parts != null:
+		parts.dispose()
+		parts = null
+	if shell_mesh != null:
+		shell_mesh.dispose()
+		shell_mesh = null
+	if shell != null:
+		shell.dispose()
+		shell = null
+	shell_tyres = null
+	for w in wheels:
+		if w.hub_node != null:
+			remove_child(w.hub_node)
+			w.hub_node.queue_free()
+		w.hub_node = null
+		w.steer_node = null
+		w.spin_node = null
+		w.visual_offset = Vector3.ZERO
+		w.lost = false
+	for n in ["Model", "Driver", "CarVisuals"]:
+		var old := get_node_or_null(n)
+		if old != null:
+			remove_child(old)
+			old.queue_free()
+	config = cfg
+	var rpm_omega := engine.omega
+	_read_config()
+	engine.omega = rpm_omega
+	_build_visual()
+	_make_shell()
+	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
+		parts = CarParts.new(self)
+	# (the flames of the exhaust are in the frame of the model: the new one)
+	for holder: Node in [self, get_parent()]:
+		if holder == null:
+			continue
+		for n in holder.get_children():
+			if n is ExhaustFlames and (n as ExhaustFlames).car == self:
+				(n as ExhaustFlames).root = model_root
+	RunLog.event("car %s built again (the wheels, the suspension, the model)" % car_id)
+	return true
 
 
 ## Makes the car whole again: the shell, its model and the parts (the browser game does it when the car is put back

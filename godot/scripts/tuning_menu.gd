@@ -3,7 +3,8 @@ extends PanelContainer
 ## The tuning menu (U), as web/js/Tuning.js has it: a panel at the right of the screen with the cards of the car
 ## editor (Tuning.CARDS), each with its groups folded away, a row for every setting (the label, a number, the unit,
 ## ↺ back to the setup that is chosen, and a slider under it), the systems and the extras with a tick, the gears and
-## the kinds of transmission, and the setups of the car (Default is car.json; Save, Save as new…, Delete). A change
+## the kinds of transmission, the engine build with its chart and dyno (TuningEngine), and the setups of the car (Default
+## is car.json: Save writes it, TuningFiles; Save as new…, Delete, Export…, Export to vehicle, Import…). A change
 ## works at once: the car is set up again while it drives (in a race the game waits while the menu is open: World).
 ## A setting that cannot do anything with the others as they are is hidden (Tuning.visible); one that the Godot
 ## physics do not use yet is grey (Tuning.NOT_IN_GODOT). The tune in use is remembered per car.
@@ -39,6 +40,7 @@ var _setup_names: Array = []
 var _setups := {}
 var _drop_b: Button
 var _save_b: Button
+var _ship_b: Button
 var _gear_grid: GridContainer
 var _gear_summary: Label
 var _gear_counter: HBoxContainer
@@ -48,6 +50,8 @@ var _holds := 0
 var _was_paused := false
 var _refreshing := false
 var _wheels: Dictionary = {}
+var _engine: TuningEngine = null    # the engine build of the Engine card
+var _rebuild_timer: Timer = null
 
 
 func setup(w: Node, c: Car, base_config: Dictionary) -> void:
@@ -117,7 +121,7 @@ func _ready() -> void:
 	margin.add_child(body)
 
 	var sub := _label("%s. Change the car while you drive (in a race the game waits while this menu is open). U shows or hides this menu. "
-		% car.config.get("name", car.car_id) + "Grey settings are not in the Godot version yet: they are kept in the tune.", 12, MUTED)
+		% car.config.get("name", car.car_id) + "The tuning of this car is kept as a setup (Save, Save as new…); Default is car.json.", 12, MUTED)
 	body.add_child(sub)
 	var info_box := PanelContainer.new()
 	var ib := _box(BG2, 5, 0)
@@ -257,6 +261,11 @@ func _card(parent: Control, card: Array) -> void:
 	if name_text == "Motorcycle" and values.get("vehicle_type") != "motorcycle":
 		return                      # (a car has no Motorcycle card)
 	var content := _section(parent, name_text, name_text, true)
+	if name_text == "Engine":
+		# (the engine build, its chart and the dyno: TuningEngine, the pieces of the car editor's Engine card)
+		_engine = TuningEngine.new()
+		content.add_child(_engine)
+		_engine.setup(self)
 	if name_text == "Assists and extras":
 		for f in Tuning.FEATURES:
 			_feature_row(content, f)
@@ -591,6 +600,17 @@ func _setup_line() -> Control:
 	_drop_b = _button("Delete")
 	_drop_b.pressed.connect(_delete)
 	flow.add_child(_drop_b)
+	# a tune as a file (TuningFiles): Export…, Export to vehicle (a tune that comes with the car), Import…
+	var export_b := _button("Export…", "The setup that is chosen (or the car as it is tuned now) as a file, to share")
+	export_b.pressed.connect(func(): _file_dialog(true))
+	flow.add_child(export_b)
+	_ship_b = _button("Export to vehicle")
+	_ship_b.pressed.connect(_export_to_vehicle)
+	_ship_b.visible = false
+	flow.add_child(_ship_b)
+	var import_b := _button("Import…", "A tune file of someone else: it becomes a setup of this car, and is chosen")
+	import_b.pressed.connect(func(): _file_dialog(false))
+	flow.add_child(import_b)
 	return flow
 
 
@@ -630,8 +650,12 @@ func _fill_setups() -> void:
 	_drop_b.text = "Undo changes" if own and shipped else "Delete"
 	_drop_b.tooltip_text = "This setup comes with the car" if shipped and not own \
 		else "The setup as it comes with the car, without the changes saved here" if own and shipped else ""
-	_save_b.tooltip_text = "Default is car.json, the car as made (the car editor of the browser game writes it)" if active == "" \
+	_save_b.tooltip_text = "car.json is overwritten with the car as it is now (Default becomes the car as tuned)" if active == "" \
 		else "The setup that is chosen is overwritten with the car as it is now"
+	# (Export to vehicle: a tune that comes with the car, of a car whose files are written here)
+	_ship_b.visible = shipped and TuningFiles.car_dir(car.car_id) != ""
+	_ship_b.tooltip_text = "The tune “%s” that comes with the car becomes the car as it is tuned now: its file next to car.json is written" % active \
+		if shipped else ""
 
 
 func _pick_setup(i: int) -> void:
@@ -686,9 +710,132 @@ func _update_reference(cfg := {}) -> void:
 func _save() -> void:
 	var n := _active_name()
 	if n == "":
-		_message.text = "Default is car.json, the car as made: the Godot version does not write it. Keep the tuning with Save as new…"
+		_save_default()
 		return
 	_save_as(n)
+
+
+## Save on Default: car.json is written with the tuning in it (the car as made becomes the car as it is tuned), in the
+## garage or in web/cars when the game runs from the repository (TuningFiles); the game's own cars of an exported game not.
+func _save_default() -> void:
+	var at := TuningFiles.where(car.car_id)
+	if at == "":
+		_message.text = "This car comes with the game: its car.json is not written here (the car editor saves a car in your garage). " \
+			+ "Keep the tuning with Save as new…"
+		return
+	_dialog("Overwrite car.json?", "Default, the car as made, becomes the car as it is tuned now: this writes cars/%s/car.json in %s." % [car.car_id,
+		"your garage" if at == "garage" else "web/ (the repository)"], "Overwrite", func(_t: String): save_default_now())
+
+
+## (also the tests) Writes car.json with the car as it is now: true when it was written.
+func save_default_now() -> bool:
+	var err := TuningFiles.write_car_json(car.car_id, car.config)
+	if err != "":
+		_message.text = "car.json was not saved: %s. Keep the tuning with Save as new…" % err
+		return false
+	base = car.config.duplicate(true)
+	if world != null and world.get("base_config") != null:
+		world.set("base_config", base)
+	_remember("")
+	_update_reference(base)
+	_refresh()
+	_message.text = "car.json saved: Default is the car as it is tuned now."
+	RunLog.event("tuning: car.json of %s written" % car.car_id)
+	return true
+
+
+## A file dialog of the system for a tune file: save (Export…) or open (Import…).
+func _file_dialog(save: bool) -> void:
+	var dlg := FileDialog.new()
+	dlg.file_mode = FileDialog.FILE_MODE_SAVE_FILE if save else FileDialog.FILE_MODE_OPEN_FILE
+	dlg.access = FileDialog.ACCESS_FILESYSTEM
+	dlg.use_native_dialog = true
+	dlg.filters = PackedStringArray(["*.json ; A tune file"])
+	if save:
+		var n := _active_name()
+		dlg.current_file = car.car_id + "-" + TuningFiles.file_name(n if n != "" else str(car.config.get("name", car.car_id)) + " as tuned")
+	add_child(dlg)
+	_hold(true)
+	var done := func():
+		_hold(false)
+		dlg.queue_free()
+	dlg.canceled.connect(done)
+	dlg.file_selected.connect(func(p: String):
+		done.call()
+		if save:
+			export_to(p)
+		else:
+			_import_ask(p))
+	dlg.popup_centered_ratio(0.6)
+
+
+## Export…: the setup that is chosen (with the changes on the car that are not saved: under its name with "(changed)"),
+## or the car as it is tuned now.
+func export_to(path: String) -> bool:
+	var n := _active_name()
+	var title := n if n != "" else str(car.config.get("name", car.car_id)) + " as tuned"
+	var cfg := car.config
+	if n != "" and _differs(_reference):
+		title = n + " (changed)"
+	elif n != "":
+		var saved := Tuning.load_tune(_path_of(n))
+		cfg = saved if not saved.is_empty() else car.config
+	var err := TuningFiles.export_file(path, car.car_id, title, cfg)
+	_message.text = ("Tune %s saved as %s." % [title, path.get_file()]) if err == "" else "The tune was not saved: %s." % err
+	return err == ""
+
+
+func _import_ask(path: String) -> void:
+	var tune := TuningFiles.parse_file(path)
+	if tune.has("error"):
+		_message.text = tune["error"]
+		return
+	var other := str(tune["car"]) != "" and str(tune["car"]) != car.car_id
+	_dialog("Import a tune", "The name of this tune" + (" (it was made for %s: only its tuning is taken, not that car's wheels, size, shell or type)"
+		% tune["car"] if other else ""), "Save", func(t: String):
+			t = t.strip_edges().left(40)
+			if t != "":
+				import_tune(tune, t), true, str(tune["name"]))
+
+
+## (also the tests) An imported tune kept as a setup of this car and chosen.
+func import_tune(tune: Dictionary, tune_name: String) -> void:
+	var cfg := TuningFiles.imported(tune, car.car_id, base)
+	var path := Tuning.save_tune(car.car_id, tune_name, cfg)
+	_use(cfg, path)
+	var other := str(tune.get("car", "")) != "" and str(tune["car"]) != car.car_id
+	_message.text = "Tune %s imported and chosen%s." % [tune_name, " (made for %s: its tuning, on this car's model)" % tune["car"] if other else ""]
+	RunLog.event("tune imported: %s (%s)" % [tune_name, path])
+
+
+## Export to vehicle: the tune that comes with the car (its file next to car.json) becomes the car as it is tuned now;
+## the copy of the player goes, the file is the tune.
+func _export_to_vehicle() -> void:
+	var n := _active_name()
+	if n == "" or _setups[n]["car"] == "":
+		return
+	var file := str(_setups[n]["car"]).get_file()
+	_dialog("Overwrite %s?" % file, "The tune “%s” that comes with the car becomes the car as it is tuned now: this writes cars/%s/%s." % [n, car.car_id, file],
+		"Overwrite", func(_t: String): export_to_vehicle_now())
+
+
+func export_to_vehicle_now() -> bool:
+	var n := _active_name()
+	if n == "" or _setups[n]["car"] == "":
+		return false
+	var shipped: String = _setups[n]["car"]
+	var err := TuningFiles.write_shipped(car.car_id, shipped, n, car.config)
+	if err != "":
+		_message.text = "%s was not saved: %s." % [shipped.get_file(), err]
+		return false
+	if _setups[n]["own"] != "":
+		Tuning.delete_tune(_setups[n]["own"])
+	_remember(shipped)
+	_update_reference(car.config)
+	_refresh()
+	_message.text = "%s saved: the tune %s that comes with the car is the car as it is tuned now." % [shipped.get_file(), n]
+	RunLog.event("tuning: %s exported to the vehicle" % shipped)
+	return true
 
 
 func _save_new() -> void:
@@ -733,7 +880,7 @@ func _delete() -> void:
 
 
 ## A question in a window of the game (with a name to type when asked). The game waits while it is open.
-func _dialog(title: String, text: String, ok_text: String, on_ok: Callable, with_input := false) -> void:
+func _dialog(title: String, text: String, ok_text: String, on_ok: Callable, with_input := false, initial := "") -> void:
 	var d := ConfirmationDialog.new()
 	d.title = title
 	d.ok_button_text = ok_text
@@ -746,6 +893,7 @@ func _dialog(title: String, text: String, ok_text: String, on_ok: Callable, with
 		box.add_child(l)
 		edit = LineEdit.new()
 		edit.max_length = 40
+		edit.text = initial
 		box.add_child(edit)
 		d.add_child(box)
 		d.register_text_enter(edit)
@@ -792,6 +940,7 @@ func _change(key: String, value: Variant) -> void:
 
 
 func _apply(cfg: Dictionary, what: String) -> void:
+	var built_before := _built_from(car.config)
 	var cams_before: Variant = car.config.get("cameras")
 	var sound_before: Variant = car.config.get("sound")
 	var wheel_before: Variant = car.config.get("steering_wheel")
@@ -819,6 +968,33 @@ func _apply(cfg: Dictionary, what: String) -> void:
 	values = Tuning.values_of(car.config, _cam())
 	_refresh()
 	RunLog.event("tuning " + what)
+	if _built_from(car.config) != built_before:
+		# (the wheel library, the parts library: the car is built again, half a second after the last change, Tuning.js)
+		if _rebuild_timer == null:
+			_rebuild_timer = Timer.new()
+			_rebuild_timer.one_shot = true
+			_rebuild_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+			_rebuild_timer.timeout.connect(rebuild_now)
+			add_child(_rebuild_timer)
+		_rebuild_timer.start(0.5)
+
+
+## What the model of the car is built from (Tuning.js builtFrom): the suspension and the driveline of the parts library,
+## the rims and tyres of the wheel library.
+static func _built_from(cfg: Dictionary) -> String:
+	var wheels: Variant = cfg.get("wheels", {})
+	return JSON.stringify([cfg.get("suspension"), cfg.get("driveline"), wheels.get("library") if wheels is Dictionary else null,
+		wheels.get("mode") if wheels is Dictionary else null])
+
+
+## (also the tests) The car built again with what the menu has now.
+func rebuild_now() -> void:
+	if car.rebuild(car.config):
+		_message.text = "The car is built again (the wheels and the suspension)."
+		if world != null and world.get("camera") != null:
+			(world.get("camera") as ChaseCamera).read_config(car)
+	else:
+		_message.text = "A motorcycle is built with this at the next start (save the setup first)."
 
 
 static func _same(a: Variant, b: Variant) -> bool:
@@ -896,6 +1072,8 @@ func _refresh() -> void:
 				any = true
 		(_sections[i][0] as Control).visible = any
 	_refreshing = false
+	if _engine != null:
+		_engine.update()
 	_fill_setups()
 	_update_info()
 

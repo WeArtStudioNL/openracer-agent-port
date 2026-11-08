@@ -372,7 +372,7 @@ func _mode_step() -> void:
 
 
 ## A tile of a car (MainMenu.js carTile): its picture, the name, the specs and the power.
-static func car_tile(id: String, cfg: Dictionary, selected: bool, host: Node, size: float, title := "", specs_text := "") -> Button:
+static func car_tile(id: String, cfg: Dictionary, selected: bool, host: Node, size: float, title := "", specs_text := "", pic_key := "") -> Button:
 	var tile := MenuStyle.card(selected, 10, Color("#1b1f25"))
 	tile.custom_minimum_size = Vector2(size, size)
 	tile.tooltip_text = str(cfg.get("description", ""))
@@ -400,15 +400,10 @@ static func car_tile(id: String, cfg: Dictionary, selected: bool, host: Node, si
 	tile.add_child(back)
 	tile.add_child(bg)
 	bg.texture = CarInfo.car_picture(id, cfg, host, func(t: Texture2D):
-		if is_instance_valid(bg):
-			bg.texture = t)
-	# (the showcase: the car under the mouse, with the focus or chosen turns in 3D on its tile)
-	tile.mouse_entered.connect(func(): CarInfo.showcase(bg, id, cfg, host))
-	tile.focus_entered.connect(func(): CarInfo.showcase(bg, id, cfg, host))
-	tile.mouse_exited.connect(func(): CarInfo.showcase_leave(bg))
-	tile.focus_exited.connect(func(): CarInfo.showcase_leave(bg))
-	if selected:
-		tile.ready.connect(func(): CarInfo.showcase(bg, id, cfg, host, true), CONNECT_DEFERRED)
+		if is_instance_valid(bg) and not bg.texture is ViewportTexture:
+			bg.texture = t, pic_key)
+	# (the showcase: every car turns in 3D on its tile, MainMenu.js)
+	tile.ready.connect(func(): CarInfo.showcase(bg, id, cfg, host), CONNECT_DEFERRED)
 	var over := VBoxContainer.new()
 	over.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	over.offset_left = 14
@@ -468,12 +463,16 @@ func _tune_tiles(car_id: String, active: String, on_pick: Callable) -> void:
 	var names: Array = [""]
 	names.append_array(tunes.keys())
 	for n in names:
-		var cfg := car_config(car_id)
+		var base := car_config(car_id)
+		var cfg := base
 		if n != "":
 			var t := Tuning.load_tune(str(tunes[n]))
 			if not t.is_empty():
-				cfg = t
-		var tile := car_tile(car_id, cfg, active == n, self, _tile_size(), str(n) if n != "" else "Default", CarInfo.specs(cfg))
+				cfg = base.duplicate(true)
+				cfg.merge(t, true)          # (a tune without the model of the car: the car's)
+		# (a picture of its own for a setup that looks otherwise: its rims, tyres, colours, parts)
+		var tile := car_tile(car_id, cfg, active == n, self, _tile_size(), str(n) if n != "" else "Default", CarInfo.specs(cfg),
+			CarInfo.picture_key(car_id, cfg, base))
 		tile.pressed.connect(on_pick.bind(str(n)))
 		g.add_child(tile)
 

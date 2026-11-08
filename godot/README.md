@@ -198,20 +198,29 @@ group folded away. A row has the label, a number, the unit, ↺ (back to the set
 and a slider with the units, ranges and steps of CarTuning.js; a changed value is orange. The brakes are a total and
 a bias, the gears a summary with Advanced (gear by gear, − and +) and a list of kinds of transmission, the tyre's fine
 settings are folded apart, the systems and the extras have a tick that opens their settings. A setting that cannot do
-anything with the others is hidden (CarTuning.visible); one that the Godot physics do not use yet is grey with a
-tooltip (Tuning.NOT_IN_GODOT: look-ahead, fov with speed and dolly of the follow camera). The rows
-of the wheel library and the parts library suspension build the car again: the browser loads it again at once, here the
-tooltip says it is built with them at the next start (Tuning.AT_NEXT_START). The shift pattern (normal, sport, drag,
+anything with the others is hidden (CarTuning.visible); none is grey now (the follow camera's look-ahead, field of view
+with speed and dolly work: ChaseCamera, Car.js). The rows of the wheel library and the parts library suspension build
+the car again at once, half a second after the last change, as the browser does (Car.rebuild: the model, the wheels, the
+rig, the driver, the shell and its parts; a motorcycle at the next start). The shift pattern (normal, sport, drag,
 manual), the heating and the life of the tyres, the steering wheel stop and degrees, hide the driver and the boost gauge
 work. A change
 works at once while the car drives (the cameras and the engine sound follow too); in a race the game waits while the
-menu is open. Setups: "Default (the car as made)" is car.json; Save overwrites the setup that is chosen, Save as
-new… asks a name, Delete (or Undo changes for a tune that comes with the car). A setup is a tune
+menu is open. Setups: "Default (the car as made)" is car.json; Save overwrites the setup that is chosen (on Default it
+writes car.json, asked first: in the garage, or in web/cars when the game runs from the repository, as the car editor
+saves; a car of an exported game is not written), Save as new… asks a name, Delete (or Undo changes for a tune that
+comes with the car), Export… (the setup or the car as tuned as a tune file), Export to vehicle (a tune that comes with
+the car: its file next to car.json is written) and Import… (a tune file: a setup of this car, chosen; one made for
+another car gives only its tuning, CarTuning.js tuningOnly) (`scripts/tuning_files.gd`). The Engine card has the engine
+build of the car editor (`scripts/tuning_engine.gd`, EngineBuildUI.js; the pieces of `car_editor_engine.gd`): the block
+and Stock block, the exhaust, the chart with Run dyno, the build with its limits; a change works out the curve and the
+turbo, the sound follows, and the car is heavier or lighter by the engine (EngineBuild.mass). A setup is a tune
 (`user://tunes/<car>/<name>.openracer-tune.json`, the format of the browser game: a whole car.json); the tunes that
 come with a car (car.json "tunes") are in the list too. The setup in use is remembered per car and used at the next
-start. Not ported: the engine build with its chart and dyno (the browser's Engine card), Export/Import of a tune
-file, the Mirrors card (the mirrors are in Settings, Mirrors). `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
-opens cards and groups (for screenshots). Test: `Godot --headless --path godot res://tools/test_tuning.tscn`.
+start. Not ported: the Mirrors card (the mirrors are in Settings, Mirrors). `--tuning` opens the menu at the start, `--tuning-open=Chassis,Chassis/Brakes`
+opens cards and groups (for screenshots). Tests: `Godot --headless --path godot res://tools/test_tuning.tscn`, and with
+HOME in a temporary folder (it writes a garage car, never web/) `res://tools/test_tuning_menu.tscn -- --user-dir=<tmp>
+[--shot=file.png]` (the Engine card, the camera, a rim that rebuilds the car, Export, Import, Save on Default, Export to
+vehicle).
 
 A kart (chassis.unsprung) stands on its tyres: the tyre is the spring (its rate with the pressure), the frame
 twists (frame_torsion) and the inner rear wheel is lifted (inner_lift) by the lateral acceleration, as in
@@ -352,11 +361,11 @@ damage on, a hard hit on a tyre (more than five times its static load: a kerb, a
 it leaks 0.05 to 0.15 bar a second down to 0.15 bar, and its grip, its sidewall and (a kart) its spring follow. A
 repair makes the tyres whole. The crash test takes `--puncture=1`.
 
-Not yet from the browser game: a wheel of the other car feeling a hit,
-the fading of the parts in the pit stop (they are put back at the end of the repair). A loose part of one car and
-another car: in the browser each car's parts are in a physics world of their own (its own car, the track and its
-objects), so they do not meet another car; in Godot a loose part (layer FREE) meets the bodies of the other cars
-(layer 1) as a rigid box and bounces off them, without denting their shells.
+A loose part (and a wheel that came off) meets its own car, the track and its things, not the other cars and their
+parts, as in the browser, where each car's parts are in a physics world of their own (CarParts.keep_to_own). A wheel of
+the other car feels a hit through the nodes of its suspension in the shell, as in the browser (WheelRig: the hub is
+pushed, it bends, and past its limit it comes off; `res://tools/test_damage_cars.tscn`). Not yet from the browser game:
+the fading of the parts in the pit stop (they are put back at the end of the repair).
 
 ## Marbles, debris and the parts library
 
@@ -441,8 +450,7 @@ and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcyc
   lever, the fork, the give and the brake lever on the brake, the limp rider, a crash into a wall, the ragdoll on the
   floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures, and the
   limp rider and the crash at a few moments: limp_0.25 to limp_1.50, crash_0.15 to crash_1.80).
-- **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the crash rules panel of
-  the 0 key and its push rule, the head that stays upright to the road and looks along the racing line, the ORG bones
+- **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the head that stays upright to the road and looks along the racing line, the ORG bones
   of a Rigify rig that follow the DEF ones, the ragdoll in the replay, walking the bike back with the feet.
 
 ## Garage
@@ -905,9 +913,12 @@ folder). The choice is kept in `user://menu.cfg`. Screenshots: `--menu-step=car 
 **Settings** (`scripts/settings_menu.gd`, `settings_pages.gd`, `settings_rows.gd`, `settings_controls_page.gd`): the tabs of
 the browser, Car, Keyboard, Gamepad, Wheel (with the calibrated wheels and Forget), Display and sound, Mobile (with the touch
 controls), Graphics, Simulation, Tools (debug text, back up and restore the settings, the records and the tunes in one file,
-forget the records of a track, Save as HDR), Controls; Reset all settings. What the Godot game does not do yet is grey with
-the tooltip "Not in the Godot version yet" (SettingsRows.NOT_IN_GODOT: the curve of the key steering and the pad's
-"slower at speed", as the Godot keys and stick steer by a rate of their own; the soft body steps of the AI cars). The steering assist of the keys and the pad (the front wheels turn into a slide), AI cars damage
+forget the records of a track, Save as HDR), Controls (with the free camera's P and O and the take key 5); Reset all
+settings. Nothing is grey now (SettingsRows.NOT_IN_GODOT is empty). The keys, the stick and the touch screen steer as the
+browser does (`scripts/steer_model.gd`: Car.js for the keys, the time to the lock, slower and a smaller lock at speed,
+the centring and the curve; controls.js for the stick, 6 rad/s divided by 1 + "slower at speed" x speed / 10); the AI
+cars' soft body takes the fewest steps of "AI cars: soft body detail"; a touch device (a phone or a tablet, or
+`--touch=1`) starts on the Low graphics. Test of driving with keys: `res://tools/test_keys.tscn -- --user-dir=<tmp>`. The steering assist of the keys and the pad (the front wheels turn into a slide), AI cars damage
 (always, only near my car within its range, off) and the debris rows work. The motorcycle options (shown with a motorcycle): Motorcycle steering (lean only, or countersteer + lean: the
 push on the bars that starts a lean, off on the brake and back slowly after it), Wheelie control, Flat-track style for
 every bike, the Motorcycle follow camera (it rolls with the lean, or the classic chase of a car), the lean at top speed. The pause menu (`scripts/pause_menu.gd`): Resume, Replay, Tune the car, Restart, Back to the
@@ -929,18 +940,23 @@ a race.
 **Debug view** (0, `scripts/debug_view.gd`, DebugView.js): the triangles of the track near the car, the nodes and beams of
 the shell, the engine bay and the radiator, the contacts of the wheels; a panel with the node grabber (the left mouse
 button on a node drags it on an elastic; its strength a slider), the hit of the middle mouse button (a cube of a tonne at
-the speed of the slider, along the view, against the shell; the car feels it), Open hinges and Break parts (a right
-click on a part), Pit stop here (a stop where the car stands), the weather and the time of day. Test:
+the speed of the slider, along the view, against the shell; the car feels it; on a tyre the wheel takes the damage by
+the impulse against softbody.wheel_strength and can come off, on a part that is off the car its body takes it), Open
+hinges (a right click opens a hinge, another closes it where it was) and Break parts, Pit stop here (a stop where the
+car stands), a motorcycle's crash rules and rider (`scripts/debug_crash_rules.gd`: each rule on or off with its limits,
+with the browser's wall and "only hard hits" rules, how the rider gives with the g-forces, a meter of the push and the
+g; kept in the prefs of the video), the weather and the time of day. Test:
 `res://tools/test_debug_tools.tscn -- --user-dir=<tmp> --video-cfg=<tmp>`.
 **Telemetry** (V, `scripts/telemetry.gd`): every value of the car and the wheels. **Touch controls**
 (`scripts/touch_controls.gd`, TouchControls.js): on a touch screen (or `--touch=1`, Settings Mobile): the steering stick
-on the left half, the pedals, the gear buttons and the top buttons. **Movable panels** (`scripts/movable.gd`): the tuning
+on the left half, the pedals, the gear buttons and the top buttons (Record: a take, red with Stop while it runs). **Movable panels** (`scripts/movable.gd`): the tuning
 menu, the debug panel and the HUD editor are dragged and scaled, and kept. Icons of Lucide (`scripts/icons.gd`).
 
-The car tiles: the car under the mouse, with the focus, or the chosen one turns in 3D on its tile (MainMenu.js
-showcase; one viewport for it, the other tiles keep their pictures, where the browser turns all of them). Not ported: a
-picture per setup, the Take button of the touch controls, the browser's storage notes; TextureBudget.js (the phones of
-the browser) has no use here.
+The car tiles: every car turns in 3D on its tile (MainMenu.js showcase): the cars stand in one world, each on a render
+layer of its own, and every tile has a small viewport with a camera on its layer (the browser draws them one by one with
+one renderer; 19 at once, a tile past them keeps its still picture). A setup that looks otherwise than the car (its
+rims, tyres, colours, parts) has a picture of its own. Not ported: the browser's storage notes; TextureBudget.js (the
+phones of the browser) has no use here.
 
 ## Physics parity
 
@@ -1053,19 +1069,13 @@ game (November 2026). What the Godot version still lacks or does otherwise, and 
 - The finished AI cars drive on at their race pace (the browser: 0.6 of it).
 - The shortened racing line keeps 3.5 m from the edge of the road, the browser 1.5 m (see Racing against the AI).
 
-**Settings and keys**
-- The keys of the free camera P and O and the take key 5 are fixed, not in Settings, Controls.
-- A touch device does not start on the Low graphics preset.
-- The curve of the key steering and the pad's "slower at speed" (grey): the Godot keys and stick steer by a rate of their
-  own (key_steer_speed, key_steer_at_speed).
-- The soft-body steps of the AI cars (grey): the Godot shell takes fixed small steps.
+**Settings and keys**: a motorcycle steers with the keys by Godot's own lean command (key_steer_speed), not the
+browser's keyRate (the car's keys, stick and touch screen are the browser's).
 
-**Tuning** (Tuning.js): Save on Default does not write car.json; no Export/Import of a tune file and no Export to vehicle
-in the tuning menu (the car editor has them); no Engine card (the build, the chart, the dyno: they are in the car
-editor); the mirrors are in Settings, Mirrors. Grey: the follow camera's look-ahead, fov with speed and dolly. The rows of the wheel and parts library build the car at the next start, not at once.
+**Tuning** (Tuning.js): the mirrors are in Settings, Mirrors; the chart of the Engine card is in the card, not pinned
+at the left of the menu; a motorcycle is built again with the wheel and parts library at the next start.
 
-**Main menu**: the browser turns every car on its tile; here the one under the mouse, with the focus or chosen (one
-viewport). No picture per setup. No "Copy game link" (`?import=`): the Godot game has no address.
+**Main menu**: past 19 car tiles at once the others keep their still pictures. No "Copy game link" (`?import=`): the Godot game has no address.
 
 **Replay**: the pieces of a part that broke keep only the colour of their material in a file (no texture); the pit
 stop is replayed as the state of the PitStop (what draws the jacks and the wheels being changed reads it); the
@@ -1079,14 +1089,9 @@ the parts that are put back do not fade; the drag time slip cannot be saved as a
 the smoke is not pushed aside by the car (Smoke.js wisps); the flame pictures of `web/images/flames/` are not used (a
 made gradient).
 
-**Debug view**: the hit of the middle mouse button pushes the shell only (not a tyre, not a part that is off the car);
-Open hinges opens, it does not close a hinge again; the motorcycle crash-rule sliders are not there.
+**Debug view**: the motorcycle crash rules are shown for a motorcycle only (the browser shows them for every car).
 
-**Damage**: a loose part of one car bounces off another car's body without denting it (in the browser the parts do not
-meet other cars at all); a wheel of the other car does not feel a hit.
-
-**Other**: no Take button on the touch controls; the motorcycle model v2 is another part of the port; in the track
-editor the touch layout and the loupe.
+**Other**: the motorcycle model v2 is another part of the port; in the track editor the touch layout and the loupe.
 
 **Browser-only, no port needed**: TextureBudget.js, PhysicsWorker.js and PhysicsLink.js (`?worker=`), the storage notes
 and "Ask the browser to keep my data", the permission of a linked folder, Zip.js, bootstrap.js, Scene.js's picture probe
@@ -1107,6 +1112,9 @@ physics-worker-check.html (the headless tests stand in for them).
 | `scripts/track.gd` | the track model, a collision shape per mesh with its surface |
 | `scripts/atmosphere.gd`, `ground.gd`, `ground_material.gd`, `graphics.gd` | the sky, light and weather; the wet and the snow and their grip; the look of the ground; the graphics settings |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
+| `scripts/steer_model.gd` | the steering of the keys, the stick and the touch screen (Car.js, controls.js) |
+| `scripts/tuning_menu.gd`, `tuning_engine.gd`, `tuning_files.gd` | the tuning menu, its Engine card, its files (car.json, tune files) |
+| `scripts/debug_view.gd`, `debug_crash_rules.gd` | the debug view (0), the crash rules of a motorcycle in its panel |
 | `scripts/main_menu.gd`, `menu/`, `settings_*.gd`, `pause_menu.gd`, `hud_*.gd` | the main menu, the settings, the pause menu, the gauge and the HUD editor |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `native/src/tyre_shell.cpp`, `scripts/shell_tyres.gd`, `tyre_deform.gd` | the shell tyre: TyreShell.js in C++, the wheels on it (Vehicle.js), the tread of the model pushed in (TyreDeform.js) |

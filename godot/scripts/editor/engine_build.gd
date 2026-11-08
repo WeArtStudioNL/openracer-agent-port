@@ -117,6 +117,12 @@ static func displacement(b: Dictionary) -> float:
 	return PI / 4.0 * pow(_f(b, "bore", 86.0) / 1000.0, 2.0) * (_f(b, "stroke", 86.0) / 1000.0) * cylinders(b) * 1000.0
 
 
+## About what an engine weighs (kg), from its size and its cylinders (EngineBuild.js mass): a kart single about 28, a
+## 2.0 four about 100, a 5.7 V8 about 240. For a swap the difference goes to the mass of the car (the tuning menu).
+static func mass(b: Dictionary) -> float:
+	return 15.0 + 32.0 * displacement(_sized(b)) + 5.0 * cylinders(b)
+
+
 static func air_density(altitude: float, celsius: float) -> float:
 	var p := 101.325 * pow(1.0 - 2.25577e-5 * altitude, 5.25588)
 	return (p / 101.325) * (T0 / (273.15 + celsius))

@@ -295,7 +295,6 @@ func _speeds_changed() -> void:
 
 ## The limits of the build fields follow from the others (EngineBuild.limits): a value they no longer allow is pulled in.
 func _update_limits() -> bool:
-	var changed := false
 	if not _has_build():
 		for pair in [["idle", 300.0, 4000.0], ["limiter", 1500.0, 20000.0], ["inertia", 0.01, 3.0]]:
 			(_speed_fields[pair[0]] as EditorStyle.NumberField).set_range(pair[1], pair[2])
@@ -303,24 +302,12 @@ func _update_limits() -> bool:
 	var b: Dictionary = ed.cfg["engine"]["build"]
 	var lim := EngineBuild.limits(b, ed.num("engine.limiter_rpm", 7000.0), ed.num("engine.idle_rpm", 850.0))
 	for d in BUILD_FIELDS:
-		var f: EditorStyle.NumberField = _build_fields[d[0]]
 		var l: Array = lim[d[3]]
-		f.set_range(float(l[0]), float(l[1]), str(l[2]))
-		var v: Variant = Tuning.read(ed.cfg, "engine.build." + d[0])
-		if v != null and (float(v) < minf(l[0], l[1]) or float(v) > maxf(l[0], l[1])):
-			Tuning.write(ed.cfg, "engine.build." + d[0], clampf(float(v), minf(l[0], l[1]), maxf(l[0], l[1])))
-			changed = true
+		(_build_fields[d[0]] as EditorStyle.NumberField).set_range(float(l[0]), float(l[1]), str(l[2]))
 	for k in ["idle", "limiter", "inertia"]:
 		var l: Array = lim[k]
 		(_speed_fields[k] as EditorStyle.NumberField).set_range(float(l[0]), float(l[1]), str(l[2]))
-		var path: String = {"idle": "engine.idle_rpm", "limiter": "engine.limiter_rpm", "inertia": "engine.inertia"}[k]
-		var v := ed.num(path)
-		if v < minf(l[0], l[1]) or v > maxf(l[0], l[1]):
-			Tuning.write(ed.cfg, path, clampf(v, minf(l[0], l[1]), maxf(l[0], l[1])))
-			changed = true
-	if not int(Tuning.read(b, "valves") if Tuning.read(b, "valves") != null else 4) in lim["valves"]:
-		b["valves"] = lim["valves"][-1]
-		changed = true
+	var changed := fit_build(ed.cfg)
 	for i in _valves.item_count:
 		_valves.set_item_disabled(i, not int(_valves.get_item_metadata(i)) in lim["valves"])
 	for i in _size.item_count:
@@ -331,31 +318,79 @@ func _update_limits() -> bool:
 	return changed
 
 
+static func _num(cfg: Dictionary, path: String, fallback := 0.0) -> float:
+	var v: Variant = Tuning.read(cfg, path)
+	return float(v) if (v is float or v is int) else fallback
+
+
+## The values of the build and the engine speeds pulled within the limits the others allow (EngineBuild.limits): true
+## when one changed. (The car editor and the Engine card of the tuning menu, TuningEngine.)
+static func fit_build(cfg: Dictionary) -> bool:
+	var b: Variant = Tuning.read(cfg, "engine.build")
+	if not b is Dictionary:
+		return false
+	var lim := EngineBuild.limits(b, _num(cfg, "engine.limiter_rpm", 7000.0), _num(cfg, "engine.idle_rpm", 850.0))
+	var changed := false
+	for d in BUILD_FIELDS:
+		var l: Array = lim[d[3]]
+		var v: Variant = Tuning.read(cfg, "engine.build." + d[0])
+		if v != null and (float(v) < minf(l[0], l[1]) or float(v) > maxf(l[0], l[1])):
+			Tuning.write(cfg, "engine.build." + d[0], clampf(float(v), minf(l[0], l[1]), maxf(l[0], l[1])))
+			changed = true
+	for k in ["idle", "limiter", "inertia"]:
+		var l: Array = lim[k]
+		var path: String = {"idle": "engine.idle_rpm", "limiter": "engine.limiter_rpm", "inertia": "engine.inertia"}[k]
+		var v := _num(cfg, path)
+		if v < minf(l[0], l[1]) or v > maxf(l[0], l[1]):
+			Tuning.write(cfg, path, clampf(v, minf(l[0], l[1]), maxf(l[0], l[1])))
+			changed = true
+	if not int(Tuning.read(b, "valves") if Tuning.read(b, "valves") != null else 4) in lim["valves"]:
+		b["valves"] = lim["valves"][-1]
+		changed = true
+	var ind: Variant = b.get("induction")
+	if ind is Dictionary and str(ind.get("type", "")) == "turbo":
+		if ind.has("size") and not str(ind["size"]) in lim["turboSizes"]:
+			ind["size"] = lim["turboSizes"][-1]
+			changed = true
+		if ind.has("variant") and not str(ind["variant"]) in lim["turboVariants"]:
+			ind["variant"] = lim["turboVariants"][0]
+			changed = true
+	return changed
+
+
+## The torque curve and the turbo of the game from the build of cfg (within its limits): the result of
+## EngineBuild.compute, or {} for an engine without a build.
+static func build_curve(cfg: Dictionary) -> Dictionary:
+	var b: Variant = Tuning.read(cfg, "engine.build")
+	if not b is Dictionary or Tuning.read(cfg, "engine.build.bore") == null:
+		return {}
+	for i in 3:
+		if not fit_build(cfg):
+			break
+	var res := EngineBuild.compute(b, _num(cfg, "engine.limiter_rpm", 7000.0), _num(cfg, "engine.idle_rpm", 850.0))
+	Tuning.write(cfg, "engine.torque_curve", (res["curve"] as Array).duplicate(true))
+	var spec := EngineBuild.turbo_spec(b)
+	if not spec.is_empty():
+		var ind: Dictionary = b["induction"]
+		Tuning.set_value(cfg, "turbo_share", roundf(float(res["boostShare"]) * 100.0 / 5.0) * 5.0)
+		Tuning.set_value(cfg, "turbo_boost", 0.0)
+		Tuning.set_value(cfg, "turbo_spool", spec["spool"])
+		Tuning.set_value(cfg, "turbo_threshold", spec["threshold"])
+		Tuning.set_value(cfg, "turbo_intercooler", roundf(float(EngineBuild.INTERCOOLERS.get(str(ind.get("intercooler", "air")), {"value": 0.65})["value"]) * 100.0))
+		Tuning.set_value(cfg, "turbo_efficiency", 72.0)
+		Tuning.set_value(cfg, "boost_full", float(ind.get("boost", 0.6)))
+	else:
+		Tuning.erase(cfg, "engine.turbo")
+	return res
+
+
 ## The curve, the turbo of the game and the chart follow the build.
 func recompute_build() -> void:
 	if not _has_build():
 		build_result = {}
 		_apply_build_ui()
 		return
-	for i in 3:
-		if not _update_limits():
-			break
-	var b: Dictionary = ed.cfg["engine"]["build"]
-	var res := EngineBuild.compute(b, ed.num("engine.limiter_rpm", 7000.0), ed.num("engine.idle_rpm", 850.0))
-	build_result = res
-	ed.cfg["engine"]["torque_curve"] = (res["curve"] as Array).duplicate(true)
-	var spec := EngineBuild.turbo_spec(b)
-	if not spec.is_empty():
-		var ind: Dictionary = b["induction"]
-		Tuning.set_value(ed.cfg, "turbo_share", roundf(float(res["boostShare"]) * 100.0 / 5.0) * 5.0)
-		Tuning.set_value(ed.cfg, "turbo_boost", 0.0)
-		Tuning.set_value(ed.cfg, "turbo_spool", spec["spool"])
-		Tuning.set_value(ed.cfg, "turbo_threshold", spec["threshold"])
-		Tuning.set_value(ed.cfg, "turbo_intercooler", roundf(float(EngineBuild.INTERCOOLERS.get(str(ind.get("intercooler", "air")), {"value": 0.65})["value"]) * 100.0))
-		Tuning.set_value(ed.cfg, "turbo_efficiency", 72.0)
-		Tuning.set_value(ed.cfg, "boost_full", float(ind.get("boost", 0.6)))
-	else:
-		Tuning.erase(ed.cfg, "engine.turbo")
+	build_result = build_curve(ed.cfg)
 	_refresh_build_fields()
 	ed.suspension.refresh(false)
 	ed.tuning.render_groups()
@@ -387,17 +422,27 @@ func _apply_build_ui() -> void:
 
 ## The engine sound follows the engine that is built (the same bore, stroke, compression, cam, flows and lengths).
 func _sync_sound_from_build(b: Dictionary, whole_preset: bool) -> void:
-	var es: Dictionary = ed.cfg["sound"]["engine_sim"]
+	sound_from_build(ed.cfg, b, whole_preset)
+	_refreshing = true
+	EditorStyle.select_value(_exhaust, Tuning.read(ed.cfg, "sound.engine_sim.exhaust_type") if Tuning.read(ed.cfg, "sound.engine_sim.exhaust_type") else "custom")
+	_refreshing = false
+	sound_changed()
+
+
+## The engine sound of cfg follows a build (the same bore, stroke, compression, cam, flows and lengths; a new block: its
+## whole preset and the exhaust that goes with it).
+static func sound_from_build(cfg: Dictionary, b: Dictionary, whole_preset: bool) -> void:
+	if not cfg.get("sound") is Dictionary:
+		cfg["sound"] = {}
+	if not cfg["sound"].get("engine_sim") is Dictionary:
+		cfg["sound"]["engine_sim"] = {}
+	var es: Dictionary = cfg["sound"]["engine_sim"]
 	if whole_preset and EngineBuild.PRESETS.has(str(b.get("block", ""))):
 		es.merge(EngineBuild.PRESETS[b["block"]], true)
 		es["exhaust_type"] = _default_exhaust(str(b["block"]))
 	es.merge({"bore": b["bore"], "stroke": b["stroke"], "compression_ratio": b["compression"], "intake_duration": b["cam_duration"],
 		"exhaust_duration": maxf(180.0, float(b["cam_duration"]) - 4.0), "intake_flow": b["intake_flow"], "exhaust_flow": b["exhaust_flow"],
 		"primary_length": b["primary_length"], "exhaust_length": b["exhaust_length"]}, true)
-	_refreshing = true
-	EditorStyle.select_value(_exhaust, es.get("exhaust_type", "custom"))
-	_refreshing = false
-	sound_changed()
 
 
 static func _default_exhaust(block: String) -> String:
@@ -455,12 +500,18 @@ func clear_dyno() -> void:
 
 
 func _dyno_pull() -> Dictionary:
-	var gears: Array = Tuning.read(ed.cfg, "drivetrain.gear_ratios") if Tuning.read(ed.cfg, "drivetrain.gear_ratios") is Array else []
-	var final := ed.num("drivetrain.final_drive")
-	var limit := ed.num("engine.limiter_rpm")
-	var r := ed.num("chassis.tire_diameter", 0.65) / 2.0
-	var mass := ed.num("chassis.mass", 1000.0)
-	var curve: Array = (Tuning.read(ed.cfg, "engine.torque_curve") as Array).duplicate(true) if Tuning.read(ed.cfg, "engine.torque_curve") is Array else []
+	return dyno_pull(ed.cfg)
+
+
+## A full-throttle pull at the wheels of cfg in the gear closest to 1:1 (the dyno of the Engine card): { points: [{rpm,
+## nm, hp}], gear, room } or {} when the car has no gears, final drive, rev limit or curve.
+static func dyno_pull(cfg: Dictionary) -> Dictionary:
+	var gears: Array = Tuning.read(cfg, "drivetrain.gear_ratios") if Tuning.read(cfg, "drivetrain.gear_ratios") is Array else []
+	var final := _num(cfg, "drivetrain.final_drive")
+	var limit := _num(cfg, "engine.limiter_rpm")
+	var r := _num(cfg, "chassis.tire_diameter", 0.65) / 2.0
+	var mass := _num(cfg, "chassis.mass", 1000.0)
+	var curve: Array = (Tuning.read(cfg, "engine.torque_curve") as Array).duplicate(true) if Tuning.read(cfg, "engine.torque_curve") is Array else []
 	if gears.is_empty() or not (final > 0.0) or not (limit > 0.0) or curve.size() < 2:
 		return {}
 	curve.sort_custom(func(a, b): return float(a[0]) < float(b[0]))
@@ -469,11 +520,11 @@ func _dyno_pull() -> Dictionary:
 		if absf(float(g) - 1.0) < absf(ratio - 1.0):
 			ratio = g
 	var big_g := ratio * final
-	var eff := ed.num("drivetrain.efficiency", 0.92)
+	var eff := _num(cfg, "drivetrain.efficiency", 0.92)
 	var room := 1.0
-	if _has_build():
-		room = 1.0 / EngineBuild.correction(float(Tuning.read(ed.cfg, "engine.build.ambient.altitude") if Tuning.read(ed.cfg, "engine.build.ambient.altitude") != null else 0),
-			float(Tuning.read(ed.cfg, "engine.build.ambient.celsius") if Tuning.read(ed.cfg, "engine.build.ambient.celsius") != null else 20))
+	if Tuning.read(cfg, "engine.build.bore") != null:
+		room = 1.0 / EngineBuild.correction(float(Tuning.read(cfg, "engine.build.ambient.altitude") if Tuning.read(cfg, "engine.build.ambient.altitude") != null else 0),
+			float(Tuning.read(cfg, "engine.build.ambient.celsius") if Tuning.read(cfg, "engine.build.ambient.celsius") != null else 20))
 	var torque_at := func(rpm: float) -> float:
 		if rpm > float(curve[-1][0]):
 			return 0.0
@@ -485,8 +536,8 @@ func _dyno_pull() -> Dictionary:
 				return (float(a[1]) + (float(b[1]) - float(a[1])) * f) * room
 		return 0.0
 	var rolling := 0.012 * mass * 9.81
-	var meff := mass + ed.num("engine.inertia", 0.3) * big_g * big_g / (r * r)
-	var rpm := maxf(ed.num("engine.idle_rpm", 850.0) * 1.4, limit * 0.25)
+	var meff := mass + _num(cfg, "engine.inertia", 0.3) * big_g * big_g / (r * r)
+	var rpm := maxf(_num(cfg, "engine.idle_rpm", 850.0) * 1.4, limit * 0.25)
 	var v := rpm * PI / 30.0 * r / big_g
 	var last := -1e9
 	var points := []
@@ -553,14 +604,17 @@ func _dyno_frame(delta: float) -> void:
 class Chart:
 	extends Control
 	var engine: CarEditorEngine
+	var cfg_of := Callable()             # (another owner than the car editor: the tuning menu) the car, its dyno, and after
+	var dyno_of := Callable()
+	var after := Callable()
 
 	func _draw() -> void:
-		var ed := engine.ed
+		var cfg: Dictionary = cfg_of.call() if cfg_of.is_valid() else engine.ed.cfg
 		var w := size.x
 		var h := size.y
 		draw_rect(Rect2(Vector2.ZERO, size), Color("#12161c"))
-		var curve: Array = Tuning.read(ed.cfg, "engine.torque_curve") if Tuning.read(ed.cfg, "engine.torque_curve") is Array else []
-		var max_rpm := ed.num("engine.limiter_rpm", 7000.0)
+		var curve: Array = Tuning.read(cfg, "engine.torque_curve") if Tuning.read(cfg, "engine.torque_curve") is Array else []
+		var max_rpm := CarEditorEngine._num(cfg, "engine.limiter_rpm", 7000.0)
 		var top := 1.0
 		for p in curve:
 			max_rpm = maxf(max_rpm, float(p[0]))
@@ -598,7 +652,7 @@ class Chart:
 		if tq.size() > 1:
 			draw_polyline(tq, Color("#ff9f43"), 2.0, true)
 			draw_polyline(pwr, Color("#54a0ff"), 2.0, true)
-		var dyno := engine._dyno
+		var dyno: Dictionary = dyno_of.call() if dyno_of.is_valid() else engine._dyno
 		if not dyno.is_empty():
 			var shown: Array = (dyno["points"] as Array).slice(0, int(dyno["up_to"]) + 1)
 			for kind in [["nm", Color("#ffd29a")], ["hp", Color("#a9cdff")]]:
@@ -609,8 +663,12 @@ class Chart:
 					draw_line(line[i], line[i + 1], kind[1], 2.0)
 			if not dyno.has("done") and not shown.is_empty():
 				draw_line(Vector2(xr.call(float(shown[-1]["rpm"])), 0), Vector2(xr.call(float(shown[-1]["rpm"])), bottom), Color.WHITE, 1.5)
-		var lx: float = xr.call(ed.num("engine.limiter_rpm"))
+		var lx: float = xr.call(CarEditorEngine._num(cfg, "engine.limiter_rpm"))
 		draw_line(Vector2(lx, 0), Vector2(lx, bottom), Color("#ff5e5e"), 1.5)
+		if after.is_valid():
+			after.call()
+			return
+		var ed := engine.ed
 		var pk := engine.peak()
 		var meta: Label = ed.card_of["Engine"]["meta"]
 		meta.text = "%d hp at %d rpm, %d Nm%s" % [roundi(pk["hp"]), roundi(pk["rpm"]), roundi(pk["nm"]),
@@ -618,7 +676,7 @@ class Chart:
 		if not engine._simple_hp.edit.has_focus():
 			engine._simple_hp.set_value(roundf(pk["hp"]))
 		if not engine._simple_rpm.edit.has_focus():
-			engine._simple_rpm.set_value(ed.num("engine.limiter_rpm"))
+			engine._simple_rpm.set_value(CarEditorEngine._num(cfg, "engine.limiter_rpm"))
 
 
 # ---- the Engine sound card and its window

@@ -12,11 +12,15 @@ var look_height := 0.6
 var smoothing := 3.5
 var fov_standing := 50.0
 var fov_fast := 70.0
+var fov_full_speed := 70.0        # m/s: fov_fast from this speed (Car.js)
+var look_z := 0.0                 # m: the point it looks at is so far ahead of the middle of the car (negative: behind)
+var dolly := 1.0                  # 0..1: the camera comes closer as the field of view widens (1: the car keeps its size)
 var cockpit := Vector3(0.35, 0.9, -0.2)
 var cockpit_fov := 75.0
 var orbit := 0.0                  # rad: the follow camera turned round the car (the keys [ and ], ` back behind it)
 var _pos := Vector3.ZERO
 var _look_dir := Vector3.FORWARD
+var _fov := -1.0                  # the field of view of the follow camera now (it follows the speed, smoothed)
 var _crash_off: Variant = null    # a motorcycle that went down: the camera follows the rider at this offset (Car.js)
 
 
@@ -37,6 +41,9 @@ func read_config(c: Car) -> void:
 	smoothing = float(f.get("smoothing", smoothing))
 	fov_standing = float(f.get("fov_standing", fov_standing))
 	fov_fast = float(f.get("fov_fast", fov_fast))
+	fov_full_speed = maxf(1.0, float(f.get("fov_full_speed", fov_full_speed)))
+	look_z = float(f.get("look_z", look_z))
+	dolly = float(f.get("dolly", dolly))
 	var cp: Dictionary = cams.get("cockpit", {})
 	if cp.has("position"):
 		var p: Array = cp["position"]
@@ -101,12 +108,18 @@ func _process(delta: float) -> void:
 			if vel.length() > 3.0 and car.gear >= 0:
 				want = want.lerp(vel.normalized(), 0.35).normalized()
 			_look_dir = _look_dir.slerp(want, 1.0 - exp(-delta * smoothing)).normalized()
-			var target := xf.origin - _look_dir.rotated(Vector3.UP, orbit) * distance + Vector3.UP * height
+			# the faster, the wider the field of view (fov_fast from fov_full_speed), and the camera comes closer in the same
+			# measure (dolly 1: the car keeps its size in the picture, a dolly zoom; Car.js); it looks look_z ahead of the car
+			var fov_want := lerpf(fov_standing, fov_fast, clampf(spd / fov_full_speed, 0.0, 1.0))
+			_fov = fov_want if _fov < 0.0 else _fov + (fov_want - _fov) * (1.0 - exp(-4.0 * minf(delta, 0.1)))
+			var scale := 1.0 + dolly * (tan(deg_to_rad(fov_standing) / 2.0) / tan(deg_to_rad(_fov) / 2.0) - 1.0)
+			var dir := _look_dir.rotated(Vector3.UP, orbit)
+			var target := xf.origin - dir * distance * scale + Vector3.UP * (look_height + (height - look_height) * scale)
 			_pos = _pos.lerp(target, 1.0 - exp(-delta * smoothing * 2.5))
-			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + Vector3.UP * look_height, Vector3.UP)
+			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + dir * look_z + Vector3.UP * look_height, Vector3.UP)
 			if car.bike != null:
 				rotate_object_local(Vector3.BACK, car.bike.camera_roll(delta))      # (a motorcycle: the camera rolls with the lean)
-			fov = lerpf(fov_standing, fov_fast, clampf(spd / 60.0, 0.0, 1.0))
+			fov = _fov
 		Mode.COCKPIT:
 			global_transform = xf * Transform3D(Basis(Vector3.UP, PI), cockpit)
 			fov = cockpit_fov

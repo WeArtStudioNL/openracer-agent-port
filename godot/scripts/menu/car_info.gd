@@ -7,25 +7,116 @@ extends RefCounted
 static var _textures := {}
 static var _rendering := {}
 static var _show: Showcase = null
-static var _chosen := {}                # the chosen tile: bg, id, cfg, host (it turns when no other does)
 
 
-## The showcase (MainMenu.js showcase): the tile whose car turns in 3D is the one under the mouse or with the focus,
-## else the chosen one. One viewport draws it (a car model each is too much for a list of cars); the other tiles keep
-## their pictures.
+## The showcase (MainMenu.js showcase): the 3D model of every car turns slowly on its tile. The cars stand in one world
+## (this viewport, which is not drawn itself: it holds the light, the cars and the world), each car on a render layer of
+## its own; every tile has a small viewport of its own on that world with a camera that sees only the layer of its car.
+## (The browser draws the cars one by one with one hidden renderer into the canvas of each tile; here a viewport a tile
+## is the way, a small picture each. Render layers 2 to 20: a tile past 19 at once keeps its still picture.) The cars
+## are built one a frame, and a tile shows its still picture until its car is there.
 class Showcase:
 	extends SubViewport
-	var car: Car
-	var car_id := ""
+	const SIZE := 360
+	var tiles: Array = []            # {bg, id, cfg, still, car, vp, cam, layer, phase, radius}
 	var clock := 0.0
-	var radius := 0.33
-	var shown: TextureRect = null    # the picture that shows it now, and what it showed before
-	var still: Texture2D = null
 
 	func _process(dt: float) -> void:
 		clock += dt
-		if car != null and is_instance_valid(car):
-			car.place(Vector3(0, radius, 0), clock * 0.35 + 0.75)
+		var built := false
+		for i in range(tiles.size() - 1, -1, -1):
+			var t: Dictionary = tiles[i]
+			if not is_instance_valid(t["bg"]) or not (t["bg"] as Node).is_inside_tree():
+				_drop(t)
+				tiles.remove_at(i)
+				continue
+			if t["car"] == null:
+				if not built and int(t["layer"]) > 0:
+					_build(t)
+					built = true            # (one car a frame: a list of cars does not stop the menu)
+				continue
+			var car: Car = t["car"]
+			car.place(Vector3(0, t["radius"], 0), clock * 0.35 + float(t["phase"]))
+			var shown := (t["bg"] as Control).is_visible_in_tree()
+			(t["vp"] as SubViewport).render_target_update_mode = SubViewport.UPDATE_ALWAYS if shown else SubViewport.UPDATE_DISABLED
+
+	func add(bg: TextureRect, id: String, cfg: Dictionary) -> void:
+		for t in tiles:
+			if t["bg"] == bg:
+				return
+		var used := []
+		for t in tiles:
+			used.append(t["layer"])
+		var layer := 0
+		for l in range(2, 21):
+			if not used.has(l):
+				layer = l
+				break
+		tiles.append({"bg": bg, "id": id, "cfg": cfg, "still": bg.texture, "car": null, "vp": null, "cam": null, "layer": layer,
+			"phase": tiles.size() * 1.3, "radius": 0.33})
+
+	func _build(t: Dictionary) -> void:
+		var cfg: Dictionary = t["cfg"]
+		var car := Car.new()
+		car.engine_damage_on = false
+		car.setup(t["id"], cfg)
+		if car.shell != null:
+			car.shell.dispose()             # (a picture: no shell that dents, and no model that bends with it)
+			car.shell = null
+		car.freeze = true
+		add_child(car)
+		var mask := 1 << (int(t["layer"]) - 1)
+		var radius := float(cfg.get("chassis", {}).get("tire_diameter", 0.65)) / 2.0
+		car.place(Vector3(0, radius, 0), 0.0)
+		var length := float(cfg.get("dimensions", {}).get("length", 4.5))
+		var box := AABB()
+		var first := true
+		for m in car.find_children("*", "VisualInstance3D", true, false):
+			(m as VisualInstance3D).layers = mask
+			var mi := m as MeshInstance3D
+			if mi == null or mi.mesh == null or not mi.is_visible_in_tree():
+				continue
+			var b := mi.global_transform * mi.get_aabb()
+			box = b if first else box.merge(b)
+			first = false
+		# (the camera by the size of the model as it is, not by the figures of car.json: MainMenu.js modelOf)
+		if not first and box.size.x > 1.0 and box.size.z > 1.0:
+			length = maxf(box.size.x, box.size.z)
+		# (a motorcycle or a kart with its rider is tall for its length: the frame takes the height too; a little further
+		# than the still, as the car turns and its diagonal must fit)
+		var reach := maxf(length, box.size.y * 1.5 if not first else 0.0)
+		var vp := SubViewport.new()
+		vp.size = Vector2i(SIZE, SIZE)
+		vp.transparent_bg = true
+		vp.world_3d = find_world_3d()           # (the world of this viewport, own_world_3d: not its world_3d)
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		var cam := Camera3D.new()
+		cam.fov = 32.0
+		cam.cull_mask = mask
+		vp.add_child(cam)
+		(t["bg"] as Node).add_child(vp)
+		var d := reach * 2.1
+		var mid := box.get_center().y if not first else radius * 1.3
+		cam.look_at_from_position(Vector3(sin(0.6) * d, reach * 0.4 + radius, cos(0.6) * d), Vector3(0, minf(mid, reach * 0.35), 0))
+		cam.make_current()
+		t["car"] = car
+		t["vp"] = vp
+		t["cam"] = cam
+		t["radius"] = radius
+		(t["bg"] as TextureRect).texture = vp.get_texture()
+
+	func _drop(t: Dictionary) -> void:
+		if t["car"] != null and is_instance_valid(t["car"]):
+			(t["car"] as Node).queue_free()
+		if t["vp"] != null and is_instance_valid(t["vp"]):
+			(t["vp"] as Node).queue_free()
+		if is_instance_valid(t["bg"]) and t["car"] != null:
+			(t["bg"] as TextureRect).texture = t["still"]
+
+	func clear() -> void:
+		for t in tiles:
+			_drop(t)
+		tiles.clear()
 
 
 ## The peak power in HP from the torque curve, times the power scale of the tuning.
@@ -117,11 +208,12 @@ static func track_picture(id: String) -> Texture2D:
 
 
 ## The picture of a car: preview.webp, else the one drawn from its model (made once, in the background: on_ready gets it).
-static func car_picture(id: String, cfg: Dictionary, host: Node, on_ready: Callable) -> Texture2D:
-	var t := _webp("cars/%s/preview.webp" % id)
+static func car_picture(id: String, cfg: Dictionary, host: Node, on_ready: Callable, key := "") -> Texture2D:
+	# (a setup that looks otherwise than the car as made, key id~hash: a picture of its own, MainMenu.js requestTune)
+	var t := _webp("cars/%s/preview.webp" % id) if key == "" or key == id else null
 	if t != null:
 		return t
-	var file := Settings.path("previews/%s.png" % id)
+	var file := Settings.path("previews/%s.png" % (key if key != "" else id).validate_filename())
 	if _textures.has(file):
 		return _textures[file]
 	if FileAccess.file_exists(file):
@@ -129,8 +221,8 @@ static func car_picture(id: String, cfg: Dictionary, host: Node, on_ready: Calla
 		if img != null:
 			_textures[file] = ImageTexture.create_from_image(img)
 			return _textures[file]
-	if not _rendering.has(id) and host != null and DisplayServer.get_name() != "headless":
-		_rendering[id] = true
+	if not _rendering.has(file) and host != null and DisplayServer.get_name() != "headless":
+		_rendering[file] = true
 		_render(id, cfg, host, file, on_ready)
 	return null
 
@@ -229,20 +321,17 @@ static func kind(cfg: Dictionary) -> String:
 	return "kart" if light or str(cfg.get("name", "")).to_lower().contains("kart") else "car"
 
 
-# ---- the showcase (MainMenu.js showcase): the 3D model of a car turns slowly on its tile
+# ---- the showcase (MainMenu.js showcase): the 3D model of every car turns slowly on its tile
 
-## The car of a tile turns on it (bg: its picture). chosen: the tile of the chosen car (it turns when no other does).
-static func showcase(bg: TextureRect, id: String, cfg: Dictionary, host: Node, chosen := false) -> void:
-	if chosen:
-		_chosen = {"bg": bg, "id": id, "cfg": cfg, "host": host}
+## The car of a tile turns on it (bg: its picture, which it shows until the car is built).
+static func showcase(bg: TextureRect, id: String, cfg: Dictionary, host: Node) -> void:
 	if host == null or not host.is_inside_tree() or DisplayServer.get_name() == "headless":
 		return
 	if _show == null or not is_instance_valid(_show):
 		_show = Showcase.new()
-		_show.size = Vector2i(400, 400)
+		_show.size = Vector2i(2, 2)
 		_show.own_world_3d = true
-		_show.transparent_bg = true
-		_show.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		_show.render_target_update_mode = SubViewport.UPDATE_DISABLED       # (the tiles draw it, each with its own camera)
 		var sun := DirectionalLight3D.new()
 		sun.rotation_degrees = Vector3(-50, 35, 0)
 		sun.light_energy = 1.6
@@ -253,63 +342,26 @@ static func showcase(bg: TextureRect, id: String, cfg: Dictionary, host: Node, c
 		env.environment.ambient_light_color = Color(0.6, 0.62, 0.66)
 		env.environment.background_mode = Environment.BG_CLEAR_COLOR
 		_show.add_child(env)
-		var cam := Camera3D.new()
-		cam.name = "Camera"
-		cam.fov = 32.0
-		_show.add_child(cam)
 		host.get_tree().root.add_child(_show)
-	if _show.shown != null and is_instance_valid(_show.shown) and _show.shown != bg:
-		_show.shown.texture = _show.still
-	if _show.shown != bg:
-		_show.still = bg.texture
-		_show.shown = bg
-	if _show.car_id != id:
-		if _show.car != null and is_instance_valid(_show.car):
-			_show.car.queue_free()
-		var car := Car.new()
-		car.engine_damage_on = false
-		car.setup(id, cfg)
-		car.freeze = true
-		_show.add_child(car)
-		_show.car = car
-		_show.car_id = id
-		var length := float(cfg.get("dimensions", {}).get("length", 4.5))
-		_show.radius = float(cfg.get("chassis", {}).get("tire_diameter", 0.65)) / 2.0
-		# (the camera by the size of the model as it is, not by the figures of car.json: MainMenu.js modelOf)
-		car.place(Vector3(0, _show.radius, 0), 0.0)
-		var box := AABB()
-		var first := true
-		for m in car.find_children("*", "MeshInstance3D", true, false):
-			var mi := m as MeshInstance3D
-			if mi.mesh == null or not mi.is_visible_in_tree():
-				continue
-			var b := mi.global_transform * mi.get_aabb()
-			box = b if first else box.merge(b)
-			first = false
-		if not first and box.size.x > 1.0 and box.size.z > 1.0:
-			length = maxf(box.size.x, box.size.z)
-		var cam := _show.get_node("Camera") as Camera3D
-		var d := length * 2.1          # (a little further than the still: the car turns, its diagonal must fit)
-		cam.position = Vector3(sin(0.6) * d, length * 0.4 + _show.radius, cos(0.6) * d)
-		cam.look_at(Vector3(0, _show.radius * 1.3, 0))
-		cam.make_current()
-	bg.texture = _show.get_texture()
+	_show.add(bg, id, cfg)
 
 
-## The mouse or the focus left a tile: the chosen car turns again (or nothing, when it was the chosen one).
-static func showcase_leave(bg: TextureRect) -> void:
-	if _show == null or not is_instance_valid(_show) or _show.shown != bg:
-		return
-	var c := _chosen
-	if not c.is_empty() and is_instance_valid(c["bg"]) and c["bg"] != bg:
-		showcase(c["bg"], c["id"], c["cfg"], c["host"])
-
-
-## The menu is gone (a drive starts): the viewport and its car go.
+## The menu is gone (a drive starts): the viewports and their cars go.
 static func showcase_end() -> void:
 	if _show != null and is_instance_valid(_show):
-		if _show.shown != null and is_instance_valid(_show.shown):
-			_show.shown.texture = _show.still
+		_show.clear()
 		_show.queue_free()
 	_show = null
-	_chosen = {}
+
+
+## The key of the picture of a car with the configuration of a setup (MainMenu.js _previewKey): the car's id for the car
+## as made, else with a short hash of what the picture shows (the wheels, the colours, the parts, the size).
+static func picture_key(id: String, cfg: Dictionary, base: Dictionary) -> String:
+	var mine := _shown_of(cfg)
+	return id if mine == _shown_of(base) else "%s~%s" % [id, String.num_uint64(hash(mine), 36)]
+
+
+static func _shown_of(c: Dictionary) -> String:
+	var ch: Dictionary = c.get("chassis", {}) if c.get("chassis") is Dictionary else {}
+	return JSON.stringify([c.get("wheels"), c.get("colors"), c.get("materials"), c.get("suspension"), c.get("driveline"),
+		c.get("dimensions"), ch.get("ride_front"), ch.get("ride_rear")])

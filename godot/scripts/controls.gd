@@ -19,7 +19,7 @@ const ACTIONS := [
 	["steer_left", "Steer left", "Driving"], ["steer_right", "Steer right", "Driving"],
 	["steer_wheel", "Steering wheel", "Driving", "wheel"], ["clutch", "Clutch", "Driving", "wheel"],
 	["handbrake", "Handbrake", "Driving"],
-	["parking_brake", "Parking brake on/off (it stays on until you press it again)", "Driving"],
+	["parking_brake", "Parking brake on/off (it stays on until you press it again; P is for the free camera too: then that goes first)", "Driving"],
 	["reverse", "Reverse (hold)", "Driving"],
 	["rider_back", "Motorcycle: rider back (hold)", "Driving"], ["rider_forward", "Motorcycle: rider forward (hold)", "Driving"],
 	["ragdoll", "Motorcycle: the rider goes limp (a crash, to try it)", "Driving"],
@@ -43,6 +43,9 @@ const ACTIONS := [
 	["start_engine", "Start the engine", "Other"], ["telemetry", "Telemetry", "Other"], ["mute", "Engine sound on/off", "Other"],
 	["calibrate", "Calibrate the wheel", "Other"], ["wheel_toggle", "Wheel on/off", "Other"],
 	["debug_view", "Debug view: what the physics sees", "Other"], ["debug_models", "Debug view: hide the car", "Other"],
+	["free_cam_aim", "Free camera: look at the car or not", "Other"],
+	["free_cam_follow", "Free camera: move with the car or stay here", "Other"],
+	["take", "Take: start a recording, and stop it (then: save it as a replay or a video)", "Other"],
 	["menu", "Pause", "Other"], ["mark", "Mark in the log", "Other"],
 ]
 
@@ -86,9 +89,16 @@ const KEYS := {
 	"wheel_toggle": [KEY_M],
 	"debug_view": [KEY_0, KEY_KP_0],
 	"debug_models": [KEY_MINUS, KEY_KP_SUBTRACT],
+	"free_cam_aim": [KEY_P],
+	"free_cam_follow": [KEY_O],
+	"take": [KEY_5],
 	"menu": [KEY_ESCAPE],
 	"mark": [KEY_F8],
 }
+
+## The inputs that an action shares with another by default (Settings.js: P is the parking brake and, while the free
+## camera is on, its aim; the free camera goes first).
+const SHARES := {"free_cam_aim": ["parking_brake"]}
 
 const PAD_BUTTONS := {
 	"handbrake": [JOY_BUTTON_A],
@@ -146,6 +156,8 @@ func _ready() -> void:
 			for b: Dictionary in _bindings[a[0]]:
 				var taken := false
 				for other in saved:
+					if other in SHARES.get(a[0], []):
+						continue
 					for o: Dictionary in saved[other]:
 						taken = taken or _same(o, b)
 				if not taken:
