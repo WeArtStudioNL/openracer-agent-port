@@ -1098,6 +1098,9 @@ physics-worker-check.html (the headless tests stand in for them).
 | `scripts/track.gd` | the track model, a collision shape per mesh with its surface |
 | `scripts/atmosphere.gd`, `ground.gd`, `ground_material.gd`, `graphics.gd` | the sky, light and weather; the wet and the snow and their grip; the look of the ground; the graphics settings |
 | `scripts/chase_camera.gd`, `hud.gd`, `world.gd`, `main.gd`, `controls.gd` | camera, dashboard, a drive, menu, keys |
+| `scripts/steer_model.gd` | the steering of the keys, the stick and the touch screen (Car.js, controls.js) |
+| `scripts/tuning_menu.gd`, `tuning_engine.gd`, `tuning_files.gd` | the tuning menu, its Engine card, its files (car.json, tune files) |
+| `scripts/debug_view.gd`, `debug_crash_rules.gd` | the debug view (0), the crash rules of a motorcycle in its panel |
 | `scripts/main_menu.gd`, `menu/`, `settings_*.gd`, `pause_menu.gd`, `hud_*.gd` | the main menu, the settings, the pause menu, the gauge and the HUD editor |
 | `native/src/engine_sim.cpp` | the engine sound: EngineSimWorklet.js and the exhaust chain of EngineSim.js in C++ |
 | `native/src/tyre_shell.cpp`, `scripts/shell_tyres.gd`, `tyre_deform.gd` | the shell tyre: TyreShell.js in C++, the wheels on it (Vehicle.js), the tread of the model pushed in (TyreDeform.js) |
