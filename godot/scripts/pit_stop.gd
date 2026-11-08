@@ -30,6 +30,7 @@ var hold_car := false               # the player's car: on the jacks until the s
 var active := false
 var done := false
 var elapsed := 0.0
+var forced := false                 # a stop where the car stands (the debug view, Pit.js forceStart)
 var plan := {}                      # { fuel, tyres, change, repair, work, total } in seconds
 var _fuel_given := 0.0
 var _fuel_wanted := 0.0
@@ -192,10 +193,12 @@ func _plan_for() -> Dictionary:
 func _physics_process(dt: float) -> void:
 	if car == null or not is_instance_valid(car):
 		return
-	if float(Settings.get_value("tyre_wear")) <= 0.0:
+	if forced and done:
+		forced = false
+	if float(Settings.get_value("tyre_wear")) <= 0.0 and not forced:
 		_end()
 		return
-	var still := (active and hold_car) or (absf(car.speed) < 0.4 and in_box())
+	var still := (active and hold_car) or forced or (absf(car.speed) < 0.4 and in_box())
 	if not still:
 		if active or done:
 			_end()
@@ -250,6 +253,12 @@ func _physics_process(dt: float) -> void:
 		active = false
 		RunLog.event("pit stop done: %s" % car.name)
 		_release()
+
+
+## A stop where the car stands, whether it is in a box or not (the debug view: Pit stop here).
+func force_start() -> void:
+	forced = true
+	done = false
 
 
 func _fresh_tyre(w: Car.Wheel) -> void:

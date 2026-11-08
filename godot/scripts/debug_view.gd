@@ -20,6 +20,9 @@ const YELLOW := Color(1, 0.9, 0.2)
 const CYAN := Color(0.2, 0.9, 1)
 const MAGENTA := Color(1, 0.3, 1)
 const WHITE := Color(0.95, 0.95, 0.95)
+const HIT_MASS := 1000.0            # the cube of the middle mouse button: a tonne and a metre
+const HIT_SIDE := 1.0
+const HIT_START := 0.4
 
 var world: Node
 var on := false
@@ -41,6 +44,14 @@ var _seg := PackedVector3Array()
 var _seg_c := PackedColorArray()
 var _pts := PackedVector3Array()
 var _pts_c := PackedColorArray()
+var _grab := {}                     # the node that is held by the elastic: node, depth, target (frame of the car), mouse
+var _cube := {}                     # the hit of the middle mouse button: face, d, u, w, v, x, t
+var _tool := ""                     # "hinge" or "break": what a right click does to a part
+var _tool_text: Label
+var _strength := 5000.0             # N/m of the elastic of the node grabber
+var _hit_kmh := 50.0
+var _tri_cache := {}
+var _last_peak := 0.0               # N: the most the last hit pushed
 
 
 func setup(w: Node) -> void:
@@ -99,6 +110,11 @@ func set_on(value: bool) -> void:
 		if not _grid_made:
 			_make_grid()
 	else:
+		if not _grab.is_empty() or not _cube.is_empty():
+			_grab = {}
+			_cube = {}
+			if world.car != null and world.car.shell != null:
+				world.car.shell.pusher = Callable()
 		_lines.clear_surfaces()
 		_points.clear_surfaces()
 		if models_hidden:
@@ -174,6 +190,10 @@ func _process(_delta: float) -> void:
 	_wheels(car)
 	if car.bike != null:
 		_rider(car, xf)
+	if not _grab.is_empty() and _grab.has("world") and car.shell != null:
+		_grab_target()
+		_seg.append_array([xf * car.shell.sb.position(int(_grab["node"])), Vector3(_grab["world"])])
+		_seg_c.append(RED)
 	_flush()
 
 
@@ -354,11 +374,7 @@ func _build_panel() -> void:
 	shell.focus_mode = Control.FOCUS_NONE
 	shell.toggled.connect(func(v: bool): Settings.set_value("debug_show_shell", v))
 	box.add_child(shell)
-	var pit := Button.new()
-	pit.text = "Pit stop here"
-	pit.disabled = true
-	pit.tooltip_text = "Not in the Godot version yet: the pit stop starts only in a pit box (PitStop has no stop where the car stands)"
-	box.add_child(pit)
+	_tools(box)
 	var head := Label.new()
 	head.text = "Weather"
 	head.add_theme_color_override("font_color", Color(0.62, 0.69, 0.77))
@@ -371,6 +387,308 @@ func _build_panel() -> void:
 	box.add_child(note)
 	if ResourceLoader.exists("res://scripts/movable.gd"):
 		load("res://scripts/movable.gd").call("make", _panel, "debug-panel", bar)
+
+
+## The node grabber, the hit and the part tools (DebugView.js makeGrabPanel): the left mouse button on a node of the
+## shell drags it on an elastic (its strength a slider), the middle mouse button hits the car with a cube of a tonne
+## at a speed (a slider), and with Open hinges or Break parts a right click on a part does that; Pit stop here.
+func _tools(box: VBoxContainer) -> void:
+	var head := Label.new()
+	head.text = "Node grabber"
+	head.add_theme_color_override("font_color", Color(0.62, 0.69, 0.77))
+	box.add_child(head)
+	_strength = clampf(float(VideoPrefs.get_value("debug", "grab_strength", 5000.0)), 100.0, 200000.0)
+	_hit_kmh = clampf(float(VideoPrefs.get_value("debug", "hit_speed", 50.0)), 5.0, 200.0)
+	var elastic := _slider(box, "Elastic", 2.0, 5.3, 0.01, log(_strength) / log(10.0), func(v: float) -> String:
+		_strength = roundf(pow(10.0, v))
+		VideoPrefs.set_value("debug", "grab_strength", _strength)
+		return "%d N/m" % _strength if _strength < 10000.0 else "%.0f kN/m" % (_strength / 1000.0))
+	elastic.tooltip_text = "Press on a node of the shell with the left mouse button and drag it, held by this elastic"
+	var hit := _slider(box, "Hit (middle mouse)", 5.0, 200.0, 5.0, _hit_kmh, func(v: float) -> String:
+		_hit_kmh = v
+		VideoPrefs.set_value("debug", "hit_speed", v)
+		return "%d km/h (%d kN)" % [roundi(v), roundi(HIT_MASS * v / 3.6 / 0.03 / 1000.0)])
+	hit.tooltip_text = "The hit of the middle mouse button: a block of a tonne and a metre at this speed"
+	var row := HBoxContainer.new()
+	for t in [["hinge", "Open hinges", "Right click a hinge (a door, the hood) to open it"], ["break", "Break parts", "Right click a part to break it loose"]]:
+		var b := Button.new()
+		b.text = t[1]
+		b.tooltip_text = t[2]
+		b.toggle_mode = true
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.toggled.connect(func(v: bool):
+			_tool = t[0] if v else ""
+			for o in row.get_children():
+				if o != b:
+					(o as Button).set_pressed_no_signal(false)
+			_say("Right click a hinge to open it." if _tool == "hinge" else ("Right click a part to break it loose." if _tool == "break" else "")))
+		row.add_child(b)
+	box.add_child(row)
+	var pit := Button.new()
+	pit.text = "Pit stop here"
+	pit.tooltip_text = "A pit stop where the car stands (fuel, tyres, repair)"
+	pit.focus_mode = Control.FOCUS_NONE
+	pit.pressed.connect(pit_here)
+	box.add_child(pit)
+	_tool_text = Label.new()
+	_tool_text.modulate = Color(0.62, 0.69, 0.77)
+	_tool_text.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_tool_text.custom_minimum_size.x = 240
+	box.add_child(_tool_text)
+
+
+func _slider(box: Control, text: String, lo: float, hi: float, step: float, value: float, shown: Callable) -> HSlider:
+	var row := HBoxContainer.new()
+	var l := Label.new()
+	l.text = text
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	var v := Label.new()
+	row.add_child(v)
+	box.add_child(row)
+	var sl := HSlider.new()
+	sl.min_value = lo
+	sl.max_value = hi
+	sl.step = step
+	sl.value = value
+	sl.focus_mode = Control.FOCUS_NONE
+	v.text = shown.call(value)
+	sl.value_changed.connect(func(x: float): v.text = shown.call(x))
+	box.add_child(sl)
+	return sl
+
+
+func _say(text: String) -> void:
+	if _tool_text != null:
+		_tool_text.text = text
+
+
+## Pit stop here (Pit.js forceStart): a stop where the car stands.
+func pit_here() -> void:
+	var car: Car = world.car
+	var pit: PitStop = null
+	for c in car.get_children():
+		if c is PitStop:
+			pit = c
+	if pit == null:
+		return
+	if pit.active:
+		_say("A stop is going on.")
+		return
+	pit.force_start()
+	_say("Pit stop where the car stands.")
+
+
+func _replaying() -> bool:
+	var r: Variant = world.get("replay")
+	return r != null and (r.playing or r.viewer)
+
+
+func _input(event: InputEvent) -> void:
+	if not on or world == null or world.car == null or _replaying():
+		return
+	var car: Car = world.car
+	var mb := event as InputEventMouseButton
+	if mb != null and mb.pressed:
+		if _panel.get_global_rect().has_point(mb.position):
+			return
+		if mb.button_index == MOUSE_BUTTON_LEFT and car.shell != null:
+			var k := _node_under(mb.position)
+			if k >= 0:
+				var cam := get_viewport().get_camera_3d()
+				var p: Vector3 = car.global_transform * car.shell.sb.position(k)
+				_grab = {"node": k, "depth": cam.global_position.distance_to(p), "mouse": mb.position}
+				_grab_target()
+				car.shell.pusher = _push
+				get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
+			if hit_car(mb.position):
+				get_viewport().set_input_as_handled()
+		elif mb.button_index == MOUSE_BUTTON_RIGHT and _tool != "":
+			_part_tool(mb.position)
+			get_viewport().set_input_as_handled()
+	elif mb != null and not mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and not _grab.is_empty():
+		drop()
+	elif event is InputEventMouseMotion and not _grab.is_empty():
+		_grab["mouse"] = (event as InputEventMouseMotion).position
+		_grab_target()
+
+
+## The node of the shell nearest to the mouse on the screen (within 30 pixels), or -1.
+func _node_under(mouse: Vector2) -> int:
+	var car: Car = world.car
+	var cam := get_viewport().get_camera_3d()
+	if car.shell == null or cam == null:
+		return -1
+	var sb := car.shell.sb
+	var xf := car.global_transform
+	var best := -1
+	var best_d := 30.0
+	for k in sb.count:
+		if sb.anchor_alive[k] == 0 and sb.part_of[k] == "":
+			continue
+		var p := xf * sb.position(k)
+		if cam.is_position_behind(p):
+			continue
+		var d := cam.unproject_position(p).distance_to(mouse)
+		if d < best_d:
+			best_d = d
+			best = k
+	return best
+
+
+## The point under the mouse at the depth of the node, in the frame of the car.
+func _grab_target() -> void:
+	var cam := get_viewport().get_camera_3d()
+	var m: Vector2 = _grab["mouse"]
+	var at := cam.project_ray_origin(m) + cam.project_ray_normal(m) * float(_grab["depth"])
+	_grab["world"] = at
+	_grab["target"] = world.car.global_transform.affine_inverse() * at
+
+
+## Lets the node go.
+func drop() -> void:
+	_grab = {}
+	if _cube.is_empty() and world.car.shell != null:
+		world.car.shell.pusher = Callable()
+
+
+## In every small step of the shell: the elastic pulls its node, the cube presses on the nodes under its face.
+func _push(h: float) -> void:
+	var car: Car = world.car
+	if car.shell == null:
+		return
+	var sb := car.shell.sb
+	if not _grab.is_empty() and _grab.has("target"):
+		var k: int = _grab["node"]
+		var f := (Vector3(_grab["target"]) - sb.position(k)) * _strength - sb.w[k] * 2.0 * sqrt(_strength * sb.mass[k])
+		sb.force[k] += f
+		sb.quiet = false
+	if _cube.is_empty():
+		return
+	# (the cube flies in the world: the car that it pushes moves away from it; in the frame of the car for the nodes)
+	var inv := car.global_transform.affine_inverse()
+	var dw: Vector3 = _cube["d"]
+	var d := (inv.basis * dw).normalized()
+	var face := inv * (Vector3(_cube["face"]) + dw * float(_cube["x"]))
+	var u := (inv.basis * Vector3(_cube["u"])).normalized()
+	var across := d.cross(u)
+	var half := HIT_SIDE / 2.0
+	var v: float = _cube["v"]
+	var v_rel := v - car.linear_velocity.dot(dw)
+	var total := 0.0
+	for k in sb.count:
+		# (the body: not the nodes of a part or of the suspension, which are solved apart; and only the nodes that were in
+		# front of the face when it was fired: one already inside the cube was shot off by the whole depth at once)
+		if sb.anchor_alive[k] == 0 or sb.part_of[k] != "" or sb.is_rig[k] == 1 or (_cube["front"] as PackedByteArray)[k] == 0:
+			continue
+		var rel := sb.position(k) - face
+		var depth := sb.radius[k] - rel.dot(d)        # (how far the leading face of the cube has gone past the node)
+		if depth <= 0.0 or depth > HIT_SIDE or absf(rel.dot(u)) > half or absf(rel.dot(across)) > half:
+			continue
+		var vn := v_rel - sb.w[k].dot(d)
+		# (the spring and the damper within what the small step of a light node can carry: an explicit step blows up past it)
+		var m := sb.mass[k]
+		var kc := minf(sb.contact_k, 0.5 * m / (h * h))
+		var fn := maxf(0.0, kc * depth + minf(2.0 * sb.contact_damping * sqrt(kc * m), 0.9 * m / h) * vn)
+		sb.force[k] += d * fn
+		total += fn
+	v -= total / HIT_MASS * h
+	_cube["v"] = v
+	_cube["x"] += v * h
+	_cube["t"] += h
+	_cube["peak"] = maxf(float(_cube.get("peak", 0.0)), total)
+	_last_peak = _cube["peak"]
+	if (v_rel < 0.0 and float(_cube["x"]) < -0.05) or float(_cube["x"]) > HIT_START + 1.5 or _cube["t"] > 3.0:
+		_cube = {}
+		if _grab.is_empty():
+			car.shell.pusher = Callable()
+
+
+
+## A hit of the middle mouse button (DebugView.js hitCar): a cube of a tonne and a metre at the speed of the panel
+## against the car where the mouse is (the surface of the model, or the node of the shell under the mouse), coming the
+## way the camera looks (CarShell.pusher, as Apply force of the car editor; the car is not held: it feels the hit through
+## the anchors of the shell).
+## False when the mouse is not on the car.
+func hit_car(mouse: Vector2) -> bool:
+	var car: Car = world.car
+	if car.shell == null:
+		return false
+	var cam := get_viewport().get_camera_3d()
+	# (the node of the shell under the mouse: what the cube pushes; else where the ray meets the model)
+	var hit := {}
+	var k := _node_under(mouse)
+	if k >= 0:
+		hit = {"position": car.global_transform * car.shell.sb.position(k) - cam.project_ray_normal(mouse) * car.shell.sb.radius[k]}
+	else:
+		hit = _surface_at(mouse)
+	if hit.is_empty():
+		return false
+	var d := cam.project_ray_normal(mouse)
+	var n := -d
+	var u := d.cross(Vector3.UP if absf(d.y) < 0.9 else Vector3.RIGHT).normalized()
+	_cube = {"face": Vector3(hit["position"]) + n * HIT_START, "d": d, "u": u, "v": _hit_kmh / 3.6 + car.linear_velocity.dot(d), "x": 0.0, "t": 0.0,
+		"at": hit["position"]}
+	var front := PackedByteArray()
+	front.resize(car.shell.sb.count)
+	var inv := car.global_transform.affine_inverse()
+	var dl := (inv.basis * d).normalized()
+	var face := inv * Vector3(_cube["face"])
+	for i in car.shell.sb.count:
+		front[i] = 1 if car.shell.sb.radius[i] - (car.shell.sb.position(i) - face).dot(dl) <= 0.0 else 0
+	_cube["front"] = front
+	car.shell.pusher = _push
+	_say("Hit at %d km/h." % roundi(_hit_kmh))
+	RunLog.event("debug view: a hit at %d km/h" % roundi(_hit_kmh))
+	return true
+
+
+## The surface of the car under the mouse: { position, normal (towards the camera), node }, or {}.
+func _surface_at(mouse: Vector2) -> Dictionary:
+	var car: Car = world.car
+	var cam := get_viewport().get_camera_3d()
+	var from := cam.project_ray_origin(mouse)
+	var dir := cam.project_ray_normal(mouse)
+	var best := {}
+	var best_d := INF
+	for m in car.find_children("*", "MeshInstance3D", true, false):
+		var mi := m as MeshInstance3D
+		if mi.mesh == null or not mi.is_visible_in_tree() or mi.top_level:
+			continue
+		if (mi.global_transform * mi.mesh.get_aabb()).grow(0.05).intersects_ray(from, dir) == null:
+			continue
+		var key := "%d/%d" % [mi.get_instance_id(), mi.mesh.get_rid().get_id()]
+		if not _tri_cache.has(key):
+			_tri_cache[key] = mi.mesh.generate_triangle_mesh()
+		var tm: TriangleMesh = _tri_cache[key]
+		if tm == null:
+			continue
+		var inv := mi.global_transform.affine_inverse()
+		var h: Dictionary = tm.intersect_ray(inv * from, (inv.basis * dir).normalized())
+		if h.is_empty():
+			continue
+		var p: Vector3 = mi.global_transform * Vector3(h["position"])
+		if p.distance_to(from) < best_d:
+			best_d = p.distance_to(from)
+			var nn := (mi.global_transform.basis.inverse().transposed() * Vector3(h["normal"])).normalized()
+			best = {"position": p, "normal": nn if nn.dot(dir) < 0.0 else -nn, "node": mi}
+	return best
+
+
+## Open hinges or Break parts: a right click on a part.
+func _part_tool(mouse: Vector2) -> void:
+	var car: Car = world.car
+	if car.parts == null:
+		_say("This car has no parts.")
+		return
+	var hit := _surface_at(mouse)
+	var p: CarParts.Part = car.parts.part_of(hit["node"]) if not hit.is_empty() else null
+	if p == null:
+		_say("No part there.")
+		return
+	_say(p.name + ": " + car.parts.tool(p, _tool))
 
 
 func _pick(box: Control, text: String, items: Array, on_pick: Callable) -> OptionButton:
