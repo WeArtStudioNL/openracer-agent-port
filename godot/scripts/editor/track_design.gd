@@ -1,3 +1,4 @@
+# gdlint: disable=max-public-methods
 class_name TrackDesign
 extends Node3D
 ## The design of a track in the track editor without a model from Blender (web/tools/track-design.js): a road drawn with nodes
@@ -9,6 +10,7 @@ extends Node3D
 
 signal rebuilt
 
+const BRIDGE := 1.6                 # m: the edges of two curbs, or of a curb and a road, that are this close are joined
 const DEFAULT_TEXTURES := {"road": "asphalt", "shoulder": "grass", "ground": "grass"}
 const BRANCH_STEP := 2.0
 const BRANCH_SHOULDER := 6.0
@@ -33,6 +35,8 @@ var branch_lines: Array = []        # [{ points: [{ x, y, z, w, tangent, along }
 var branch_edges: Array = []
 var surface_grid := TriGrid.new()   # what a prefab stands on: the road, the branches, the surfaces and the ground
 var ground_y: Callable              # the ground of the editor under the surfaces (x, z, hint) -> y
+var curbs_of: Callable              # the curbs of the editor: () -> [{ points (Curbs.points_of), width }] (a surface connects to their edge too)
+var _edge_cache := {}               # the edges that a surface connects to (edge_sets): made again when the road or a curb changes
 var _last_terrain: MeshInstance3D = null
 
 
@@ -172,6 +176,7 @@ func rebuild(with_terrain := true) -> void:
 	if nodes.size() < 2:
 		main_line = []
 		road_edges = []
+		_edge_cache = {}
 		_grid()
 		rebuilt.emit()
 		return
@@ -215,6 +220,7 @@ func rebuild(with_terrain := true) -> void:
 		unfold(row, tangents, closed)
 	main_curve = curve
 	road_edges = [{"pts": left, "closed": closed}, {"pts": right, "closed": closed}]
+	_edge_cache = {}
 	var lines := build_branch_lines()
 	for b in lines:
 		for q in b["points"]:
@@ -516,6 +522,7 @@ func _branch_parts(lines: Array) -> Dictionary:
 	var rings: Array = []
 	var built: Array = []
 	branch_edges = []
+	_edge_cache = {}
 	var branches: Array = data.get("branches", [])
 	for line in lines:
 		var pts: Array = line["points"]
@@ -608,20 +615,18 @@ func _branch_parts(lines: Array) -> Dictionary:
 ## The nearest place on the edge of the track or of a branch: { x, z, nx, nz (away from the road), d }, or {}.
 func road_edge_at(x: float, z: float) -> Dictionary:
 	var best := {}
-	var sets: Array = []
-	if road_edges.size() == 2:
-		sets.append([road_edges[0], road_edges[1]])
-		sets.append([road_edges[1], road_edges[0]])
-	for i in range(0, branch_edges.size() - 1, 2):
-		sets.append([branch_edges[i], branch_edges[i + 1]])
-		sets.append([branch_edges[i + 1], branch_edges[i]])
-	for s in sets:
-		var pts: Array = s[0]["pts"]
-		var other: Array = s[1]["pts"]
+	for e in edge_sets()["edges"]:
+		if not e["road"]:
+			continue
+		var pts: Array = e["pts"]
+		var other: Array = e["other"]
+		var ok: Array = e["road_valid"]
 		var n := pts.size()
-		var count := n if s[0]["closed"] else n - 1
+		var count := n if e["closed"] else n - 1
 		for i in count:
 			var j := (i + 1) % n
+			if not ok[i] or not ok[j]:
+				continue
 			var a: Vector3 = pts[i]
 			var b: Vector3 = pts[j]
 			var dx := b.x - a.x
@@ -640,73 +645,229 @@ func road_edge_at(x: float, z: float) -> Dictionary:
 	return best
 
 
-## Whether (x, z) is well inside a road (also 10 cm to every side of it).
+## Whether (x, z) is well inside a road or a curb (also 10 cm to every side of it): a surface that connects to the road
+## lies under it there, not on it (roadMask).
 func _deep(x: float, z: float) -> bool:
-	for k in [Vector2.ZERO, Vector2(0.1, 0), Vector2(-0.1, 0), Vector2(0, 0.1), Vector2(0, -0.1)]:
-		if not _on_road(x + k.x, z + k.y):
-			return false
-	return true
-
-
-func _on_road(x: float, z: float) -> bool:
-	if road_edges.size() == 2:
-		var l: Array = road_edges[0]["pts"]
-		var r: Array = road_edges[1]["pts"]
-		if road_edges[0]["closed"]:
-			if inside_ring(l, x, z) != inside_ring(r, x, z):
-				return true
-		else:
-			var ring: Array = l.duplicate()
-			var rr := r.duplicate()
-			rr.reverse()
-			ring.append_array(rr)
-			if inside_ring(ring, x, z):
-				return true
-	for i in range(0, branch_edges.size() - 1, 2):
-		var ring: Array = (branch_edges[i]["pts"] as Array).duplicate()
-		var rr: Array = (branch_edges[i + 1]["pts"] as Array).duplicate()
-		rr.reverse()
-		ring.append_array(rr)
-		if inside_ring(ring, x, z):
+	var prints: Array = edge_sets()["prints"]
+	for f in prints:
+		var box: Rect2 = f["box"]
+		var all := true
+		for k in [Vector2.ZERO, Vector2(0.1, 0), Vector2(-0.1, 0), Vector2(0, 0.1), Vector2(0, -0.1)]:
+			var q := Vector2(x + k.x, z + k.y)
+			if not box.has_point(q) or not (f["test"] as Callable).call(q.x, q.y):
+				all = false
+				break
+		if all:
 			return true
 	return false
 
 
-## The way along the nearest edge of a road from the edge point nearest to b to the one nearest to a (an area that connects to
-## the road closes along it).
-func _edge_path(a: Vector2, b: Vector2) -> Array:
-	var all: Array = road_edges.duplicate()
-	all.append_array(branch_edges)
-	var pick := func(p: Vector2) -> Array:
-		var best := [-1, -1, 60.0 * 60.0]
-		for e in all.size():
-			var pts: Array = all[e]["pts"]
-			for i in pts.size():
-				var d := Vector2(pts[i].x - p.x, pts[i].z - p.y).length_squared()
-				if d < best[2]:
-					best = [e, i, d]
-		return best
-	var na: Array = pick.call(a)
-	var nb: Array = pick.call(b)
-	if na[0] < 0 or nb[0] < 0 or na[0] != nb[0]:
+func _on_road(x: float, z: float) -> bool:
+	for f in edge_sets()["prints"]:
+		if f["road"] and (f["box"] as Rect2).has_point(Vector2(x, z)) and (f["test"] as Callable).call(x, z):
+			return true
+	return false
+
+
+static func _box_of(pts: Array) -> Rect2:
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for q in pts:
+		var v := Vector2(q.x, q.z)
+		lo = lo.min(v)
+		hi = hi.max(v)
+	return Rect2(lo, hi - lo).grow(0.001)
+
+
+## The edges that a surface or a curb connects to (track-design.js edgeSets): the edges of the roads (the track, the
+## branches) and of the curbs of the editor, as lines of points, and which points of them can be seen from outside (a
+## point that lies on another road or curb is no edge any more: a branch cut the edge of the track, a curb lies over it).
+## { edges: [{ owner, pts, closed, other, road, valid, road_valid }], prints: [{ owner, road, box, test }], graph }
+func edge_sets() -> Dictionary:
+	if not _edge_cache.is_empty():
+		return _edge_cache
+	var edges: Array = []
+	var prints: Array = []
+	if road_edges.size() == 2:
+		var l: Array = road_edges[0]["pts"]
+		var r: Array = road_edges[1]["pts"]
+		var closed: bool = road_edges[0]["closed"]
+		edges.append({"owner": "main", "pts": l, "closed": closed, "other": r, "road": true})
+		edges.append({"owner": "main", "pts": r, "closed": closed, "other": l, "road": true})
+		if closed:
+			prints.append({"owner": "main", "road": true, "box": _box_of(l + r), "test": func(x: float, z: float) -> bool:
+				return inside_ring(l, x, z) != inside_ring(r, x, z)})
+		else:
+			var ring := l.duplicate()
+			var rr := r.duplicate()
+			rr.reverse()
+			ring.append_array(rr)
+			prints.append({"owner": "main", "road": true, "box": _box_of(ring), "test": func(x: float, z: float) -> bool: return inside_ring(ring, x, z)})
+	for i in range(0, branch_edges.size() - 1, 2):
+		var owner := "b%d" % (i / 2)
+		var a: Array = branch_edges[i]["pts"]
+		var b: Array = branch_edges[i + 1]["pts"]
+		var ring := a.duplicate()
+		var rb := b.duplicate()
+		rb.reverse()
+		ring.append_array(rb)
+		edges.append({"owner": owner, "pts": a, "closed": false, "other": b, "road": true})
+		edges.append({"owner": owner, "pts": b, "closed": false, "other": a, "road": true})
+		prints.append({"owner": owner, "road": true, "box": _box_of(ring), "test": func(x: float, z: float) -> bool: return inside_ring(ring, x, z)})
+	# the curbs: the strip from its points, as Curbs makes it (half the width times the size at a point, to either side)
+	var curbs: Array = curbs_of.call() if curbs_of.is_valid() else []
+	for ci in curbs.size():
+		var c: Dictionary = curbs[ci]
+		var pts: Array = (c.get("points", []) as Array).filter(func(q: Variant) -> bool: return q is Array and (q as Array).size() >= 2)
+		if pts.size() < 2:
+			continue
+		var half := (float(c["width"]) if float(c.get("width", 0)) > 0.0 else 1.2) / 2.0
+		var cl: Array = []
+		var cr: Array = []
+		for k in pts.size():
+			var a: Array = pts[maxi(0, k - 1)]
+			var b: Array = pts[mini(pts.size() - 1, k + 1)]
+			var t := Vector2(float(b[0]) - float(a[0]), float(b[1]) - float(a[1]))
+			var len := t.length() if t.length() > 0.0 else 1.0
+			var w := half * maxf(0.05, float(pts[k][5]) if (pts[k] as Array).size() > 5 else 1.0)
+			var side := Vector2(t.y / len * w, -t.x / len * w)
+			cl.append(Vector3(float(pts[k][0]) + side.x, 0.0, float(pts[k][1]) + side.y))
+			cr.append(Vector3(float(pts[k][0]) - side.x, 0.0, float(pts[k][1]) - side.y))
+		var owner := "c%d" % ci
+		var ring := cl.duplicate()
+		var rr := cr.duplicate()
+		rr.reverse()
+		ring.append_array(rr)
+		edges.append({"owner": owner, "pts": cl, "closed": false, "other": cr, "road": false})
+		edges.append({"owner": owner, "pts": cr, "closed": false, "other": cl, "road": false})
+		prints.append({"owner": owner, "road": false, "box": _box_of(ring), "test": func(x: float, z: float) -> bool: return inside_ring(ring, x, z)})
+	var covered := func(e: Dictionary, q: Vector3, road_only: bool) -> bool:
+		for f in prints:
+			if f["owner"] != e["owner"] and (not road_only or f["road"]) and (f["box"] as Rect2).has_point(Vector2(q.x, q.z)) \
+					and (f["test"] as Callable).call(q.x, q.z):
+				return true
+		return false
+	for e in edges:
+		e["valid"] = (e["pts"] as Array).map(func(q: Vector3) -> bool: return not covered.call(e, q, false))
+		e["road_valid"] = (e["pts"] as Array).map(func(q: Vector3) -> bool: return not covered.call(e, q, true)) if e["road"] else []
+	_edge_cache = {"edges": edges, "prints": prints, "graph": []}
+	return _edge_cache
+
+
+## The road or a curb changed: the edges are made again when they are asked for.
+func edges_changed() -> void:
+	_edge_cache = {}
+
+
+## The visible edges as a graph (edgeGraph): the points along an edge, over a run of at most 8 covered points too (the
+## tapered end of a curb that lies half on the edge of the road), and bridges to the points of other edges that are
+## close: the way along the edge hops from the road to a curb and back.
+func _edge_graph() -> Array:
+	var cache := edge_sets()
+	if not (cache["graph"] as Array).is_empty():
+		return cache["graph"]
+	var nodes: Array = []            # [x, z, edge, adj: [[node, weight]]]
+	var index := {}
+	var edges: Array = cache["edges"]
+	for k in edges.size():
+		var e: Dictionary = edges[k]
+		for i in (e["pts"] as Array).size():
+			if e["valid"][i]:
+				index[Vector2i(k, i)] = nodes.size()
+				nodes.append([e["pts"][i].x, e["pts"][i].z, k, []])
+	var link := func(a: int, b: int, factor: float) -> void:
+		var d := Vector2(nodes[a][0] - nodes[b][0], nodes[a][1] - nodes[b][1]).length() * factor
+		nodes[a][3].append([b, d])
+		nodes[b][3].append([a, d])
+	for k in edges.size():
+		var e: Dictionary = edges[k]
+		var n: int = (e["pts"] as Array).size()
+		for i in n + (0 if e["closed"] else -1):
+			if not index.has(Vector2i(k, i)):
+				continue
+			var a: int = index[Vector2i(k, i)]
+			for step in range(1, 10):
+				var j := i + step
+				if not e["closed"] and j >= n:
+					break
+				if index.has(Vector2i(k, j % n)):
+					var b: int = index[Vector2i(k, j % n)]
+					if a != b:
+						link.call(a, b, 1.0 if step == 1 else 1.2)
+					break
+	var grid := {}
+	for ni in nodes.size():
+		var key := Vector2i(floori(nodes[ni][0] / BRIDGE), floori(nodes[ni][1] / BRIDGE))
+		if not grid.has(key):
+			grid[key] = []
+		grid[key].append(ni)
+	for ni in nodes.size():
+		var cell := Vector2i(floori(nodes[ni][0] / BRIDGE), floori(nodes[ni][1] / BRIDGE))
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				for o in grid.get(cell + Vector2i(dx, dz), []):
+					if nodes[o][2] > nodes[ni][2] and Vector2(nodes[o][0] - nodes[ni][0], nodes[o][1] - nodes[ni][1]).length() < BRIDGE:
+						link.call(ni, o, 1.5)
+	cache["graph"] = nodes
+	return nodes
+
+
+## The shortest way through the graph (Dijkstra), as a list of nodes, or [] when there is none.
+static func _shortest(nodes: Array, from: int, to: int) -> Array:
+	var dist := {from: 0.0}
+	var prev := {}
+	var done := {}
+	var heap: Array = [[0.0, from]]
+	while not heap.is_empty():
+		var best := 0
+		for h in heap.size():
+			if heap[h][0] < heap[best][0]:
+				best = h
+		var top: Array = heap[best]
+		heap[best] = heap[heap.size() - 1]
+		heap.pop_back()
+		var node: int = top[1]
+		if done.has(node):
+			continue
+		done[node] = true
+		if node == to:
+			break
+		for adj in nodes[node][3]:
+			var nd: float = top[0] + adj[1]
+			if not dist.has(adj[0]) or nd < dist[adj[0]]:
+				dist[adj[0]] = nd
+				prev[adj[0]] = node
+				heap.append([nd, adj[0]])
+	if not done.has(to):
 		return []
-	var pts: Array = all[na[0]]["pts"]
-	var n := pts.size()
-	var out: Array = []
-	var from: int = nb[1]
-	var to: int = na[1]
-	var fwd := posmod(to - from, n)
-	var step := 1
-	var n_len := absi(to - from)
-	if all[na[0]]["closed"]:
-		step = 1 if fwd <= n - fwd else -1
-		n_len = fwd if step == 1 else n - fwd
-	elif to < from:
-		step = -1
-	for k in n_len + 1:
-		var q: Vector3 = pts[posmod(from + k * step, n)]
-		out.append(Vector2(q.x, q.z))
-	return out
+	var path: Array = []
+	var n: Variant = to
+	while n != null:
+		path.append(n)
+		n = prev.get(n)
+	path.reverse()
+	return path
+
+
+## The way along the visible edge of the roads and curbs from the edge point nearest to b to the one nearest to a (an area
+## that connects to the road closes along it; none when there is no way within 60 m).
+func _edge_path(a: Vector2, b: Vector2) -> Array:
+	var nodes := _edge_graph()
+	var nearest := func(pt: Vector2) -> int:
+		var best := -1
+		var best_d := 60.0 * 60.0
+		for i in nodes.size():
+			var d := Vector2(nodes[i][0] - pt.x, nodes[i][1] - pt.y).length_squared()
+			if d < best_d:
+				best_d = d
+				best = i
+		return best
+	var na: int = nearest.call(a)
+	var nb: int = nearest.call(b)
+	if na < 0 or nb < 0:
+		return []
+	var path := [na] if na == nb else _shortest(nodes, nb, na)
+	return path.map(func(i: int) -> Vector2: return Vector2(nodes[i][0], nodes[i][1]))
 
 
 # ---- the surfaces: data.patches [{ surface, points: [{ x, z }], connect }]
@@ -834,6 +995,7 @@ func _patch_mesh(p: Dictionary, index: int) -> MeshInstance3D:
 
 
 func build_patches() -> void:
+	_edge_cache = {}                 # (a curb may have changed)
 	for c in patch_group.get_children():
 		c.free()
 	var patches: Array = data.get("patches", [])

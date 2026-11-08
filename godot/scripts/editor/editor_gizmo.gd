@@ -163,8 +163,12 @@ func handle_at(cam: Camera3D, mouse: Vector2) -> int:
 			var prev := Vector2.ZERO
 			for k in 49:
 				var ang := TAU * k / 48.0
-				var p := cam.unproject_position(o + (u * cos(ang) + v * sin(ang)) * unit * 0.735)
-				if k > 0:
+				var at := o + (u * cos(ang) + v * sin(ang)) * unit * 0.735
+				if cam.is_position_behind(at):
+					prev = Vector2.INF
+					continue
+				var p := cam.unproject_position(at)
+				if k > 0 and prev != Vector2.INF:
 					var d := Geometry2D.get_closest_point_to_segment(mouse, prev, p).distance_to(mouse)
 					if d < best_d:
 						best_d = d

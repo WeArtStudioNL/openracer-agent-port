@@ -1,3 +1,4 @@
+# gdlint: disable=max-public-methods
 class_name CarEditorLayers
 extends RefCounted
 ## The layers panel of the car editor (the #layers aside of car-editor.html): the cameras of the game, the model (its
@@ -22,6 +23,7 @@ var ed: CarEditor
 var selected := ""
 var exhaust: Array = []              # { id, target, pipe, s }
 var exhaust_mode := "move"
+var flame_test := false              # the flames of the pops and bangs at the exhaust points, now and then (setFlameTest)
 var targets := {}                    # layer -> the Node3D the gizmo moves
 var panel: PanelContainer
 var _list: VBoxContainer
@@ -30,6 +32,8 @@ var _thumb: TextureRect
 var _thumb_label: Label
 var _expanded := {}
 var _parts_for: Variant = null
+var _flames: ExhaustFlames = null
+var _flame_timer := 0.0
 var _chosen_part := ""
 var _counter := 0
 var _window: PanelContainer
@@ -308,6 +312,8 @@ func frame() -> void:
 		return
 	var cams: Dictionary = ed.cfg.get("cameras", {})
 	var r := ed.num("chassis.tire_diameter", 0.65) / 2.0
+	# (the cockpit camera does not see the driver, as in the game, which hides the head and the body inside)
+	ed.view.thumb_camera.cull_mask = 1 | (CarEditorView.DRIVER_LAYER if id == "follow" else 0)
 	if id == "follow":
 		var f: Dictionary = cams.get("follow", {})
 		var pos := Vector3(0, float(f.get("height", 2)) - r, -float(f.get("distance", 6)))
@@ -406,6 +412,27 @@ func new_exhaust() -> Dictionary:
 	return add_exhaust([snappedf(x, 0.01), snappedf(y, 0.01), snappedf(rear_z, 0.01)], [0, 0, 0], null)
 
 
+## The flame test: while it is on, the points make a flame now and then, as the game does (ExhaustFlames).
+func set_flame_test(on: bool) -> void:
+	flame_test = on
+	if on and _flames == null:
+		_flames = ExhaustFlames.new()
+		ed.view.viewport.add_child(_flames)
+		_flames.setup_preview(ed.view.extras, {"exhaust": exhaust_config()})
+	_flame_timer = 0.0
+	render()
+
+
+func flames_frame(dt: float) -> void:
+	if _flames == null or not flame_test or exhaust.is_empty():
+		return
+	_flame_timer -= dt
+	if _flame_timer <= 0.0:
+		_flame_timer = 0.18 + randf() * 0.4
+		_flames.refresh({"exhaust": exhaust_config()})
+		_flames.emit_bang({"strength": 0.6 + randf() * 0.9, "loud": 1.0, "flame": 1.0})
+
+
 func exhaust_config() -> Array:
 	var out := []
 	for e in exhaust:
@@ -430,6 +457,8 @@ func placed_on_model() -> Array:
 		list.append("the exhaust points")
 	if ed.cfg.get("driver") is Dictionary:
 		list.append("the driver")
+	if (ed.cfg.get("parts", []) as Array).any(func(p: Variant) -> bool: return p is Dictionary and (p.has("mounts") or p.has("hinge"))):
+		list.append("the hinges and pins of the parts")
 	return list
 
 
@@ -635,6 +664,10 @@ func render() -> void:
 	var t := EditorStyle.group("Exhaust")
 	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t)
+	var test := EditorStyle.button("Test: on" if flame_test else "Test: off", "small" + (" accent" if flame_test else " ghost"),
+		"Show the flames of the pops and bangs at the exhaust points")
+	test.pressed.connect(func(): set_flame_test(not flame_test))
+	head.add_child(test)
 	_list.add_child(head)
 	for i in exhaust.size():
 		var e: Dictionary = exhaust[i]

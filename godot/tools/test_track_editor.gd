@@ -240,15 +240,59 @@ func _design_track() -> void:
 		_click(Vector3(q.x, ed.ground_y(q.x, q.z), q.z))
 	_key(KEY_ENTER)
 	_check((ed.design.data["patches"] as Array).size() == 1 and ed.design.patch_group.get_child_count() == 1, "Surfaces: an area of gravel")
+	_edge_over_curb()
+	# a surface of its own: a colour, with the grip of sand (chosen for the next area)
+	ed.select("")
+	TrackEditorPanels._surface_editor(ed, "new")
+	(ed.ui["dsSurfaceName"] as LineEdit).text = "Red sand"
+	(ed.ui["dsSurfaceColour"] as ColorPickerButton).color = Color("#aa4433")
+	(ed.ui["dsSurfaceGrip"] as OptionButton).select(3)
+	TrackEditorPanels._surface_save(ed)
+	var customs: Array = ed.design.data.get("surfaces", [])
+	_check(customs.size() == 1 and customs[0]["label"] == "Red sand" and customs[0]["grip"] == "sand" and customs[0]["colour"] == "#aa4433"
+		and ed.patch_surface == "c:" + str(customs[0]["id"]) and ed.design.surface_of(ed.patch_surface)["role"] == "sand",
+		"New surface: a surface of the track, chosen for the next area")
+	ed.patch_surface = "gravel"
+	_check(is_equal_approx(TrackEditorIO.distance_of("400 ft"), 121.92) and TrackEditorIO.distance_of("120") == 120.0 and is_nan(TrackEditorIO.distance_of("far")),
+		"Scale by two points takes metres or feet")
+	# two cinematic cameras beside the road (the replay of a drive here films from them)
+	ed.set_mode("camera")
+	for k in [2, 6]:
+		var nd: Dictionary = ed.design.data["nodes"][k]
+		_click(Vector3(float(nd["x"]) * 1.15, ed.ground_y(float(nd["x"]) * 1.15, float(nd["z"]) * 1.15), float(nd["z"]) * 1.15))
+	_check(ed.cameras.size() == 2, "Add camera: two cameras beside the road")
+	ed.set_mode("view")
 	await _shot("te-design.png")
 	ed.ui["name"].text = "Editor test design"
 	ed.ui["id"].text = "te-test-design"
+	# the draft: what is not saved is kept, and can be restored
+	ed.history.draft_resolved = true
+	ed.history.save_draft()
+	var draft := ed.history.read_draft()
+	_check(draft.get("id") == "te-test-design" and ed.history.draft_path().begins_with(out), "the draft of the unsaved changes is kept (in the test folder)")
+	(ed.design.data["patches"] as Array).clear()
+	ed.design.build_patches()
+	ed.history.restore_draft(draft)
+	_check((ed.design.data["patches"] as Array).size() == 1 and ed.design.patch_group.get_child_count() == 1, "Restore: the area of gravel is back")
 	# the start on the road: box 1 at the first node, along the road
 	var n0: Dictionary = ed.design.data["nodes"][0]
 	var n1: Dictionary = ed.design.data["nodes"][1]
 	ed.grid = [{"x": n0["x"], "y": ed.ground_y(n0["x"], n0["z"]), "z": n0["z"], "heading": atan2(n1["z"] - n0["z"], n1["x"] - n0["x"])}]
 	TrackEditorUI._gate_at_start(ed)
 	_check(TrackEditorIO.save(ed), "saved as te-test-design: " + ed.ui["status"].text)
+	_check(not FileAccess.file_exists(ed.history.draft_path()), "saving throws the draft away")
+	var asked := [""]
+	ed.record_line.connect(func(id: String): asked[0] = id)
+	TrackEditorUI._record_line(ed)
+	_check(asked[0] == "te-test-design", "Record AI racing line drives the saved track (%s)" % asked[0])
+	var pictures := []
+	ed.thumbs.request("test-cone", func() -> Node3D: return DesignPrefabs.make("cone", ""), func(t: Texture2D): pictures.append(t))
+	for k in 10:
+		if pictures.is_empty():
+			await get_tree().process_frame
+	var headless := DisplayServer.get_name() == "headless"
+	_check(pictures.size() == 1 and (headless or (pictures[0] != null and (pictures[0] as Texture2D).get_width() == ModelThumbs.SIZE)),
+		"a picture of a model for the library (%s)" % ("no screen" if headless else str(pictures[0])))
 	var dir := out.path_join("tracks/te-test-design")
 	_check(FileAccess.file_exists(dir.path_join("te-test-design.glb")), "the glb of the design is written")
 	var cfg: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("track.json")))
@@ -270,6 +314,49 @@ func _design_track() -> void:
 	root.free()
 	_check(names.has("road") and names.has("shoulder_left") and names.has("ground") and names.has("prefab_tyrewall_1") and names.has("patch_gravel_1"),
 		"the glb has road, shoulder_left, ground, prefab_tyrewall_1, patch_gravel_1")
+
+
+## A surface that connects to the road closes along its edge; where a curb lies on that edge the way goes over the outside
+## of the curb and back (track-design.js edgeGraph: the edges are joined where they are close).
+func _edge_over_curb() -> void:
+	var edge: Array = ed.design.road_edges[0]["pts"]
+	var i0 := 10
+	var pa := Vector2(edge[i0].x, edge[i0].z)
+	var pb := Vector2(edge[i0 + 24].x, edge[i0 + 24].z)
+	var plain: Array = ed.design._edge_path(pa, pb)
+	# (a curb as the editor makes one: a point every half metre, tapered at its ends, from between two points of the edge)
+	var line: Array = []
+	for k in range(i0 + 5, i0 + 19):
+		var a := Vector2(edge[k].x, edge[k].z)
+		var b := Vector2(edge[k + 1].x, edge[k + 1].z)
+		var steps := maxi(1, ceili(a.distance_to(b) / 0.5))
+		for j in steps:
+			line.append(a.lerp(b, float(j) / steps))
+	var first := ceili(line.size() * 0.03)
+	line = line.slice(first, line.size() - 1)
+	var fake := []
+	for k in line.size():
+		var ends := minf(k, line.size() - 1 - k)
+		fake.append([line[k].x, line[k].y, 0.0, 0.0, 0.0, clampf(ends / 4.0, 0.05, 1.0)])
+	var was: Callable = ed.design.curbs_of
+	ed.design.curbs_of = func() -> Array: return [{"points": fake, "width": 1.2}]
+	ed.design.edges_changed()
+	var hop: Array = ed.design._edge_path(pa, pb)
+	var off := func(path: Array) -> float:
+		var worst := 0.0
+		for q in path:
+			var near := INF
+			for e in edge:
+				near = minf(near, Vector2(e.x, e.z).distance_to(q))
+			worst = maxf(worst, near)
+		return worst
+	var plain_off: float = off.call(plain)
+	var hop_off: float = off.call(hop)
+	_check(plain.size() > 10 and plain_off < 0.01 and hop.size() > 10 and hop_off > 0.4 and hop_off < 1.5,
+		"a connected surface goes along the edge of the road (%d points, %.1f m apart) and over the outside of a curb on it (%d points, %.2f m out)" % [
+			plain.size(), Vector2(edge[i0].x, edge[i0].z).distance_to(Vector2(edge[i0 + 1].x, edge[i0 + 1].z)), hop.size(), hop_off])
+	ed.design.curbs_of = was
+	ed.design.edges_changed()
 
 
 ## A track opened and saved again without a change: what the browser wrote comes out the same.

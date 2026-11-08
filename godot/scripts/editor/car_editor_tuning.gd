@@ -32,6 +32,7 @@ var _features: Array = []
 var _setup_pick: OptionButton
 var _save_to: Label
 var _tune_menu: MenuButton
+var _ship: Button
 var _paths := {}                     # tune name -> its file
 var _refreshing := false
 
@@ -66,6 +67,11 @@ func build_setup_bar(parent: VBoxContainer) -> void:
 	pm.add_item("Import tune file…", 2)
 	pm.id_pressed.connect(_tune_action)
 	row.add_child(_tune_menu)
+	_ship = EditorStyle.button("Ship with the car", "small ghost", "The tune that is chosen as a file next to car.json, listed in car.json: " +
+		"it comes with the car, for everyone who plays it")
+	_ship.pressed.connect(ship_pressed)
+	_ship.visible = false
+	parent.add_child(_ship)
 	_save_to = EditorStyle.hint("Save writes car.json")
 	parent.add_child(_save_to)
 
@@ -101,6 +107,90 @@ func update_tune_buttons() -> void:
 	save_button.tooltip_text = ("Overwrite the tune %s with the car as the form has it (car.json is not written)" % n) if n != "" else "Save the car (car.json)"
 	var where := "your garage" if not ed.save_to_repo else "web/cars (the repository)"
 	_save_to.text = ("Save writes to the tune " + n) if n != "" else "Save writes car.json in " + where
+	var ship := shipped_state(n)
+	_ship.visible = n != ""
+	_ship.text = "Take off the car" if ship == "car" else ("Ship the changes with the car" if ship == "copy" else "Ship with the car")
+	if ship == "car":
+		_save_to.text += " (a copy of your own)"
+
+
+## Where a tune is: "car" (it comes with the car only), "copy" (with the car, and changed here), "" (the player's own).
+func shipped_state(n: String) -> String:
+	if n == "" or ed.existing_id == "":
+		return ""
+	var d: Variant = Tuning.list_detail(ed.existing_id, ed.existing).get(n)
+	if not d is Dictionary or d["car"] == "":
+		return ""
+	return "car" if d["own"] == "" else "copy"
+
+
+## Ship with the car (car-editor.js tuneShip): the tune that is chosen as <name>.openracer-tune.json next to car.json and
+## its file in car.json "tunes" (only car.json as it was saved is written, with the list, not what the form changed); the
+## player's copy goes, the file is the tune now. Take off the car removes the file and the name again.
+func ship_pressed() -> void:
+	var id := ed.existing_id
+	var n := chosen_tune()
+	if id == "" or ed.car_id != id or ed.existing.is_empty():
+		ed.status("Save the car first.", "error")
+		return
+	if n == "":
+		ed.status("Choose a tune first.", "error")
+		return
+	var ship := shipped_state(n)
+	var detail: Dictionary = Tuning.list_detail(id, ed.existing)[n]
+	var kept := str(detail["car"]).get_file() if detail["car"] != "" else ""
+	var car := ed.existing.duplicate(true)
+	var list := []
+	for f in car.get("tunes", []) if car.get("tunes") is Array else []:
+		if str(f) != kept:
+			list.append(str(f))
+	var dir := ed.save_dir().path_join(id)
+	DirAccess.make_dir_recursive_absolute(dir)
+	if ship == "car":
+		if not await ed.ask("Take the tune %s off the car?" % n, "Its file is removed from the folder of the car.", "Take off"):
+			return
+		if FileAccess.file_exists(dir.path_join(kept)):
+			DirAccess.remove_absolute(dir.path_join(kept))
+	else:
+		var c := Tuning.load_tune(str(detail["own"]))
+		for k in ["model", "id", "tunes"]:
+			c.erase(k)
+		var file_name := kept
+		if file_name == "":
+			var base := n.validate_filename().replace(" ", "-").to_lower()
+			file_name = base + ".openracer-tune.json"
+			var k := 2
+			while list.has(file_name):
+				file_name = "%s-%d.openracer-tune.json" % [base, k]
+				k += 1
+		var f := FileAccess.open(dir.path_join(file_name), FileAccess.WRITE)
+		if f == null:
+			ed.status("Could not write %s (%s)." % [file_name, error_string(FileAccess.get_open_error())], "error")
+			return
+		f.store_string(JSON.stringify({"openracer-tune": 1, "car": id, "name": n, "saved": Time.get_datetime_string_from_system(true) + "Z", "config": c}, " ") + "\n")
+		f.close()
+		list.append(file_name)
+	if list.is_empty():
+		car.erase("tunes")
+	else:
+		car["tunes"] = list
+	var jf := FileAccess.open(dir.path_join("car.json"), FileAccess.WRITE)
+	if jf == null:
+		ed.status("Could not change the tunes of the car (%s)." % error_string(FileAccess.get_open_error()), "error")
+		return
+	jf.store_string(CarEditorIO.to_json(car))
+	jf.close()
+	if car.has("tunes"):
+		ed.existing["tunes"] = car["tunes"]
+	else:
+		ed.existing.erase("tunes")
+	if ship != "car":
+		Tuning.delete_tune(str(detail["own"]))      # (the copy of the player is the file now)
+	render_setups()
+	EditorStyle.select_value(_setup_pick, n)
+	update_tune_buttons()
+	ed.status("Tune %s is off the car." % n if ship == "car" else "Tune %s comes with the car now: %s next to car.json." % [n, list[-1]], "ok")
+	RunLog.event("car editor: tune %s %s %s" % [n, "taken off" if ship == "car" else "shipped with", id])
 
 
 func save_pressed() -> void:
@@ -192,8 +282,8 @@ func _tune_action(id: int) -> void:
 				ed.status("Choose a tune first.", "error")
 				return
 			var path := str(_paths.get(n, ""))
-			if not path.begins_with("user://"):
-				ed.status("This tune comes with the car: it is not deleted here.", "error")
+			if not path.begins_with(Tuning.tunes_root):
+				ed.status("This tune comes with the car: Take off the car takes it away.", "error")
 				return
 			if not await ed.ask("Delete the tune %s?" % n, "Its file is removed.", "Delete"):
 				return
@@ -516,6 +606,9 @@ func refresh() -> void:
 				(r["reset"] as Button).modulate.a = 1.0 if changed else 0.0
 				if key.begins_with("rubber_"):
 					(r["label"] as Label).text = str(r["text"]) + " · " + _rubber_label(x)
+				elif key.begins_with("tread_"):
+					var rubber: Variant = v.get("rubber_" + key.substr(6))
+					(r["label"] as Label).text = str(r["text"]) + " · " + tread_label(x, float(rubber) if rubber is float or rubber is int else 50.0)
 			"select":
 				EditorStyle.select_value(r["pick"], value if value != null else "")
 			"tick":
@@ -540,6 +633,16 @@ static func _rubber_label(x: float) -> String:
 			d = absf(float(s[1]) - x)
 			best = s[0]
 	return names.get(best, best)
+
+
+## What pattern a tread is (Wheel.js treadPattern, treadLabel): knobbly, all-terrain, or a road tyre or a slick by its rubber.
+static func tread_label(tread: float, rubber: float) -> String:
+	var at := clampf(tread, 0.0, 100.0)
+	if at >= 75.0:
+		return "Knobbly"
+	if at >= 25.0:
+		return "All-terrain"
+	return "Slick" if rubber >= 75.0 else "Road"
 
 
 func sync_visibility() -> void:

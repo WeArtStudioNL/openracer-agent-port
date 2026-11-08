@@ -69,6 +69,8 @@ const DEFAULTS := {
 	"keys_shown": false,          # the box with the keys that matter was shown once
 	"controls": {},               # the bindings that the player set (Controls)
 	"tunes": {},                  # car -> the tune in use (its file)
+	"editor_test_track": "testtrack",   # the track of Save and test of the car editor, the last one chosen
+	"editor_last_track": "",      # the track that the track editor opened last (its start dialog offers it)
 	# the graphics (Graphics, the Graphics page of web/js/Graphics.js): a preset is a set of these
 	"gfx_preset": "high",
 	"gfx_resolution": "native",   # "native" or the height of the picture in pixels (720, 1080, 1440, 2160)
@@ -95,6 +97,7 @@ const DEFAULTS := {
 	"gfx_sun_azimuth": 40.0,
 	"gfx_moon": 1.0,
 	"gfx_weather": "clear",       # clear, cloudy, fog, rain, snow
+	"gfx_ground": "auto",         # auto (follows the weather), dry, wet, snow (the car editor's Save and test)
 	# the mirrors of the car (CarMirrors, Mirrors.js): the turn and the tilt of each glass (degrees), and a real mirror (off, as in Settings.js)
 	"mirror_left_yaw": 0.0, "mirror_left_tilt": 0.0, "mirror_left_real": false,
 	"mirror_right_yaw": 0.0, "mirror_right_tilt": 0.0, "mirror_right_real": false,

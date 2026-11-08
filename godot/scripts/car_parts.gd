@@ -893,6 +893,73 @@ func _limit_speeds() -> void:
 			p.body.linear_velocity = p.body.linear_velocity.normalized() * max_lin
 
 
+## A part breaks or comes loose now (Parts.js breakLoose: Break it now of the car editor): false when it is off already.
+func break_loose(p: Part) -> bool:
+	if p == null or p.state in ["free", "broken"]:
+		return false
+	if p.mode == "breakable":
+		_break(p)
+		return true
+	for m in p.mounts:
+		m.alive = false
+	_start(p, "free")
+	return true
+
+
+## A hit on a part from outside (Parts.js hit: Apply force of the car editor): along dir (a unit vector in the world,
+## into the part), with an impulse (N s) and the force it is over the time of the hit (N). A part that is off the car
+## gets the impulse on its body; a hinge opens past its latch or the "opens at" force of a pin, tears at its break
+## force or at the break force of a pin; a part on the car (a breakable one) comes off at its break force. Gives what
+## happened: "held", "opened", "off", "broke", "tore off", "pushed" or "none".
+func hit(p: Part, dir: Vector3, impulse: float, force: float) -> String:
+	if p == null or p.state == "broken":
+		return "none"
+	var result := "pushed"
+	if p.state == "held":
+		if p.mode == "hinge":
+			var open := INF
+			for m in p.mounts:
+				if m.alive and m.activate > 0.0:
+					open = minf(open, m.activate)
+			if is_inf(open):
+				open = float(p.hinge.get("latch", INF))
+			if not (force > open):
+				return "held"
+			_start(p, "hinge")
+			result = "opened"
+		else:
+			if p.break_force > 0.0 and force > p.break_force:
+				_come_off(p)
+				return "broke" if p.mode == "breakable" else "off"
+			return "held"
+	if p.state == "hinged":
+		var alive := p.mounts.filter(func(m: Mount) -> bool: return m.alive)
+		var torn := alive.filter(func(m: Mount) -> bool: return m.break_force > 0.0 and force / maxf(1.0, alive.size()) > m.break_force)
+		for m: Mount in torn:
+			m.alive = false
+		var hb := float(p.hinge.get("break_force", 0.0))
+		if hb > 0.0 and force > hb:
+			_start(p, "free")
+			result = "tore off"
+		elif not torn.is_empty():
+			_event(p, "mount torn")
+			if p.mounts.any(func(m: Mount) -> bool: return m.alive):
+				_join(p)
+			else:
+				_start(p, "free")
+				result = "tore off"
+	if p.body != null and is_instance_valid(p.body) and p.state in ["hinged", "free"]:
+		p.body.apply_central_impulse(dir.normalized() * impulse)
+	return result
+
+
+func part_named(object_name: String) -> Part:
+	for p in parts:
+		if p.name == object_name:
+			return p
+	return null
+
+
 ## Every part back in its place, whole.
 func repair() -> void:
 	for p in parts:

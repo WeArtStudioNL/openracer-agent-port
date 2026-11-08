@@ -709,7 +709,7 @@ func build_test_bar() -> void:
 	var tabs := HBoxContainer.new()
 	col.add_child(tabs)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 8)
 	col.add_child(row)
 	crash_pane = VBoxContainer.new()
 	crash_pane.visible = false
@@ -731,7 +731,7 @@ func build_test_bar() -> void:
 		s.min_value = lo
 		s.max_value = hi
 		s.value = value
-		s.custom_minimum_size.x = 150
+		s.custom_minimum_size.x = 112                # (room for the buttons of the tests: Drop car, Full test, Drive, ↺)
 		s.focus_mode = Control.FOCUS_NONE
 		box.add_child(s)
 		row.add_child(box)
@@ -775,6 +775,10 @@ func build_test_bar() -> void:
 	(tl[0] as HSlider).value_changed.connect(show_drop)
 	show_drop.call(0.0)
 	drop.pressed.connect(func(): ed.bench.drop(h[0].value, tl[0].value))
+	var full := EditorStyle.button("Full test", "small accent", "A drop from 1 m at 5°, the engine to the rev limiter in neutral, a metre " +
+		"forwards and back, the steering to both locks, then a wall far ahead and full throttle into it")
+	full.pressed.connect(func(): ed.bench.full_test())
+	row.add_child(full)
 	var drive := EditorStyle.button("Drive", "small accent", "Drive the car on the floor with the keys of the game: arrows or WASD, space is the handbrake, " +
 		"the shift keys shift, R puts it back")
 	drive.pressed.connect(func():

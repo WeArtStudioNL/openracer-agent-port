@@ -12,6 +12,7 @@ signal gizmo_moved
 signal gizmo_released
 
 const MARKER_LAYER := 2              # (the markers and the gizmo are on a layer of their own: the thumbnail does not draw them)
+const DRIVER_LAYER := 1 << 9         # (the driver: the thumbnail of the cockpit camera does not draw it, as the game hides it inside)
 
 var container: SubViewportContainer
 var viewport: SubViewport
@@ -23,6 +24,7 @@ var markers: Node3D                  # the cameras of the game
 var extras: Node3D                   # the exhaust points, the suspension of the parts library and its mounts
 var grid: MeshInstance3D
 var gizmo: EditorGizmo
+var chrome: Array[Node3D] = []       # the axes, the forward arrow and the grid (hidden while a crash test runs: hide_chrome)
 var target := Vector3(0, 0.4, 0)     # the point the camera orbits
 var ortho := false
 var thumb_viewport: SubViewport
@@ -109,6 +111,7 @@ func _build_scene() -> void:
 	sun.look_at_from_position(Vector3(4, 8, 5), Vector3.ZERO)
 	viewport.add_child(sun)
 	camera = Camera3D.new()
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF     # (moved in _process: no lag of its picture)
 	camera.fov = 40.0
 	camera.near = 0.05
 	camera.far = 200.0
@@ -132,6 +135,7 @@ func _build_scene() -> void:
 	cone.position = Vector3(0, 0.02, 2.4)
 	arrow.add_child(cone)
 	viewport.add_child(arrow)
+	chrome = [axes, arrow, grid]
 	pivot = Node3D.new()
 	pivot.name = "Pivot"
 	viewport.add_child(pivot)
@@ -151,6 +155,7 @@ func _build_scene() -> void:
 	thumb_viewport.msaa_3d = Viewport.MSAA_4X
 	add_child(thumb_viewport)
 	thumb_camera = Camera3D.new()
+	thumb_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	thumb_camera.cull_mask = 1
 	thumb_camera.near = 0.05
 	thumb_camera.far = 300.0
@@ -180,6 +185,13 @@ static func flat_material(c: Color, on_top := false) -> StandardMaterial3D:
 		m.no_depth_test = true
 		m.render_priority = 5
 	return m
+
+
+## The helpers of the view (the camera markers, the axes, the forward arrow, the grid) go while a crash test runs (hideChrome).
+func hide_chrome(on: bool) -> void:
+	for n in chrome:
+		n.visible = not on
+	markers.visible = not on
 
 
 ## Lines between every two points (the colours per point).

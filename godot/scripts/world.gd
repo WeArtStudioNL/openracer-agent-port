@@ -18,6 +18,7 @@ var race: Race = null
 var replay: Replay = null
 var free_cam: GameFreeCamera = null    # the fourth camera (C: follow, cockpit, bonnet, free)
 var take: Take = null                  # the 5 key (Take)
+var recorder: LineRecorder = null      # the racing line is recorded for the track editor (options record_line)
 var options := {}
 var base_config := {}
 var pause_layer: CanvasLayer
@@ -106,6 +107,15 @@ func setup(car_id: String, track_id: String, opts := {}) -> void:
 	laps.message.connect(hud.toast)
 	add_child(laps)
 	hud.laps = laps
+	# (the track editor's Record AI racing line: the laps that are driven are the line; Esc or Stop saves it and leaves)
+	if options.get("record_line", false):
+		recorder = LineRecorder.new()
+		recorder.setup(self, track_id, laps)
+		recorder.done.connect(func(_r: String):
+			RunLog.car = null
+			ForceFeedback.neutral()
+			leave.emit())
+		add_child(recorder)
 	line = RacingLine.from_track(track.config)
 	# (a test: the AI drives the player's car along the racing line)
 	if Content.arg("ai") != "" and line != null:
