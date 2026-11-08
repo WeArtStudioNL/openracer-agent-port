@@ -35,6 +35,8 @@ var _tune_menu: MenuButton
 var _ship: Button
 var _paths := {}                     # tune name -> its file
 var _refreshing := false
+var _shown_for := ""                 # the car that the list of tunes was made for
+var _before := ""                    # the tune that is chosen, for Stay when a switch is called off
 
 
 func _init(editor: CarEditor) -> void:
@@ -80,8 +82,15 @@ func chosen_tune() -> String:
 	return str(EditorStyle.value_of(_setup_pick)) if _setup_pick.selected > 0 else ""
 
 
+## A car was loaded: the next render_setups chooses the tune that the game has chosen for it.
+func forget_choice() -> void:
+	_shown_for = ""
+
+
 func render_setups() -> void:
 	var own := ed.car_id != "" and ed.car_id == ed.existing_id
+	var same_car := ed.existing_id != "" and _shown_for == ed.existing_id
+	var kept := chosen_tune() if _setup_pick.item_count > 0 else ""
 	_setup_pick.clear()
 	_setup_pick.add_item("Default (the car as made)")
 	_setup_pick.set_item_metadata(0, "")
@@ -93,10 +102,16 @@ func render_setups() -> void:
 			_paths[n] = d["own"] if d["own"] != "" else d["car"]
 			_setup_pick.add_item(str(n) + (" · with the car" if d["own"] == "" else (" · with the car, changed here" if d["car"] != "" else "")))
 			_setup_pick.set_item_metadata(_setup_pick.item_count - 1, n)
-		var active: String = str(Settings.get_value("tunes").get(ed.existing_id, ""))
-		for n in _paths:
-			if _paths[n] == active:
-				EditorStyle.select_value(_setup_pick, n)
+		if same_car:                        # (a save, a new model: what is being edited stays chosen)
+			if _paths.has(kept):
+				EditorStyle.select_value(_setup_pick, kept)
+		else:                               # (a car that was just loaded: the tune that the game has chosen)
+			var active: String = str(Settings.get_value("tunes").get(ed.existing_id, ""))
+			for n in _paths:
+				if _paths[n] == active:
+					EditorStyle.select_value(_setup_pick, n)
+	_shown_for = ed.existing_id
+	_before = chosen_tune()
 	_setup_pick.disabled = not own
 	update_tune_buttons()
 
@@ -261,8 +276,9 @@ func _pick_setup() -> void:
 	if ed.dirty and not await ed.ask("Switch to %s?" % ("“%s”" % n if n != "" else "Default"),
 			"The car in the form has changes that are not saved. They are lost when you switch.",
 			"Switch", "Stay"):
-		render_setups()
+		EditorStyle.select_value(_setup_pick, _before)
 		return
+	_before = n
 	var c: Dictionary
 	if n == "":
 		c = ed.existing.duplicate(true)

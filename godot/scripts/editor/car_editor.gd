@@ -523,6 +523,7 @@ func load_existing(id: String) -> void:
 		status("Could not read cars/%s/car.json." % id, "error")
 		return
 	new_car()
+	tuning.forget_choice()
 	existing_id = id
 	existing = raw
 	var shown: Dictionary = (raw as Dictionary).duplicate(true)
