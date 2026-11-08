@@ -52,6 +52,18 @@ func add_faces(faces: PackedVector3Array, xf: Transform3D, kind: String) -> void
 				(_cells[key] as Array).append(i)
 
 
+## Adds the shapes of a body as walls (a ConcavePolygonShape3D or a box: the wall of the crash test of the car editor).
+func add_body(body: CollisionObject3D, kind: String) -> void:
+	for n in body.find_children("*", "CollisionShape3D", false, false):
+		var col := n as CollisionShape3D
+		if col.shape is ConcavePolygonShape3D:
+			add_faces((col.shape as ConcavePolygonShape3D).get_faces(), col.global_transform, kind)
+		elif col.shape is BoxShape3D:
+			var bm := BoxMesh.new()
+			bm.size = (col.shape as BoxShape3D).size
+			add_faces(bm.get_faces(), col.global_transform, kind)
+
+
 ## The triangles whose box comes within r of the point p (each once).
 func near(p: Vector3, r: float) -> PackedInt32Array:
 	var out := PackedInt32Array()
