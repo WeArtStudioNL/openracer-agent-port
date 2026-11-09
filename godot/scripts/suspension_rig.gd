@@ -697,7 +697,7 @@ func _corner_at(c: Dictionary, a: float) -> Dictionary:
 	if c["upper"] != null:
 		var ou := _xy(c["upper"]["origin"])
 		var bu0 := _xy(c["upper"]["far"])
-		var hit: Variant = _circles(ou, (bu0 - ou).length(), bl, (bu0 - b0).length(), bu0)
+		var hit: Variant = _circles(ou, (bu0 - ou).length(), bl, (bu0 - b0).length(), bl + (bu0 - b0))      # (the point where the upright stays upright, also far from where the model has it)
 		if hit == null:
 			return {}
 		bu = hit
