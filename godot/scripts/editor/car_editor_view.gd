@@ -70,6 +70,7 @@ func _ready() -> void:
 	overlay.add_child(hud)
 	toast = EditorStyle.label("", 13, EditorStyle.TEXT)
 	toast.visible = false
+	toast.z_index = 20                  # (over the panels: a message that is hidden behind the test bar says nothing)
 	toast.mouse_filter = Control.MOUSE_FILTER_STOP
 	var ts := EditorStyle.box(Color(0.09, 0.106, 0.133, 0.95), 10, 1, Color("#2f3845"))
 	ts.content_margin_left = 14

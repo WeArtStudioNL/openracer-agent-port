@@ -505,9 +505,7 @@ func status(text: String, kind := "") -> void:
 
 ## Starts the bench (when it is not running, or when the shell has changed) and draws the shell.
 func show_shell() -> void:
-	if not Settings.get_value("damage"):
-		status("Damage is off (Settings, Driving): the cars do not dent.", "error")
-		return
+	crash._damage_for_the_test()
 	if ed.bench.car == null:
 		restart_bench()
 	car = ed.bench.car

@@ -173,6 +173,15 @@ func get_value(key: String) -> Variant:
 	return _values.get(key, DEFAULTS.get(key))
 
 
+## A value for now that is not saved (the bench of the car editor), until clear_override or set_value.
+func override_for_session(key: String, value: Variant) -> void:
+	_overrides[key] = value
+
+
+func clear_override(key: String) -> void:
+	_overrides.erase(key)
+
+
 func set_value(key: String, value: Variant) -> void:
 	_values[key] = value
 	_overrides.erase(key)

@@ -156,9 +156,7 @@ func _result(text: String) -> void:
 # ---- the crash test
 
 func start() -> void:
-	if not Settings.get_value("damage"):
-		ed.status("Damage is off (Settings, Driving): the cars do not dent.", "error")
-		return
+	_damage_for_the_test()
 	var angle: float = ui["angle"].value
 	var speed: float = ui["speed"].value / 3.6
 	_clear_wall()
@@ -208,6 +206,20 @@ func start() -> void:
 	if ed.view.gizmo.target != null:
 		ed.view.gizmo.detach()
 	_result("Accelerating to %d km/h…" % roundi(speed * 3.6))
+
+
+## These tests are about the damage: with Damage off in the settings they turn it on for the bench, without touching the setting (it is back when the editor closes).
+func _damage_for_the_test() -> void:
+	if Settings.get_value("damage"):
+		return
+	Settings.override_for_session("damage", true)
+	if not ed.tree_exiting.is_connected(_damage_back):
+		ed.tree_exiting.connect(_damage_back)
+	ed.status("Damage is off in the settings: it is on for these tests here, the setting stays as it is.", "ok")
+
+
+func _damage_back() -> void:
+	Settings.clear_override("damage")
 
 
 ## The shell was changed while the crash test was on: the test again with the new car.
@@ -328,9 +340,7 @@ func reading(c: Car) -> String:
 
 func set_push(on: bool) -> void:
 	if on:
-		if not Settings.get_value("damage"):
-			ed.status("Damage is off (Settings, Driving): the cars do not dent.", "error")
-			return
+		_damage_for_the_test()
 		if running():
 			stop()
 		if _car() == null or ed.bench.parked:

@@ -167,6 +167,21 @@ func _run() -> void:
 	check(RegEx.create_from_string(CarEditor.ID_PATTERN).search(ed.car_id) == null, "an id with capitals and ! is refused by the id pattern")
 	ed.car_id = "zz-editor-test"
 	print("3. save it into the test folder")
+	# the crash test and Apply force work with Damage off in the settings, without changing the setting
+	Settings.set_value("damage", false)
+	var crash = ed.hooks["Soft body"].crash
+	crash.start()
+	await get_tree().process_frame
+	check(crash.running(), "the crash test starts with Damage off in the settings")
+	check(Settings._values.get("damage") == false and Settings.get_value("damage") == true, "and the setting itself stays off")
+	crash.stop()
+	await get_tree().process_frame
+	crash.set_push(true)
+	check(crash.push_mode, "Apply force too")
+	crash.set_push(false)
+	crash._damage_back()
+	check(Settings.get_value("damage") == false, "back to the setting after the bench")
+	Settings.set_value("damage", true)
 	# the warnings about the numbers, over the cards: the button of one cures it, in the form too
 	var travel_was: Variant = Tuning.read(ed.cfg, "chassis.suspension_travel")
 	var length_was: Variant = Tuning.read(ed.cfg, "chassis.suspension_length")
