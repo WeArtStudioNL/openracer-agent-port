@@ -994,8 +994,9 @@ func _apply(cfg: Dictionary, what: String) -> void:
 ## the rims and tyres of the wheel library.
 static func _built_from(cfg: Dictionary) -> String:
 	var wheels: Variant = cfg.get("wheels", {})
-	return JSON.stringify([cfg.get("suspension"), cfg.get("driveline"), wheels.get("library") if wheels is Dictionary else null,
-		wheels.get("mode") if wheels is Dictionary else null])
+	# (wheels of the model follow their tyre at once: CarTyres; nothing to build again)
+	var mode: Variant = wheels.get("mode") if wheels is Dictionary else null
+	return JSON.stringify([cfg.get("suspension"), cfg.get("driveline"), wheels.get("library") if wheels is Dictionary and mode != "model" else null, mode])
 
 
 ## (also the tests) The car built again with what the menu has now.

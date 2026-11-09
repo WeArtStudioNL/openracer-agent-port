@@ -411,6 +411,10 @@ func rebuild(cfg: Dictionary) -> bool:
 		if old != null:
 			remove_child(old)
 			old.queue_free()
+	for c in get_children():                # (the parts of the suspension are out of the model, in the holders of the rig)
+		if str(c.name).contains("SuspensionRig"):
+			remove_child(c)
+			c.queue_free()
 	config = cfg
 	var rpm_omega := engine.omega
 	_read_config()
