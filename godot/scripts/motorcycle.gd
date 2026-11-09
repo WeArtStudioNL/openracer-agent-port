@@ -133,6 +133,8 @@ var since_brake := 99.0
 var complied := 0.0
 var slide_time := 0.0
 var dbg_force := 0.0               # N: the most push of the road and the things on the body in the last tenth of a second (the panel)
+var dbg_values := {}               # what the crash rules measure now (the panel)
+var last_crash := {}               # the rule of the last crash and what the bike measured then (the panel; a reset keeps it)
 var dbg_accel := 0.0               # m/s2: the acceleration of the bike (the panel)
 var brace := 0.0
 var key_command := 0.0            # the keys bring the lean command over time
@@ -275,6 +277,7 @@ func fall_off(v: Vector3) -> void:
 	crash_reason = "limp-off"
 	_crash_speed = v
 	RunLog.event("motorcycle down (limp-off) at %.0f km/h" % (v.length() * 3.6))
+	_note_crash(-1.0)
 
 
 ## After a reset or a repair: the rider is back on the bike.
@@ -827,7 +830,8 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 		dbg_force = maxf(dbg_force, float(h[1]))
 	dbg_accel = _accel.length()
 	var hard: bool = not r["force"]["on"] or dbg_force > float(r["force"]["kN"]) * 1000.0
-	var wall: bool = r["wall"]["on"] and hard and state != null and _impact(state) > float(r["wall"]["kmh"]) / 3.6
+	var impact := _impact(state) if state != null else 0.0
+	var wall: bool = r["wall"]["on"] and hard and impact > float(r["wall"]["kmh"]) / 3.6
 	_now += dt
 	_hist.append([_now, v, pos])
 	while _hist.size() > 2 and float(_hist[1][0]) < _now - 0.1:
@@ -854,7 +858,10 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	var lowside: bool = low["on"] and slide_time > float(low["time"])
 	var spin: bool = r["spin"]["on"] and absf(car.angular_velocity.dot(Vector3.UP)) > float(r["spin"]["rate"]) and absf(u) > 5.0
 	var blow: bool = r["blow"]["on"] and hard and _accel.length() > float(r["blow"]["g"]) * G
+	var yaw := absf(car.angular_velocity.dot(Vector3.UP))
+	var lost_now := maxf(0.0, minf(speed_old - speed_now, lost3))
 	var lean_limit: float = float(r["lean"]["deg"]) * DEG if r["lean"]["deg"] != null else crash_lean
+	dbg_values = {"lean": absf(lean) / DEG, "slide": absf(beta) / DEG, "slide_time": slide_time, "spin": yaw, "g": _accel.length() / G, "lost": lost_now, "wall": impact * 3.6, "kN": dbg_force / 1000.0, "kmh": v.length() * 3.6}
 	var leaned: bool = absf(lean) > 0.7 if limp else (r["lean"]["on"] and absf(lean) > lean_limit)
 	var still := limp and absf(u) < 0.5
 	if leaned or still or over or lowside or spin or blow or hit or wall:
@@ -862,7 +869,16 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 		crash_reason = "lean" if leaned else ("limp-still" if still else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow
 			else ("wall" if wall else "hit"))))))
 		RunLog.event("motorcycle %s down (%s) at %.0f km/h, lean %.0f deg" % [car.name, crash_reason, v.length() * 3.6, lean / DEG])
+		var limits := {"lean": rad_to_deg(lean_limit), "lowside": float(low["time"]), "spin": float(r["spin"]["rate"]), "blow": float(r["blow"]["g"]), "hit": loss, "wall": float(r["wall"]["kmh"])}
+		_note_crash(limits.get(crash_reason, -1.0))
 		_crash_speed = vo if hit else v
+
+
+## What the crash panel shows of the last crash: its rule and what the bike measured at that moment (kept after a reset).
+func _note_crash(limit: float) -> void:
+	last_crash = dbg_values.duplicate()
+	last_crash["reason"] = crash_reason
+	last_crash["limit"] = limit
 
 
 ## The rider on the bike: where he sits (the posture), and what his weight does to the bike where he is not where

@@ -24,10 +24,14 @@ const FEEL_ROWS := [["amount", "Rider gives with the g-forces", 0.0, 3.0, 0.05, 
 const TICKS := {"lean": "Lean", "lowside": "Lowside", "spin": "Spin", "over": "On its back", "blow": "Blow", "hit": "Hit",
 	"wall": "Wall", "force": "Only hard hits"}
 const MUTED := Color(0.62, 0.69, 0.77)
+## The rule of a crash in words, and the unit of its limit.
+const NAMES := {"lean": "Lean", "lowside": "Lowside", "spin": "Spin", "over": "On its back", "blow": "Blow", "hit": "Hit", "wall": "Wall", "limp-still": "Limp rider stopped", "limp-off": "Rider off (limp)"}
+const UNITS := {"lean": "°", "lowside": "s", "spin": "rad/s", "blow": "g", "hit": "m/s", "wall": "km/h"}
 
 var world: Node
 var _body: VBoxContainer
 var _meter: Label
+var _last: Label
 var _peaks: Array = []
 var _clock := 0.0
 
@@ -47,6 +51,11 @@ func setup(w: Node) -> void:
 	_meter.add_theme_color_override("font_color", Color(0.94, 0.72, 0.23))
 	_meter.add_theme_font_size_override("font_size", 12)
 	add_child(_meter)
+	_last = Label.new()
+	_last.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_last.custom_minimum_size.x = 240
+	_last.add_theme_font_size_override("font_size", 12)
+	add_child(_last)
 	_body = VBoxContainer.new()
 	_body.add_theme_constant_override("separation", 2)
 	_body.visible = bool(VideoPrefs.get_value("debug", "crash_open", false))
@@ -149,12 +158,24 @@ func _process(delta: float) -> void:
 	if bike == null:
 		_meter.text = ""
 		return
-	_peaks.append([float(bike.dbg_force), float(bike.dbg_accel) / 9.81])
+	var d: Dictionary = bike.dbg_values
+	_peaks.append([float(bike.dbg_force), float(bike.dbg_accel) / 9.81, float(d.get("lean", 0.0)), float(d.get("slide", 0.0)), float(d.get("spin", 0.0)), float(d.get("lost", 0.0)), float(d.get("wall", 0.0))])
 	if _peaks.size() > 10:
 		_peaks.pop_front()
-	var f := 0.0
-	var g := 0.0
+	var most := [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	for p in _peaks:
-		f = maxf(f, p[0])
-		g = maxf(g, p[1])
-	_meter.text = "push %.1f kN  ·  %.1f g  (the most of 1 s)" % [f / 1000.0, g]
+		for i in most.size():
+			most[i] = maxf(most[i], p[i])
+	_meter.text = "push %.1f kN  ·  %.1f g  ·  lean %.0f°  ·  slide %.0f°\nspin %.1f rad/s  ·  lost %.1f m/s in 0.1 s  ·  body hit %.0f km/h\n(the most of 1 s)" % most
+	_last.text = _last_text(bike.last_crash)
+
+
+## The rule of the last crash, how far past its limit, and what the bike measured then.
+static func _last_text(c: Dictionary) -> String:
+	if c.is_empty():
+		return "Last crash: none yet"
+	var reason := str(c["reason"])
+	var unit: String = UNITS.get(reason, "")
+	var over := " (limit %.1f %s)" % [float(c["limit"]), unit] if float(c.get("limit", -1.0)) >= 0.0 else ""
+	return "Last crash: %s%s at %.0f km/h\nlean %.0f°  ·  slide %.0f° for %.1f s  ·  spin %.1f rad/s\n%.1f g  ·  push %.1f kN  ·  lost %.1f m/s in 0.1 s  ·  body hit %.0f km/h" % [
+		NAMES.get(reason, reason), over, float(c["kmh"]), float(c["lean"]), float(c["slide"]), float(c["slide_time"]), float(c["spin"]), float(c["g"]), float(c["kN"]), float(c["lost"]), float(c["wall"])]
