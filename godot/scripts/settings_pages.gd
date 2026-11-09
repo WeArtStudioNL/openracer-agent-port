@@ -56,8 +56,6 @@ func car_page(page: VBoxContainer) -> void:
 			+ "speed; off: hang off to the inside, as in road racing)", "bike_push")
 		R.pick_key(page, "Motorcycle follow camera", "bike_camera",
 			[["lean", "Motorcycle lean chase (the picture rolls with the bike)"], ["classic", "Classic chase (as a car)"]])
-		R.slider(page, "Motorcycle: lean at top speed (the keys ask for less lean as the speed goes up; this is what is left at the top)",
-			"bike_fast_lean", 15, 45, 1, func(v: float) -> String: return "%d°" % roundi(v))
 	R.check(page, "ABS", "abs")
 	R.check(page, "Automatic: reverse with the brake key", "auto_reverse")
 	R.check(page, "Automatic: reverse with the brake pedal (wheel, pad, touch)", "auto_reverse_pedals")

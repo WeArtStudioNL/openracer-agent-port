@@ -208,7 +208,7 @@ const GROUPS := [
 	]],
 	["Motorcycle", [
 		["bike_max_lean", "Lean at most", "°", 20, 75, 1],
-		["bike_fast_lean", "Lean the keys can ask for at speed", "°", 5, 60, 1],
+		["bike_fast_lean", "Lean at top speed (the keys ask for less lean as the speed goes up; this is what is left at the top)", "°", 5, 60, 1],
 		["bike_rake", "Rake of the fork", "°", 15, 40, 0.5],
 		["bike_rider_mass", "Rider", "kg", 30, 200, 1],
 		["bike_hang_off", "The rider hangs off the seat by", "m", 0, 1, 0.02],

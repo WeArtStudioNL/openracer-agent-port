@@ -389,10 +389,7 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	var eps_full := atan(share * max_hang * (push_hang if _pushed() else 1.0) / car.cg_height)
 	var eps := atan(share * float(posture["lat"]) / car.cg_height)
 	var brake := clampf(car.brake, 0.0, 1.0)
-	# (the menu: Motorcycle: lean at top speed, for every bike; car.json fast_lean_deg without it)
-	var menu_fast := float(Settings.get_value("bike_fast_lean"))
-	var fast_lean_now := menu_fast * DEG if menu_fast > 0.0 else fast_lean
-	var speed_max := max_lean - (max_lean - minf(max_lean, fast_lean_now)) * smooth(fast_from, fast_from + 22.0, au)
+	var speed_max := max_lean - (max_lean - minf(max_lean, fast_lean)) * smooth(fast_from, fast_from + 22.0, au)
 	var extra := push_extra_lean * (1.0 - smooth(14.0, 26.0, au)) * (1.0 - smooth(0.05, 0.4, brake)) if _pushed() else 0.0
 	speed_max += extra
 	# (the circle of grip: what the tyres give along the bike they cannot give sideways)
