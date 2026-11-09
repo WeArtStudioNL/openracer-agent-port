@@ -68,6 +68,9 @@ var rider_roll_max := 1.2
 var rider_grip_share := 0.9
 var rider_ease_off := 45.0 * DEG
 var rider_yaw_hold := 1.0
+var _corner_t := 0.0
+var _corner_b := 0.0
+var _hold_speed := -1.0           # m/s: the speed that he holds in a bend without gas or brake
 var _lean_ref := 0.0              # the lean that he asks for, smoothed: the bike is taken into the bend, not pulled
 var balance_from := 6.0
 var balance_to := 14.0
@@ -961,6 +964,38 @@ func _rider_on_ground(car: Car, state: PhysicsDirectBodyState3D) -> bool:
 		if not state.get_space_state().intersect_ray(ask).is_empty():
 			return true
 	return false
+
+
+## In a bend the rider handles the gas and the brake with feeling, also from keys that are only on or off (the assist "corner_pedals" of a tune): the gas rolls on slowly and no further than
+## the rear tyre has grip left next to the bend, without gas or brake he holds the speed with a touch of gas (no engine brake that pitches and upsets the bike), and the brake comes on gently and not fully.
+func corner_pedals(car: Car, t: float, b: float, dt: float) -> Vector2:
+	var u := absf(car.speed)
+	var on: bool = car.config.get("extras", {}).get("corner_pedals_on", true) != false
+	if not on or crashed or limp or pushing or lean_from_bend or u < 5.0 or car.gear <= 0:
+		_corner_t = t
+		_corner_b = b
+		_hold_speed = -1.0
+		return Vector2(t, b)
+	var share := smooth(8.0 * DEG, 28.0 * DEG, absf(lean))
+	var rear: Car.Wheel = car.wheels[2]
+	var mu := _tyre_grip(car)
+	var slope := tan(minf(absf(lean), 1.3))
+	var budget := sqrt(maxf(0.0, 1.0 - (slope / maxf(0.2, mu)) * (slope / maxf(0.2, mu))))
+	var full_force := maxf(1.0, car.engine.full_torque(car.engine.rpm()) * absf(car.gear_total()) / rear.radius)
+	var gas_cap := lerpf(1.0, clampf(0.9 * mu * maxf(rear.load, 300.0) * budget / full_force, 0.05, 1.0), share)
+	var want_t := minf(t, gas_cap)
+	if t < 0.02 and b < 0.02 and share > 0.0:
+		if _hold_speed < 0.0:
+			_hold_speed = u
+		want_t = clampf(0.04 + 0.3 * (_hold_speed - u), 0.0, 0.4) * share
+	else:
+		_hold_speed = -1.0
+	_corner_t = move_toward(_corner_t, want_t, lerpf(10.0, 1.5 if want_t > _corner_t else 4.0, share) * dt)
+	# (in a lean the front brake is mostly off: the rear tyre does the work, within the grip that it has left)
+	var brake_cap := clampf(0.8 * mu * maxf(rear.load, 300.0) * budget * rear.radius / maxf(1.0, rear.max_brake * 2.0 * maxf(0.1, rear_brake)), 0.1, 1.0)
+	var want_b := minf(b, lerpf(1.0, minf(0.4, brake_cap), share))
+	_corner_b = move_toward(_corner_b, want_b, lerpf(30.0, 3.0 if want_b > _corner_b else 10.0, share) * dt)
+	return Vector2(_corner_t, _corner_b)
 
 
 ## What the crash panel shows of the last crash: its rule and what the bike measured at that moment (kept after a reset).

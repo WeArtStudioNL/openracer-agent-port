@@ -1012,6 +1012,10 @@ func _controls(dt: float) -> void:
 			gear = 1
 		else:
 			reverse_hold = 0.0
+	if bike != null:
+		var eased: Vector2 = bike.corner_pedals(self, t, b, dt)
+		t = eased.x
+		b = eased.y
 	throttle = t
 	brake = b
 	abs_on = bool(Settings.get_value("abs"))
