@@ -74,7 +74,8 @@ func add_wheel(slot: String, parts: Array, frame: Node3D, radius: float) -> void
 		for c in part.find_children("*", "MeshInstance3D", true, false):
 			meshes.append(c)
 		if rim_re.search(str(part.name)) != null:
-			rims.append({"node": part, "rel": CarModel.relative(part, frame)})
+			var rim_box := CarModel.bounds(part, frame)
+			rims.append({"node": part, "rel": CarModel.relative(part, frame), "width": rim_box.size.x, "middle": rim_box.get_center().x})
 	for mi in meshes:
 		if mi.mesh == null or not mi.mesh is ArrayMesh or not_tyre.search(str(mi.name)) != null:
 			continue
@@ -121,12 +122,13 @@ func apply(cfg: Dictionary) -> void:
 			target["inner"] = target["outer"] * clampf(float(custom.get("inner_ratio", 0.65)), 0.2, 0.95)
 			if float(custom.get("width", 0.0)) > 0.0:
 				target["width"] = float(custom["width"])
-		var key := "%s/%s/%s" % [(ex[1] if ex != null else ""), sized, target]
+		var rim_offset := float(custom.get("rim_offset", 0.0)) / 1000.0 if custom is Dictionary else 0.0
+		var key := "%s/%s/%s/%s" % [(ex[1] if ex != null else ""), sized, target, rim_offset]
 		if key == w["key"]:
 			continue
 		w["key"] = key
 		_shape(w, ex, target, slot)
-		_fit_rims(w, target, sized)
+		_fit_rims(w, target, sized, rim_offset)
 
 
 ## The tyre of a band for a corner; a wheel that has no tyre of its own takes the nearest one that the model has.
@@ -206,7 +208,8 @@ static func _made(src: Dictionary, target: Dictionary, to_part: Basis, centre: V
 	return out
 
 
-func _fit_rims(w: Dictionary, target: Dictionary, sized: bool) -> void:
+## The rims with the size of the tyre; offset (m) is taken off or added on each side of a rim, round its own middle.
+func _fit_rims(w: Dictionary, target: Dictionary, sized: bool, offset: float) -> void:
 	var d0: Dictionary = w["dims"]
 	var r := float(target["inner"]) / maxf(1e-3, float(d0["inner"])) if sized else 1.0
 	var k := float(target["width"]) / float(d0["width"]) if sized else 1.0
@@ -218,4 +221,10 @@ func _fit_rims(w: Dictionary, target: Dictionary, sized: bool) -> void:
 			continue
 		var rel: Transform3D = e["rel"]
 		var now := Transform3D(s * rel.basis, c + s * (rel.origin - c))
+		var wide := float(e["width"]) * k
+		if offset != 0.0 and wide > 1e-4:
+			var extra := maxf(0.05, (wide + 2.0 * offset) / wide)
+			var middle := c.x + k * (float(e["middle"]) - c.x)
+			now.basis = Basis.from_scale(Vector3(extra, 1.0, 1.0)) * now.basis
+			now.origin.x = middle + extra * (now.origin.x - middle)
 		node.transform = CarModel.relative(node.get_parent(), w["frame"]).affine_inverse() * now

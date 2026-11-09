@@ -21,7 +21,7 @@ const HOMES := {"Chassis": "Chassis", "Brakes": "Brakes", "Aerodynamics": "Aerod
 	"Springs and dampers": "Suspension", "Ride height and travel": "Suspension", "Wheel alignment": "Suspension", "Suspension geometry": "Suspension", "Suspension parts": "Suspension",
 	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Engine sound": "Engine sound"}
 const PAINT := ["body", "rim"]
-const TYRE_KEYS := ["tyre_section_front", "tyre_section_rear", "tyre_aspect_front", "tyre_aspect_rear", "tyre_rim_front", "tyre_rim_rear", "tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
+const TYRE_KEYS := ["tyre_section_front", "tyre_section_rear", "tyre_aspect_front", "tyre_aspect_rear", "tyre_rim_front", "tyre_rim_rear", "tyre_rim_offset_front", "tyre_rim_offset_rear", "tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
 	"tyre_width", "tyre_width_rear", "tyre_inner_ratio", "tyre_rings", "tyre_segments", "tyre_carcass"]
 
 var ed: CarEditor

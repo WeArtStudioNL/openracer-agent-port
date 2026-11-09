@@ -22,11 +22,13 @@ const GROUPS := [
 		["tyre_section_front", "Tyre at the front: width", "mm", 95, 500, 5],
 		["tyre_aspect_front", "Tyre at the front: sidewall, as a share of the width", "%", 15, 100, 5],
 		["tyre_rim_front", "Tyre at the front: rim", "inch", 10, 27, 1],
+		["tyre_rim_offset_front", "Tyre at the front: width of the rim (added on each side)", "mm", -60, 30, 1],
 		["rubber_front", "Tyre at the front: rubber", "", 0, 100, 1],
 		["tread_front", "Tyre at the front: tread (grip on grass, sand and mud)", "", 0, 100, 1],
 		["tyre_section_rear", "Tyre at the rear: width", "mm", 95, 500, 5],
 		["tyre_aspect_rear", "Tyre at the rear: sidewall, as a share of the width", "%", 15, 100, 5],
 		["tyre_rim_rear", "Tyre at the rear: rim", "inch", 10, 27, 1],
+		["tyre_rim_offset_rear", "Tyre at the rear: width of the rim (added on each side)", "mm", -60, 30, 1],
 		["rubber_rear", "Tyre at the rear: rubber", "", 0, 100, 1],
 		["tread_rear", "Tyre at the rear: tread", "", 0, 100, 1],
 		["tyre_width", "Tyre: width of the tread, front (0: from the wheel)", "cm", 0, 60, 1],
@@ -371,6 +373,7 @@ const MAP := {
 	"rim_rear": ["wheels.library.rear.rim", 0, ""], "tyre_rear": ["wheels.library.rear.tyre", 0, ""],
 	"tyre_diameter_front": ["wheels.library.front.custom.diameter", 0.001, null], "tyre_diameter_rear": ["wheels.library.rear.custom.diameter", 0.001, null],
 	"rubber_front": ["wheels.library.front.custom.rubber", 1.0, null], "rubber_rear": ["wheels.library.rear.custom.rubber", 1.0, null],
+	"tyre_rim_offset_front": ["wheels.library.front.custom.rim_offset", 1.0, 0.0], "tyre_rim_offset_rear": ["wheels.library.rear.custom.rim_offset", 1.0, 0.0],
 	"tread_front": ["wheels.library.front.custom.tread", 1.0, null], "tread_rear": ["wheels.library.rear.custom.tread", 1.0, null],
 	"tyre_width": ["tyres.shell.width", 0.01, 0.0], "tyre_width_rear": ["tyres.shell.width_rear", 0.01, 0.0], "tyre_rings": ["tyres.shell.rings", 1.0, 3.0],
 	"tyre_segments": ["tyres.shell.segments", 1.0, 36.0], "tyre_inner_ratio": ["tyres.shell.inner_ratio", 0.01, 0.62],
@@ -604,7 +607,7 @@ static func row_note(key: String, v: Dictionary) -> String:
 		return CarEditorTuning.tread_label(float(v.get(key, 0.0)), float(v.get("rubber_" + key.substr(6), 50.0)))
 	if key.begins_with("rubber_"):
 		return CarEditorTuning._rubber_label(float(v.get(key, 50.0)))
-	if key.begins_with("tyre_rim_"):
+	if key == "tyre_rim_front" or key == "tyre_rim_rear":
 		var axle := key.substr(9)
 		var dia := float(v["tyre_rim_" + axle]) * 25.4 + 2.0 * float(v["tyre_section_" + axle]) * float(v["tyre_aspect_" + axle]) / 100.0
 		return "%d/%d R%d · %.0f cm" % [v["tyre_section_" + axle], v["tyre_aspect_" + axle], v["tyre_rim_" + axle], dia / 10.0]
@@ -777,9 +780,9 @@ static func visible(key: String, v: Dictionary) -> bool:
 			var axle := key.substr(5)
 			var t := str(v.get(key, ""))
 			return (str(v.get("rim_" + axle, "")) != "" and v.get("model_tyres") != "on") if bike else (t != "" and t != "custom" and v.get("model_wheels") != "on")
-		"tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "rubber_front", "tread_front":
+		"tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_rim_offset_front", "rubber_front", "tread_front":
 			return custom_tyre(v, "front")
-		"tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "rubber_rear", "tread_rear":
+		"tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "tyre_rim_offset_rear", "rubber_rear", "tread_rear":
 			return custom_tyre(v, "rear")
 		"shift_style":
 			return g in ["torque-converter", "dct", "amt"]

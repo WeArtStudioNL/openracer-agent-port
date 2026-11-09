@@ -793,7 +793,7 @@ func _library_wheel(w: Wheel, axle: Dictionary) -> void:
 	var tyre := MeshInstance3D.new()
 	tyre.mesh = CarModel.tyre_mesh(w.radius, w.radius * inner, width)
 	w.spin_node.add_child(tyre)
-	var rim := CarModel.library_rim(str(axle.get("rim", "")), dia * inner * 1.02, width)
+	var rim := CarModel.library_rim(str(axle.get("rim", "")), dia * inner * 1.02, maxf(0.02, width + 2.0 * float(custom.get("rim_offset", 0.0)) / 1000.0))
 	if not w.left:
 		rim.rotation.y = PI
 	w.spin_node.add_child(rim)
