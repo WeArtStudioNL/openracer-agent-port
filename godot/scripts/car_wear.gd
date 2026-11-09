@@ -104,7 +104,7 @@ static func tyre_force(w: Car.Wheel, load: float, surf: Dictionary, vref: float,
 	var angle_peak := 0.15 / (cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner)
 	var sx := w.slip_ratio / slip_peak
 	# the camber: a leaning tyre pushes to the side it leans to, like a little slip angle (camber thrust, Vehicle.js)
-	var sy := (w.slip_tan - 0.5 * w.lean * angle_peak / 0.15) / angle_peak
+	var sy := (w.slip_tan - (0.5 * w.lean + w.camber_slip) * angle_peak / 0.15) / angle_peak
 	var s := sqrt(sx * sx + sy * sy)
 	w.s = s
 	var f := sin(c * atan(peak * s))

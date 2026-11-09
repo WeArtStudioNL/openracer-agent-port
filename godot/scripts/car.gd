@@ -87,6 +87,8 @@ class Wheel:
 	var arc := PackedFloat32Array() # the way in or out of the hub with the travel, along the arms (SuspensionRig.fill_arcs): every ARC_STEP from ARC_LOW
 	var arc_x := 0.0                # m, along the car's x: where the arms have the hub now
 	var arc_slope := 0.0            # m of x per m of travel
+	var camber_slip := 0.0          # a motorcycle (model v2): the lean of the bike, as slip of its tyre (Motorcycle.camber_slip)
+	var fy_slip := 0.0              # the side force of the slip angle alone (for the trail on the bars)
 	var lost := false               # a motorcycle: the second wheel of a pair is not there (no road, spring, drive, brake)
 	var lat_grip := 1.0             # a share of the grip across (a motorcycle in flat-track style: the tail steps out)
 	var fe_load := 0.0              # a motorcycle: the load of the road force along the travel of the fork or the swingarm (N)
@@ -1250,6 +1252,11 @@ func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> vo
 			var kappa := clampf((w.omega * w.radius - w.forward_speed) / w.vref, -12.0, 12.0)
 			w.slip_ratio += (kappa - w.slip_ratio) * (1.0 - exp(-h * w.vref / 0.35))
 			var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
+			if bike != null and bike.v2:
+				w.camber_slip = 0.0
+				CarWear.tyre_force(w, w.grip_load, surf, w.vref, cornering)
+				w.fy_slip = w.fy
+				w.camber_slip = bike.camber_slip * bike.lean
 			CarWear.tyre_force(w, w.grip_load, surf, w.vref, cornering)
 			w.tyre_slope = 0.0
 			# (Vehicle.js: a little damping on the slip speed keeps a nearly stationary wheel from ringing; the body gets it too)
@@ -1267,7 +1274,7 @@ func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> vo
 		w.fy = sum_fy[i] / steps
 		# the side force acts at the roll centre (the geometric load transfer of the browser game); the force along
 		# the wheel at the contact, raised by anti-dive or anti-squat (the linkage passes that share higher up)
-		var at := w.point + up * w.roll_centre
+		var at := w.point + up * (0.0 if bike != null and bike.v2 else w.roll_centre)
 		state.apply_force(w.lf * w.fy, at - origin)
 		var anti := (anti_dive if w.fx < 0.0 else anti_lift_front) if w.front else (anti_lift_rear if w.fx < 0.0 else anti_squat)
 		var below := (origin + com - w.point).dot(up)
