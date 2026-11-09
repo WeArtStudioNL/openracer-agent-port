@@ -88,6 +88,7 @@ class Wheel:
 	var arc_x := 0.0                # m, along the car's x: where the arms have the hub now
 	var arc_slope := 0.0            # m of x per m of travel
 	var camber_slip := 0.0          # a motorcycle (model v2): the lean of the bike, as slip of its tyre (Motorcycle.camber_slip)
+	var rim_r := 0.2                # m: the radius of the rim (ShellTyres)
 	var fy_slip := 0.0              # the side force of the slip angle alone (for the trail on the bars)
 	var lost := false               # a motorcycle: the second wheel of a pair is not there (no road, spring, drive, brake)
 	var lat_grip := 1.0             # a share of the grip across (a motorcycle in flat-track style: the tail steps out)

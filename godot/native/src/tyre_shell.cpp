@@ -744,7 +744,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 		double kgS = kg / S, mS = mn / S;
 		wetSize = std::sqrt(An / S);
 		// (a safety net for a point deep in a solid: what a point may press follows the rubber that touches, this is far above it)
-		double pointMax = 8.0 * pA / S;
+		double pointMax = 1e12;
 		for (int ie = 0; ie < N; ie++) {
 			eFn[ie] = 0;
 			eNx[ie] = eNy[ie] = eNz[ie] = 0;
@@ -753,6 +753,22 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 		for (int io = 0; io < N; io++) {
 			ownTri[io] = -1;
 			if (nearNode[io] && contact_at(Px[io], Py[io], Pz[io], hub, ground, nodeList[io], tol)) {
+				// the solid under the rubber (the ground of BeamNG has one under its elastic layer): a node never goes further in than the rubber is thick. It is put back and
+				// loses only its speed into the road: the carcass and the air take the hit, and nothing is seen through a wall
+				double solid = std::max(tol, std::min(0.03, 0.08 * radius));
+				if (cDepth > solid) {
+					double back = cDepth - solid;
+					Px[io] += cNx * back;
+					Py[io] += cNy * back;
+					Pz[io] += cNz * back;
+					double vin = Vx[io] * cNx + Vy[io] * cNy + Vz[io] * cNz;
+					if (vin < 0) {
+						Vx[io] -= cNx * vin;
+						Vy[io] -= cNy * vin;
+						Vz[io] -= cNz * vin;
+					}
+					cDepth = solid;
+				}
 				ownTri[io] = cTri;
 				ownDepth[io] = cDepth;
 				ownWet[io] = cWet;
@@ -1190,8 +1206,10 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 		hubFy += fRim * sn.y;
 		hubFz += fRim * sn.z;
 		rRimStrike = fRim;
+		rRimGap = rimIn;
 	} else {
 		rRimStrike = 0;
+		rRimGap = 0;
 	}
 	// a wheel that lies on its side: the sidewall folds and keeps most of what it is given, it does not throw the car back up (the shell of nodes is a stiff, nearly
 	// lossless spring that way round)
@@ -1221,6 +1239,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 Dictionary TyreShell::result() const {
 	Dictionary d;
 	d["normal"] = rNormal;
+	d["rim_gap"] = rRimGap;
 	d["friction"] = rFriction;
 	d["centre"] = rCentre;
 	d["surface_normal"] = rSurfaceNormal;

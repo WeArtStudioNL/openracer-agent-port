@@ -15,10 +15,7 @@ extends RefCounted
 
 const SHELL_TEAL := Color(0.3, 0.8, 0.8)
 const SHELL_DIM := Color(0.35, 0.4, 0.45)
-const MAX_ACROSS := 3.0          # the most that the road pushes a wheel across its suspension, in the weight of the car
 const MAX_RUB := 8.0             # the most that a tyre rubs, as a share of how hard it is pressed
-const MAX_WALL := 2.0            # and from the side against a wall
-const MAX_LOAD := 6.0            # and along it: a tyre that is rammed flat (the wheel at the end of its travel) gives no more
 const STEPS := 3                 # steps of the car in a step of Godot (1/360 s; Vehicle.js steps at 1/300 s or less)
 
 static var _ground: Object = null           # TyreGround: the triangles of the ground of the scene
@@ -35,6 +32,7 @@ var unsprung_mass := 35.0
 var _v_prev := Vector3.ZERO
 var _acc_down := 0.0             # the acceleration of the body along the suspension, outwards (lastBodyAccDown)
 var _has_prev := false
+var _hull_low := 1e9                 # the lowest point of the hulls of the body, in its own frame (found once)
 var _force := Vector3.ZERO           # (the sums of the small steps)
 var _torque := Vector3.ZERO
 var _pitch := 0.0
@@ -209,6 +207,7 @@ func _configure() -> void:
 	for i in 4:
 		var w := car.wheels[i]
 		var sh := shell_of(w)
+		w.rim_r = w.radius * clampf(float(sh["inner_ratio"]), 0.3, 0.9)
 		var p := maxf(minf(0.15, w.pressure), w.pressure - w.pressure_loss)
 		# (the gas law: the pressure is set for a tyre at its best temperature; colder it is lower, hotter higher. The air follows the rubber for a good part)
 		var air := 25.0 + 0.6 * (w.temp - 25.0)
@@ -305,10 +304,24 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 			var tb: Object = tyres[i]
 			var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
 			var fr := friction_for(w, float(tb.call("friction_load")), surf)
+			# (however fast it came: the hub does not go through the road. Looked for along the spring, from the mount, so also when no node of the tyre is left above the road)
+			var fence := PhysicsRayQueryParameters3D.create(top, top - up_s * (w.length + w.rim_r), 1, [car.get_rid()])
+			var road_hit := state.get_space_state().intersect_ray(fence)
+			if not road_hit.is_empty():
+				var to_road: float = (top - (road_hit["position"] as Vector3)).dot(up_s)
+				if to_road - w.rim_r < w.length:
+					w.length = maxf(0.02, to_road - w.rim_r)
+					sus_vel[i] = maxf(0.0, float(sus_vel[i]))
 			var hub := top - up_s * w.length
 			touched[i] = bool(tb.call("step", h, hub, vm - up_s * float(sus_vel[i]) - basis_s.x * w.arc_slope * float(sus_vel[i]), l_axis, dir, u_axis, w.omega, gnd, fr.x, fr.y, w.lat_grip))
 			var res: Dictionary = tb.call("result")
 			_limit_on_its_side(res, up_s, w)
+			# (the rim does not go into the road: however fast it came, the wheel is put where the rim touches and the spring takes the rest)
+			var rim_gap := float(res.get("rim_gap", 0.0))
+			if rim_gap > 0.0 and touched[i]:
+				var along_spring: float = maxf(0.3, up_s.dot(res.get("surface_normal", up_s)))
+				w.length = maxf(0.02, w.length - rim_gap * along_spring)
+				sus_vel[i] = maxf(0.0, float(sus_vel[i]))
 			results[i] = res
 			tyre_load[i] = 0.0
 			tyre_torque[i] = 0.0
@@ -333,6 +346,7 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 		car._drivetrain(h, tyre_torque)
 		for w in car.wheels:
 			w.omega_from_tyre = false
+	_not_through_the_road(state)
 	# ---- the body gets the mean of the small steps
 	state.apply_central_force(_force / STEPS)
 	state.apply_torque(_torque / STEPS)
@@ -357,14 +371,6 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 ## give is limited, or it would throw the car away. So is a tyre rammed flat under a wheel at the end of its travel. A wall is not limited.
 func _limit_on_its_side(res: Dictionary, up: Vector3, w: Car.Wheel) -> void:
 	var n: Vector3 = res.get("normal", Vector3.ZERO)
-	# (against a wall the tyre is stiff and the car hits it hard: what it pushes back with and rubs with is limited, or a touch sends the car spinning)
-	var across := Vector3(n.x, 0.0, n.z)
-	var wall_most := car.mass * Car.G * MAX_WALL
-	if across.length() > wall_most:
-		var kept := wall_most / across.length()
-		n = across * kept + Vector3.UP * n.y
-		res["normal"] = n
-		res["friction"] = (res["friction"] as Vector3) * kept
 	# (rubber cannot rub harder than the tyre is pressed: a peak in one small step sends the car spinning)
 	var fric: Vector3 = res["friction"]
 	var pressed := maxf(w.load, car.mass * Car.G * 0.25)      # (the load of the wheel of the last step: a tyre of few nodes hops from node to node)
@@ -373,12 +379,34 @@ func _limit_on_its_side(res: Dictionary, up: Vector3, w: Car.Wheel) -> void:
 	var size := n.length()
 	if size > 1.0:                          # (a tyre on its side wall hardly grips: the car slides, it is not flung round on it)
 		res["friction"] = (res["friction"] as Vector3) * smoothstep(0.45, 0.9, absf(n.dot(up)) / size)
-	var most := car.mass * Car.G * (MAX_ACROSS if absf(n.dot(up)) < 0.7 * size else MAX_LOAD)
-	if size <= most or absf(n.y) <= 0.7 * size:
+
+
+## The body never ends up under the road: after a hit too hard for one step the physics can leave the hull under a surface that has only one side, and it stays there. It is set
+## back on the road, with only its speed downwards taken away.
+func _not_through_the_road(state: PhysicsDirectBodyState3D) -> void:
+	if state.transform.basis.y.y < 0.5:
 		return
-	var k := most / size
-	res["normal"] = n * k
-	res["friction"] = (res["friction"] as Vector3) * k
+	if _hull_low > 1e8:
+		_hull_low = 1e7
+		for h in car._hulls:
+			if not h.disabled and h.shape is ConvexPolygonShape3D:
+				for q: Vector3 in (h.shape as ConvexPolygonShape3D).points:
+					_hull_low = minf(_hull_low, (h.transform * q).y)
+		if _hull_low > 1e6:
+			var box := car._box.shape as BoxShape3D
+			_hull_low = car._box.position.y - box.size.y / 2.0 if box != null else 0.0
+	var at := state.transform.origin
+	var ask := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 4.0, at + Vector3.DOWN * 2.0, 1, [car.get_rid()])
+	var road := state.get_space_state().intersect_ray(ask)
+	if road.is_empty():
+		return
+	var under: float = (road["position"] as Vector3).y - (at.y + _hull_low)
+	if under > 0.02 and under < 3.0:
+		var xf := state.transform
+		xf.origin.y += under - 0.02
+		state.transform = xf
+		if state.linear_velocity.y < 0.0:
+			state.linear_velocity.y = 0.0
 
 
 ## The force of the tread on the car (Vehicle.js, wheel.cylActive): the friction of the nodes along the wheel and across

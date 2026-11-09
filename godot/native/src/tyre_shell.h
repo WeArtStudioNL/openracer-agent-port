@@ -154,6 +154,7 @@ private:
 	int rSurface = 0, rContacts = 0, rSubsteps = 0, rSubstepsWanted = 0;
 	double rMaxDepth = 0, rSag = 0, rPatch = 0, rSlidingShare = 0, rUsed = 0, rOmegaOut = 0, rOmegaAvg = 0, rDampSlope = 0, rAxleTorque = 0;
 	double rRimStrike = 0, rCentreAlong = 0;
+	double rRimGap = 0;
 	bool rHasOmega = false;
 };
 
