@@ -222,7 +222,7 @@ void TyreShell::build() {
 		innerRad[j] = (float)(radius * ratio);
 	}
 	for (auto *v : { &Px, &Py, &Pz, &Vx, &Vy, &Vz, &Fx, &Fy, &Fz, &Ix, &Iy, &Iz, &IVx, &IVy, &IVz, &Ox, &Oy, &Oz, &OVx, &OVy, &OVz, &Tx, &Ty, &Tz, &Nx, &Ny,
-				 &Nz, &t1xA, &t1yA, &t1zA, &t2xA, &t2yA, &t2zA, &Bx, &By, &Bz, &Kxx, &Kxy, &Kxz, &Kyy, &Kyz, &Kzz, &eFn, &eNx, &eNy, &eNz, &ownDepth, &ownNx, &ownNy, &ownNz, &fnNode, &cnx, &cny,
+				 &Nz, &t1xA, &t1yA, &t1zA, &t2xA, &t2yA, &t2zA, &Bx, &By, &Bz, &Kxx, &Kxy, &Kxz, &Kyy, &Kyz, &Kzz, &eFn, &eNx, &eNy, &eNz, &ownDepth, &ownWet, &ownNx, &ownNy, &ownNz, &fnNode, &cnx, &cny,
 				 &cnz, &ux, &uy }) {
 		v->assign(N, 0.0);
 	}
@@ -323,6 +323,7 @@ void TyreShell::shell_normals() {
 bool TyreShell::contact_at(double x, double y, double z, const Vector3 &hub, TyreGround *ground, const std::vector<int> &list, double tol) {
 	cDepth = 0;
 	cTri = -1;
+	cWet = 1;
 	// (the deepest a node of a tyre can be: deeper, and it is not on that face. A node that went past the back wall of a ramp is not 1.3 m under its deck)
 	double deep = 0.75 * radius;
 	// the tread is a ball of rubber: the road is asked from its centre, a little inside the tyre, so that the centre stays in the air while the rubber is
@@ -415,7 +416,11 @@ bool TyreShell::contact_at(double x, double y, double z, const Vector3 &hub, Tyr
 			cNx = mx;
 			cNy = my;
 			cNz = mz;
+			cWet = region == 0 ? 1.0 : std::min(1.0, 2 * std::sqrt(2 * ball * dd) / wetSize);
 		}
+	}
+	if (inside) {
+		cWet = 1;
 	}
 	if (inside && next < 1e8) {
 		double share = 1 - (next - cDepth) / ball;
@@ -731,9 +736,9 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 		const int contactSamples = 4;
 		int S = std::max(contactSamples, std::min(24, (int)std::ceil(72.0 / segs)));
 		double kgS = kg / S, mS = mn / S;
-		// the most a point of the tread can press: the air behind it, a few times over. A point on the corner of a ramp is a small piece of rubber, not
-		// a metre of penetration times the stiffness of the whole patch; on a road no point comes near it
-		double pointMax = 3.0 * pA / S;
+		wetSize = std::sqrt(An / S);
+		// (a safety net for a point deep in a solid: what a point may press follows the rubber that touches, this is far above it)
+		double pointMax = 8.0 * pA / S;
 		for (int ie = 0; ie < N; ie++) {
 			eFn[ie] = 0;
 			eNx[ie] = eNy[ie] = eNz[ie] = 0;
@@ -744,6 +749,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 			if (nearNode[io] && contact_at(Px[io], Py[io], Pz[io], hub, ground, nodeList[io], tol)) {
 				ownTri[io] = cTri;
 				ownDepth[io] = cDepth;
+				ownWet[io] = cWet;
 				ownNx[io] = cNx;
 				ownNy[io] = cNy;
 				ownNz[io] = cNz;
@@ -756,20 +762,20 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 			}
 			double qvx = Vx[na] + (Vx[nb] - Vx[na]) * tt, qvy = Vy[na] + (Vy[nb] - Vy[na]) * tt, qvz = Vz[na] + (Vz[nb] - Vz[na]) * tt;
 			double qvn = qvx * cNx + qvy * cNy + qvz * cNz;
-			double qd = -roadDamping * 2 * std::sqrt(kgS * mS) * qvn * std::min(1.0, cDepth / tol), qcap = roadStop * mS * std::abs(qvn) / h;
+			double qk = kgS * cWet, qd = -roadDamping * 2 * std::sqrt(qk * mS) * qvn * std::min(1.0, cDepth / tol), qcap = roadStop * mS * std::abs(qvn) / h;
 			if (qd > qcap) {
 				qd = qcap;
 			} else if (qd < -qcap) {
 				qd = -qcap;
 			}
-			double qf = kgS * cDepth + qd;
+			double qf = qk * cDepth + qd;
 			if (qf <= 0) {
 				return;
 			}
 			double wa = 1 - tt;
 			if (qf < pointMax) {
-				add_k(na, kgS * wa * wa, cNx, cNy, cNz);
-				add_k(nb, kgS * tt * tt, cNx, cNy, cNz);
+				add_k(na, qk * wa * wa, cNx, cNy, cNz);
+				add_k(nb, qk * tt * tt, cNx, cNy, cNz);
 			} else {
 				qf = pointMax;
 			}
@@ -839,25 +845,26 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 			double depth = 0, nxg = 0, nyg = 0, nzg = 0, fnOwn = 0;
 			if (ownTri[ig] >= 0) {
 				cTri = ownTri[ig];
+				double kOwn = kgS * ownWet[ig];
 				depth = ownDepth[ig];
 				nxg = ownNx[ig];
 				nyg = ownNy[ig];
 				nzg = ownNz[ig];
 				double vn = Vx[ig] * nxg + Vy[ig] * nyg + Vz[ig] * nzg;
-				double dampF = -roadDamping * 2 * std::sqrt(kgS * mS) * vn * std::min(1.0, depth / tol), dampCap = roadStop * mS * std::abs(vn) / h;
+				double dampF = -roadDamping * 2 * std::sqrt(kOwn * mS) * vn * std::min(1.0, depth / tol), dampCap = roadStop * mS * std::abs(vn) / h;
 				if (dampF > dampCap) {
 					dampF = dampCap;
 				} else if (dampF < -dampCap) {
 					dampF = -dampCap;
 				}
-				fnOwn = kgS * depth + dampF;
+				fnOwn = kOwn * depth + dampF;
 				if (fnOwn < 0) {
 					fnOwn = 0;
 				}
 				if (fnOwn >= pointMax) {
 					fnOwn = pointMax;
 				} else if (fnOwn > 0) {
-					add_k(ig, kgS, nxg, nyg, nzg);
+					add_k(ig, kOwn, nxg, nyg, nzg);
 				}
 			}
 			double fn = fnOwn + eFn[ig];

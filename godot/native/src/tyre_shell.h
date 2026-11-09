@@ -126,7 +126,7 @@ private:
 	std::vector<double> Px, Py, Pz, Vx, Vy, Vz, Fx, Fy, Fz, Ix, Iy, Iz, IVx, IVy, IVz, Ox, Oy, Oz, OVx, OVy, OVz, Tx, Ty, Tz, Nx, Ny, Nz;
 	std::vector<std::vector<int>> blockList, nodeList;
 	std::vector<uint8_t> nearNode, holdA, inContact, sliding;
-	std::vector<double> Bx, By, Bz, Kxx, Kxy, Kxz, Kyy, Kyz, Kzz, t1xA, t1yA, t1zA, t2xA, t2yA, t2zA, eFn, eNx, eNy, eNz, ownDepth, ownNx, ownNy, ownNz;
+	std::vector<double> Bx, By, Bz, Kxx, Kxy, Kxz, Kyy, Kyz, Kzz, t1xA, t1yA, t1zA, t2xA, t2yA, t2zA, eFn, eNx, eNy, eNz, ownDepth, ownWet, ownNx, ownNy, ownNz;
 	std::vector<int> ownTri;
 	std::vector<double> fnNode, cnx, cny, cnz, ux, uy;
 	std::vector<int> ctri;
@@ -140,6 +140,7 @@ private:
 	double hubAcc[4] = { 0, 0, 0, 0 }, hubC[3] = { 0, 0, 0 };
 	double axisLx = 0, axisLy = 0, axisLz = 0, upX = 0, upY = 1, upZ = 0;
 	double cDepth = 0, cNx = 0, cNy = 0, cNz = 0;
+	double cWet = 1, wetSize = 0.07;  // how much of a piece of tread touches: all of it on a face, a strip that grows with the depth on an edge
 	int cTri = -1;
 	double halfPatch = 0.1;
 	double loadPrev = 0, fltX = 0, fltY = 0, fltZ = 0, fltT = 0;
