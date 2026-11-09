@@ -18,6 +18,7 @@ extends RefCounted
 
 const G := 9.81
 const DEG := PI / 180.0
+const WHEELIE_TURN_MAX := 1.0       # rad/s: the most that the lean adds to the turn of a bike on its rear wheel
 ## The rules of a crash (Motorcycle.js CRASH_DEFAULTS): each on or off with its limit, as the panel of the debug view
 ## (0) sets them (kept in the prefs of the video and the debug, VideoPrefs "debug" "crash_rules"; crash_rules() fills in
 ## what is not set). lean deg null: the bike's own crash_lean_deg. force: with it on, a hit (wall, hit, blow) only counts
@@ -725,6 +726,7 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 			if brace > 0.0:
 				yaw_on = maxf(yaw_on, minf(1.0, brace / 0.3))
 		state.apply_torque(Vector3.UP * damp * yaw_on)
+		_lean_steers_a_wheelie(car, state, r_lean, front_share, dt)
 	# no reverse gear: the rider walks the bike back, slowly; when the push stops he holds it with his feet
 	var flat: Vector3 = st["flat"]
 	if pushing:
@@ -732,6 +734,19 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 	elif u < -0.05 and u > -2.0 and car.throttle <= 0.05:
 		state.apply_central_force(flat * minf(700.0, m * 4.0 * -u))
 	_camber(car, state, st, xf, alive)
+
+
+## On the rear wheel the rider steers with his lean: there is no front tyre to turn the bike, so the bike and the way it goes turn together as far as its lean asks for more than it does
+## now (a force of the rear tyre for it would stand the bike up and throw it to the other side).
+func _lean_steers_a_wheelie(car: Car, state: PhysicsDirectBodyState3D, r_lean: float, front_share: float, dt: float) -> void:
+	var wheelie := (1.0 - smooth(0.05, 0.3, front_share)) if not car.wheels[0].contact else 0.0
+	if wheelie <= 0.0 or not car.wheels[2].contact or absf(car.speed) < 4.0:
+		return
+	var angle := wheelie * clampf(-r_lean - state.angular_velocity.y, -WHEELIE_TURN_MAX, WHEELIE_TURN_MAX) * dt
+	var cg := state.transform.origin + state.center_of_mass
+	var turn := Basis(Vector3.UP, angle)
+	state.transform = Transform3D(turn * state.transform.basis, cg + turn * (state.transform.origin - cg))
+	state.linear_velocity = turn * state.linear_velocity
 
 
 ## The camber thrust: a leaned tyre pushes the bike to the inside of the bend, at its contact patch, shared as the
