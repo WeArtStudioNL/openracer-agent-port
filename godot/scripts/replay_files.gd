@@ -272,7 +272,7 @@ static func fit_browser(data: Dictionary, cars: Array) -> void:
 
 # ---- the Replays of the main menu
 
-## A window with the replays: Watch (the edit when there is one), Edit (the video editor), Delete (to the Trash),
+## A window with the replays: a field to find one, Watch (the edit when there is one), Edit (the video editor), Rename, Delete (to the Trash),
 ## Open a file… (a .oreplay or a .openracer-replay of the browser, copied into the replays folder), the folder.
 ## start(car, track, options) starts a viewer.
 static func open_dialog(host: Node, start: Callable) -> void:
@@ -282,9 +282,20 @@ static func open_dialog(host: Node, start: Callable) -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	dlg.add_child(box)
+	var search := LineEdit.new()
+	search.placeholder_text = "Find a replay: a name, a track, a car…"
+	search.clear_button_enabled = true
+	box.add_child(search)
 	var list := ItemList.new()
 	list.custom_minimum_size = Vector2(760, 380)
 	box.add_child(list)
+	var name_row := HBoxContainer.new()
+	name_row.visible = false
+	var name_edit := LineEdit.new()
+	name_edit.placeholder_text = "A name for this replay"
+	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_row.add_child(name_edit)
+	box.add_child(name_row)
 	var note := Label.new()
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	note.custom_minimum_size.x = 760
@@ -293,12 +304,17 @@ static func open_dialog(host: Node, start: Callable) -> void:
 	row.add_theme_constant_override("separation", 8)
 	box.add_child(row)
 	var heads: Array = []
+	var known := {}                     # (the file -> its head: a file is read once, not at every letter of the search)
 	var fill := func() -> void:
 		list.clear()
 		heads.clear()
+		var word := search.text.strip_edges().to_lower()
 		for f in list_files():
-			var h := read_head(f)
+			var h: Dictionary = known[f] if known.has(f) else read_head(f)
+			known[f] = h
 			if h.is_empty():
+				continue
+			if word != "" and not ("%s %s %s %s %s" % [h["name"], h["track_name"], h["track"], " ".join(h["names"]), f.get_file()]).to_lower().contains(word):
 				continue
 			heads.append([f, h])
 			var stamp := Time.get_datetime_string_from_unix_time(FileAccess.get_modified_time(f)).replace("T", " ").left(16)
@@ -307,8 +323,9 @@ static func open_dialog(host: Node, start: Callable) -> void:
 				"" if (h["cars"] as Array).size() == 1 else "s", LapTimer.format_time(h["seconds"]),
 				" · edited %s" % LapTimer.format_time(h["edit_seconds"]) if h["edited"] else "", stamp])
 		if heads.is_empty():
-			list.add_item("No replays yet: Esc, Replay, Save replay while you drive.")
+			list.add_item("No replay with that in it." if word != "" else "No replays yet: Esc, Replay, Save replay while you drive.")
 	fill.call()
+	search.text_changed.connect(func(_t: String): fill.call())
 	var chosen := func() -> Array:
 		var sel := list.get_selected_items()
 		return heads[sel[0]] if not sel.is_empty() and sel[0] < heads.size() else []
@@ -325,7 +342,27 @@ static func open_dialog(host: Node, start: Callable) -> void:
 		dlg.queue_free()
 		start.call(str(h["cars"][0]), str(h["track"]), {"mode": "replay", "file": it[0], "edit": edit})
 	list.item_activated.connect(func(_i: int): go.call(false))
-	for item in [["Watch", func(): go.call(false)], ["Edit (video editor)", func(): go.call(true)], ["Delete", func():
+	var renaming := [""]
+	name_edit.text_submitted.connect(func(t: String):
+		if renaming[0] != "" and update(renaming[0], {"name": t.strip_edges()}):
+			known.erase(renaming[0])
+			note.text = "Renamed."
+			fill.call()
+		elif renaming[0] != "":
+			note.text = "This replay cannot be renamed here (a replay of the browser)."
+		renaming[0] = ""
+		name_row.visible = false)
+	for item in [["Watch", func(): go.call(false)], ["Edit (video editor)", func(): go.call(true)], ["Rename", func():
+			var it: Array = chosen.call()
+			if it.is_empty():
+				note.text = "Choose a replay in the list first."
+				return
+			renaming[0] = it[0]
+			name_edit.text = str(it[1]["name"])
+			name_row.visible = true
+			name_edit.grab_focus()
+			name_edit.select_all()
+			note.text = "Type a name and press Enter."], ["Delete", func():
 			var it: Array = chosen.call()
 			if not it.is_empty():
 				OS.move_to_trash(ProjectSettings.globalize_path(it[0]))

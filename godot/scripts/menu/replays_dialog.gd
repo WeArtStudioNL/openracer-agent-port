@@ -24,8 +24,8 @@ func fill() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	var shown := 0
-	for f in Replay.list_files():
-		var h := Replay.read_head(f)
+	for f in ReplayFiles.list_files():
+		var h := ReplayFiles.read_head(f)
 		if h.is_empty():
 			continue
 		shown += 1
@@ -59,20 +59,20 @@ func fill() -> void:
 
 
 func _download(f: String) -> void:
-	MenuDialog.file_dialog(self, FileDialog.FILE_MODE_SAVE_FILE, PackedStringArray(["*.%s ; Replay" % Replay.EXT]), "Save the replay", func(p: Variant):
+	MenuDialog.file_dialog(self, FileDialog.FILE_MODE_SAVE_FILE, PackedStringArray(["*.%s ; Replay" % ReplayFiles.EXT]), "Save the replay", func(p: Variant):
 		var err := DirAccess.copy_absolute(ProjectSettings.globalize_path(f), str(p))
 		say("Saved %s." % str(p).get_file() if err == OK else "Could not save it (%s)." % error_string(err), err != OK), f.get_file())
 
 
 func _import() -> void:
-	MenuDialog.file_dialog(self, FileDialog.FILE_MODE_OPEN_FILE, PackedStringArray(["*.%s ; Replay" % Replay.EXT]), "A replay file", func(p: Variant):
+	MenuDialog.file_dialog(self, FileDialog.FILE_MODE_OPEN_FILE, PackedStringArray(["*.%s ; Replay" % ReplayFiles.EXT]), "A replay file", func(p: Variant):
 		var path := str(p)
-		var h := Replay.read_head(path)
+		var h := ReplayFiles.read_head(path)
 		if h.is_empty():
 			say("This is not a replay of this version.", true)
 			return
-		DirAccess.make_dir_recursive_absolute(Replay.DIR)
-		var err := DirAccess.copy_absolute(path, ProjectSettings.globalize_path(Replay.DIR.path_join(path.get_file())))
+		DirAccess.make_dir_recursive_absolute(VideoPrefs.replays_dir())
+		var err := DirAccess.copy_absolute(path, ProjectSettings.globalize_path(VideoPrefs.replays_dir().path_join(path.get_file())))
 		say("Imported %s." % path.get_file() if err == OK else "Could not import it (%s)." % error_string(err), err != OK)
 		fill())
 
