@@ -210,6 +210,8 @@ var steer_direct := false       # a racing wheel: steer_input is the position of
 var abs_on := true
 var pedal_input := false        # the brake comes from a pedal (a wheel, a pad, the touch screen), not a key (World)
 var manual := false
+const AUTO_BACK := 3.0           # s: an automatic (a torque converter) that was shifted by hand shifts itself again after this
+var manual_for := 0.0
 
 # state
 var gear := 1                   # -1 reverse, 0 neutral, 1.. forward
@@ -980,6 +982,7 @@ func _controls(dt: float) -> void:
 
 
 func shift(up: bool) -> void:
+	manual_for = AUTO_BACK if gearbox == "torque-converter" else 0.0
 	manual = true
 	gear = clampi(gear + (1 if up else -1), -1, gear_ratios.size())      # (the timer of the shift: CarDrivetrain.controls)
 

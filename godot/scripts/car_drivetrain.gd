@@ -41,6 +41,10 @@ static func controls(c: Car, dt: float) -> void:
 	var gears := c.gear_ratios.size()
 	c.gear = mini(c.gear, gears)
 	c.since_shift += dt
+	if c.manual_for > 0.0 and c.gear > 0:
+		c.manual_for -= dt
+		if c.manual_for <= 0.0:
+			c.manual = false
 	var thr := clampf(c.throttle, 0.0, 1.0)
 	var u := c.speed
 	if c.gearbox == "cvt":
