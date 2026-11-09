@@ -86,6 +86,15 @@ func _run() -> void:
 		if (c["item"] as Control).visible:
 			found += 1
 	_check(found > 30, "and with an empty field all are back (%d)" % found)
+	# ---- back to saved: every change goes back at once
+	_check(not menu._revert_b.visible, "nothing changed: no Back to saved")
+	var grip_was := float(menu.values.get("grip", 100.0))
+	menu._change("grip", grip_was + 10.0)
+	_check(menu._revert_b.visible, "a change shows Back to saved")
+	menu._revert_b.pressed.emit()
+	await _wait(0.2)
+	menu = world.tuning_layer.get_child(0)
+	_check(is_equal_approx(float(menu.values.get("grip", -1.0)), grip_was), "and it brings the value back")
 	# ---- the rings and the nodes of a custom tyre (the hatchback has one of one ring)
 	_check(Tuning.visible("tyre_rings", menu.values) and Tuning.visible("tyre_segments", menu.values), "a custom tyre shows its rings and nodes")
 	var rings_was: Variant = menu.values.get("tyre_rings")

@@ -30,6 +30,7 @@ var car: Car
 var base: Dictionary = {}           # the car as car.json makes it
 var values := {}                    # the values of the car as it is now, in the units of the menu
 var _search: LineEdit
+var _revert_b: Button
 var _filter := ""                   # what is typed in the search field: only the rows with it are shown, and their cards are open
 var _checks: VBoxContainer          # the warnings about the numbers (TuningChecks)
 var _reference := {}                # the setup that is chosen (or the car as made): a value that differs is orange, ↺ goes back to it
@@ -619,6 +620,9 @@ func _setup_line() -> Control:
 	_save_b.add_theme_stylebox_override("hover", accent_hover)
 	_save_b.pressed.connect(_save)
 	flow.add_child(_save_b)
+	_revert_b = _button("Back to saved", "Every change since this setup was saved goes back")
+	_revert_b.pressed.connect(func(): _switch(str(_setup_names[_setup_pick.selected]) if _setup_pick.selected >= 0 and _setup_pick.selected < _setup_names.size() else ""))
+	flow.add_child(_revert_b)
 	var save_new := _button("Save as new…", "The car as it is now, kept under a new name")
 	save_new.pressed.connect(_save_new)
 	flow.add_child(save_new)
@@ -1117,6 +1121,8 @@ func _refresh() -> void:
 				any = true
 		(_sections[i][0] as Control).visible = any
 	_refreshing = false
+	if _revert_b != null:
+		_revert_b.visible = _differs(_reference)
 	if _engine != null:
 		_engine.update()
 	_fill_setups()
