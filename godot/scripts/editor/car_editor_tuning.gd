@@ -457,6 +457,7 @@ func render_groups() -> void:
 			_row(target, item)
 		if fine != null:
 			fold.move_child(fine.get_parent().get_parent(), fold.get_child_count() - 1)
+	_settings_first()
 	var assists := ed.body_of("Assists and extras")
 	var box := VBoxContainer.new()
 	assists.add_child(box)
@@ -464,6 +465,20 @@ func render_groups() -> void:
 	for f in Tuning.FEATURES:
 		_feature(box, f)
 	refresh()
+
+
+## The settings of the suspension come first in its card, the parts and their mounts after them.
+func _settings_first() -> void:
+	var body := ed.body_of("Suspension")
+	var at := 0
+	if ed.form.travel_row != null:
+		body.move_child(ed.form.travel_row, at)
+		at += 1
+	for f: VBoxContainer in _folds:
+		var wrap: Control = f.get_parent().get_parent()
+		if wrap.get_parent() == body:
+			body.move_child(wrap, at)
+			at += 1
 
 
 func _row(parent: Control, d: Array) -> void:

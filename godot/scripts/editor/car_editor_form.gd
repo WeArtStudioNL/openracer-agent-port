@@ -36,6 +36,7 @@ var _lib_info: Label
 var _lib_same: Button
 var _steering_info: Label
 var _travel_label: Label
+var travel_row: Control = null
 var _drag_row: HBoxContainer
 var _steer_box: VBoxContainer
 var _travel: HSlider
@@ -822,6 +823,7 @@ func build_chassis_card() -> void:
 	ed.bind_number(r, "chassis.weight_distribution", "front weight (%)", 0.5, 20.0, 80.0, 100.0)
 	ed.bind_number(r, "chassis.cg_height", "CG height (m)", 0.01, 0.1, 1.5)
 	r = _row(ed.body_of("Suspension"))
+	travel_row = r
 	var travel_box := VBoxContainer.new()
 	travel_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_travel_label = EditorStyle.label("Suspension travel before the bump stop: 9 cm", 12, Color("#b9c3d0"))

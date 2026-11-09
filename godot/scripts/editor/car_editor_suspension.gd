@@ -11,6 +11,7 @@ const COLOURS := {"front": Color("#5ec8ff"), "rear": Color("#8ee26b"), "drivelin
 const AT_THE_WHEEL := ["upper_ball", "lower_ball", "strut_bottom", "tierod_outer"]
 const WITH_AXLE := {"front": ["diff_front", "prop_front_end"], "rear": ["diff_rear", "prop_rear_end"]}
 
+var _engine_row: Control = null
 var ed: CarEditor
 var editing := false
 var mode := "move"
@@ -40,6 +41,14 @@ func _reset_state() -> void:
 		"driveline": {"engine": "front", "mounts": {}, "hidden": []}}
 
 
+## Where the engine sits belongs with the drivetrain.
+func move_engine_row() -> void:
+	_engine_row.get_parent().remove_child(_engine_row)
+	var body := ed.body_of("Drivetrain")
+	body.add_child(_engine_row)
+	body.move_child(_engine_row, 0)
+
+
 func build_card() -> void:
 	var c := ed.add_card("Suspension")
 	var b: VBoxContainer = c["body"]
@@ -55,6 +64,7 @@ func build_card() -> void:
 		_selects[axle] = o
 		r.add_child(EditorStyle.labelled(o, "Front suspension" if axle == "front" else "Rear suspension"))
 	r = EditorStyle.row(b)
+	_engine_row = r
 	var eng := EditorStyle.options([["front", "In the front"], ["mid", "In the middle"], ["rear", "In the rear"]])
 	eng.item_selected.connect(func(_i: int):
 		state["driveline"]["engine"] = EditorStyle.value_of(eng)

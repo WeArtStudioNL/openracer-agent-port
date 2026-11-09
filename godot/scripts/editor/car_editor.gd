@@ -237,6 +237,7 @@ func _build_cards() -> void:
 	form.move_to_their_cards()
 	form.build_bike_card()
 	form.build_drivetrain_card()
+	suspension.move_engine_row()
 	engine.build_engine_card()
 	engine.build_sound_card()
 	add_card("Assists and extras")
