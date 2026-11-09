@@ -627,6 +627,9 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 		v["gear%d" % i] = float(gears[i])
 	# the tyres of the wheel library and a custom tyre
 	var lib: Dictionary = read(cfg, "wheels.library") if read(cfg, "wheels.library") is Dictionary else {}
+	var custom_rubber := func(axle: String) -> bool:
+		return str(read(cfg, "wheels.library.%s.tyre" % axle)) == "custom" and read(cfg, "wheels.library.%s.custom.rubber" % axle) != null
+	v["compound_used"] = not (custom_rubber.call("front") and custom_rubber.call("rear"))
 	v["model_wheels"] = "on" if str(read(cfg, "wheels.mode")) == "model" else "off"
 	v["model_tyres"] = "on" if lib.get("front", {}).get("model", false) or lib.get("rear", {}).get("model", false) else "off"
 	var compound := str(v.get("compound", "road"))
@@ -828,7 +831,22 @@ static func visible(key: String, v: Dictionary) -> bool:
 	var built: bool = v.get("engine_build") != null
 	var kart: bool = v.get("unsprung") == "none"
 	var bike: bool = v.get("vehicle_type") == "motorcycle"
+	# (a tyre that has its own numbers: the shell of the tyre takes them from it)
+	var own_front: bool = library_tyre(v, "front") or str(v.get("tyre_front", "")) == "custom"
+	var own_rear: bool = library_tyre(v, "rear") or str(v.get("tyre_rear", "")) == "custom"
 	match key:
+		"compound":
+			return v.get("compound_used", true)
+		"cam_follow_dolly":
+			return float(v.get("cam_follow_distance_fast", 0.0)) <= 0.0
+		"cam_follow_height_fast":
+			return float(v.get("cam_follow_distance_fast", 0.0)) > 0.0
+		"engine_place":
+			return str(v.get("susp_front", "model")) not in ["model", "none", ""] or str(v.get("susp_rear", "model")) not in ["model", "none", ""]
+		"roll_front":
+			return not kart and not bike
+		"roll_center_front", "roll_center_rear", "ackermann", "camber_front", "camber_rear", "roll_camber", "drive", "diff":
+			return not bike
 		"shift_time":
 			return g != "cvt"
 		"clutch", "clutch_start_rpm", "clutch_full_rpm":
@@ -838,11 +856,11 @@ static func visible(key: String, v: Dictionary) -> bool:
 		"tc_stall_rpm", "tc_ratio", "tc_lockup":
 			return g == "torque-converter"
 		"diff_preload", "diff_power", "diff_coast", "diff_lock":
-			return v.get("diff") == "lsd"
+			return v.get("diff") == "lsd" and not bike
 		"center_diff":
-			return v.get("drive") == "awd"
+			return v.get("drive") == "awd" and not bike
 		"center_split":
-			return v.get("drive") == "awd" and v.get("center_diff") != "locked"
+			return v.get("drive") == "awd" and v.get("center_diff") != "locked" and not bike
 		"turbo_spool":
 			return turbo
 		"turbo_share":
@@ -852,13 +870,13 @@ static func visible(key: String, v: Dictionary) -> bool:
 		"turbo_intercooler", "turbo_efficiency":
 			return float(v.get("turbo_boost", 0.0)) > 0.0
 		"tyre_inner_ratio":
-			return not ((custom_tyre(v, "front") or library_tyre(v, "front")) and (custom_tyre(v, "rear") or library_tyre(v, "rear")))
+			return not (own_front and own_rear)
 		"tyre_width":
-			return not library_tyre(v, "front")
+			return not own_front
 		"tyre_width_rear":
-			return not library_tyre(v, "rear")
+			return not own_rear
 		"tyre_rings", "tyre_segments", "tyre_carcass":
-			return not (library_tyre(v, "front") and library_tyre(v, "rear"))
+			return not (own_front and own_rear)
 		"rim_front", "rim_rear":
 			return v.get("model_tyres") != "on" and v.get("model_wheels") != "on"
 		"tyre_front", "tyre_rear":

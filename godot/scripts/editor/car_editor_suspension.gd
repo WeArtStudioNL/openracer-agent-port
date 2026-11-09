@@ -244,6 +244,8 @@ func wheels_moved() -> void:
 func refresh(force: bool) -> void:
 	if _rows == null:
 		return
+	if _engine_row != null:                # (where the engine sits only places the parts of the library)
+		_engine_row.visible = not (str(state["front"]["type"]) in ["model", "none"] and str(state["rear"]["type"]) in ["model", "none"])
 	var meas := _measured()
 	_follow_wheels(meas)
 	if not _active():

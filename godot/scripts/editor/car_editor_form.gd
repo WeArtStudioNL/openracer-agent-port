@@ -37,6 +37,8 @@ var _lib_same: Button
 var _steering_info: Label
 var _travel_label: Label
 var travel_row: Control = null
+var _cam_height_fast: Control = null
+var _cam_dolly: Control = null
 var _drag_row: HBoxContainer
 var _steer_box: VBoxContainer
 var _travel: HSlider
@@ -804,6 +806,15 @@ func model_warnings() -> Array:
 
 # ---- Chassis
 
+## The follow camera comes closer by itself, or has a place at full speed: of the two the fields that count.
+func update_camera_fields() -> void:
+	if _cam_dolly == null:
+		return
+	var placed := float(Tuning.read(ed.cfg, "cameras.follow.distance_fast") if Tuning.read(ed.cfg, "cameras.follow.distance_fast") != null else 0.0) > 0.0
+	_cam_height_fast.visible = placed
+	_cam_dolly.visible = not placed
+
+
 ## What was made with another card but belongs in a card of its own.
 func move_to_their_cards() -> void:
 	_steer_box.get_parent().remove_child(_steer_box)
@@ -1035,7 +1046,9 @@ func build_cameras_card() -> void:
 	d.add_child(EditorStyle.tipline("Heights above the road; cockpit from the origin", "Heights are above the road; the cockpit is from the origin of the model " +
 		"(x to the left, y up, z forward). Fields of view are the vertical angle in degrees."))
 	d.add_child(EditorStyle.group("1 Follow"))
-	var upd := func(): ed.layers.update_camera_markers()
+	var upd := func():
+		ed.layers.update_camera_markers()
+		update_camera_fields()
 	r = _row(d)
 	ed.bind_number(r, "cameras.follow.distance", "distance (m)", 0.1, 1.0, 15.0, 1.0, "", upd)
 	ed.bind_number(r, "cameras.follow.height", "height (m)", 0.05, 0.0, 6.0, 1.0, "", upd)
@@ -1047,11 +1060,11 @@ func build_cameras_card() -> void:
 	ed.bind_number(r, "cameras.follow.fov_fast", "FOV at full speed", 1, 20.0, 120.0, 1.0, "", upd)
 	r = _row(d)
 	ed.bind_number(r, "cameras.follow.distance_fast", "distance at full speed (m, 0: comes closer)", 0.1, 0.0, 15.0, 1.0, "", upd)
-	ed.bind_number(r, "cameras.follow.height_fast", "height at full speed (m)", 0.05, 0.0, 6.0, 1.0, "", upd)
+	_cam_height_fast = ed.bind_number(r, "cameras.follow.height_fast", "height at full speed (m)", 0.05, 0.0, 6.0, 1.0, "", upd)
 	r.add_child(Control.new())
 	r = _row(d)
 	ed.bind_number(r, "cameras.follow.fov_full_speed", "full speed (km/h)", 10, 50.0, 400.0, 3.6, "", upd)
-	ed.bind_number(r, "cameras.follow.dolly", "comes closer (0 to 1)", 0.1, 0.0, 1.0, 1.0, "", upd)
+	_cam_dolly = ed.bind_number(r, "cameras.follow.dolly", "comes closer (0 to 1)", 0.1, 0.0, 1.0, 1.0, "", upd)
 	r.add_child(Control.new())
 	d.add_child(EditorStyle.tipline("Faster: wider view and the camera moves in", "The faster the car, the wider the FOV. With “comes closer” at 1 the camera moves in " +
 		"with it, so the car keeps its size and only the sense of speed changes (a dolly zoom)."))
@@ -1093,6 +1106,7 @@ func default_cameras() -> void:
 # ---- the form shows the car
 
 func fill() -> void:
+	update_camera_fields()
 	_id_edit.text = ed.car_id
 	EditorStyle.select_value(_type_pick, "motorcycle" if ed.is_bike() else "car")
 	_radio_default.set_pressed_no_signal(ed.wheel_radio != "model")
