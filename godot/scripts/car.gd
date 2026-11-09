@@ -576,6 +576,9 @@ func _read_config() -> void:
 	shift_time = float(dt.get("shift_time", 0.32))
 	shift_style = str(dt.get("shift_style", "normal")) if str(dt.get("shift_style", "normal")) in ["sport", "drag", "manual"] else "normal"
 	gearbox = str(dt.get("gearbox", "gears"))
+	if gearbox == "torque-converter":      # (shifted by hand with the gearbox before it: this one shifts itself)
+		manual = false
+		manual_for = 0.0
 	cvt_rpm = float(dt.get("cvt_rpm", 0))      # (0: 85 % of the limiter)
 	cvt_rate = float(dt.get("cvt_rate", 1.8))
 	cvt_low = float(dt.get("cvt_low", gear_ratios[0]))
