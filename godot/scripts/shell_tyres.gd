@@ -45,8 +45,7 @@ var _ready := false
 var _frame := 0                  # (the physics frame of the last step)
 var _bike_load := [0.0, 0.0, 0.0, 0.0]          # N: what presses a motorcycle tyre on the road, smoothed (its grip)
 var _bike_fx := 0.0                             # N: the force along the wheel of the tyre of this small step (a motorcycle)
-var _patch := [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]         # where the patch of a motorcycle tyre lies from its hub, smoothed
-var _patch_ok := [false, false, false, false]
+var _crown_width := [0.2, 0.2, 0.2, 0.2]        # m: the width of the crown of a motorcycle tyre
 var _cg_now := Vector3.ZERO                     # the centre of gravity at this small step (a motorcycle: the spring goes in at the patch)
 var _deform: Array = []          # a TyreDeform per wheel
 var _frozen: Array = []                         # (the debug view in a replay: the shape of every tyre in the frame of its wheel)
@@ -229,6 +228,7 @@ func _configure() -> void:
 			w.free_length = car.susp_length + (car.ride_front if w.front else car.ride_rear) + maxf(0.0, w.rest_load - unsprung_mass * Car.G) / w.spring
 		var rings := minf(float(sh["rings"]), 1.0 if detail == "low" else 2.0) if lighter else float(sh["rings"])
 		var tread_width := float(sh["width"]) if float(sh["width"]) > 0.0 else maxf(0.1, 0.7 * w.radius)
+		_crown_width[i] = minf(tread_width, MAX_BIKE_WIDTH)
 		(tyres[i] as Object).call("configure", {
 			"round": car.bike != null, "tyre_mass": maxf(1.5, 0.3 * unsprung_mass), "pressure": p, "inner_ratio": sh["inner_ratio"], "carcass": sh["carcass"],
 			"rings": rings,
@@ -347,12 +347,10 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 				tyre_load[i] = maxf(0.0, ((res["normal"] as Vector3) + (res["friction"] as Vector3)).dot(up_s))
 				w.contact = true
 				w.point = res["centre"]
-				if car.bike != null:            # (the patch hops from ring to ring and from node to node: where it is, a moment smoothed, from the hub)
-					_patch[i] = (_patch[i] as Vector3).lerp((w.point - hub) as Vector3, minf(1.0, h / 0.03)) if _patch_ok[i] else w.point - hub
-					_patch_ok[i] = true
-					w.point = hub + (_patch[i] as Vector3)
 				w.normal = res["surface_normal"]
 				w.surface = str(res["surface"])
+				if car.bike != null:
+					w.point = _crown_patch(i, hub, left, w.point, w.normal)
 				w.load = tyre_load[i]
 				_tyre_forces(i, res, h, cg, v, av, basis_s, hub - cg)
 				n_touch[i] += 1
@@ -360,7 +358,6 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 				tyre_torque[i] = -_bike_fx * w.radius if car.bike != null else (float(res["omega_out"]) - w.omega) * w.inertia / h
 			else:
 				w.contact = false
-				_patch_ok[i] = false
 		_cg_now = cg
 		_springs(h, basis, up, com, tyre_load, rest_hold)
 		# ---- the wheels and the drivetrain (the shell turned the wheel: the torque that gives that turn)
@@ -492,6 +489,17 @@ func _tyre_forces(i: int, res: Dictionary, h: float, cg: Vector3, v: Vector3, av
 	var perp := nrm - up * nrm.dot(up)
 	_force += perp
 	_torque += r_hub.cross(perp)
+
+
+## Where a round crown stands on the road: where its surface is parallel to the road, across the wheel from the hub. Worked out: the nodes hop from ring to ring and round the
+## wheel, and a patch that hops rocks the bike from side to side. On the road plane through the patch that the nodes found.
+func _crown_patch(i: int, hub: Vector3, side: Vector3, found: Vector3, n: Vector3) -> Vector3:
+	var w := float(_crown_width[i])
+	var s := side.dot(n)
+	var slope := absf(s) / maxf(0.05, sqrt(1.0 - s * s))
+	var x := -signf(s) * minf(0.46 * w, w * slope / 2.836)         # (the crown of TyreShell.build: 0.3 w (x / 0.46 w)^2 lower at x across)
+	var above := hub + side * x
+	return above + n * (found - above).dot(n)
 
 
 ## The road force of a motorcycle tyre on the bike, whole, at the patch (which on a round crown lies to the inside of the lean). The press of the road comes through the spring
