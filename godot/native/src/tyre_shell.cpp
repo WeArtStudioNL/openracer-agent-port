@@ -322,28 +322,41 @@ void TyreShell::shell_normals() {
 bool TyreShell::contact_at(double x, double y, double z, const Vector3 &hub, TyreGround *ground, const std::vector<int> &list, double tol) {
 	cDepth = 0;
 	cTri = -1;
+	// (the deepest a node of a tyre can be: deeper, and it is not on that face. A node that went past the back wall of a ramp is not 1.3 m under its deck)
+	double deep = 0.75 * radius;
+	bool inside = false;  // (a node really behind a face leaves by the nearest one: not through the wall of a ramp when it is just under the deck)
 	for (int t : list) {
 		ground->tests++;
-		if (!ground->box_near(t, x, y, z, tol + 0.06)) {
+		if (!ground->box_near(t, x, y, z, tol + 0.06 + deep)) {
 			continue;
 		}
 		double nrx, nry, nrz;
 		int region;
 		double d2 = ground->closest(t, x, y, z, nrx, nry, nrz, region), dist = std::sqrt(d2), mx, my, mz, dd;
-		double tnx, tny, tnz;
+		double tnx, tny, tnz, front;
 		if (region == 0) {
 			ground->normal_of(t, tnx, tny, tnz);
-			double upN = upX * tnx + upY * tny + upZ * tnz, s;
-			if (std::abs(upN) > 0.3) {
-				s = upN >= 0 ? 1 : -1;
+			double sideHub = (hub.x - nrx) * tnx + (hub.y - nry) * tny + (hub.z - nrz) * tnz, s;
+			if (std::abs(tny) >= 0.5) {
+				// a road or a ramp: its top is up in the world, whatever the car does (the triangles of a model can face either way). Its other
+				// side only for a wheel that hangs under it upside down (a loop, a ceiling). The side of the hub says nothing here: a wheel beside a
+				// ramp has its hub below the deck and a ring of the tyre on it
+				s = tny >= 0 ? 1 : -1;
+				if ((upX * tnx + upY * tny + upZ * tnz) * s < -0.3 && sideHub * s < 0) {
+					s = -s;
+				}
 			} else {
-				double sideHub = (hub.x - nrx) * tnx + (hub.y - nry) * tny + (hub.z - nrz) * tnz;
+				// a wall: the side where the wheel is. (The lean of the car said which side it was: a car leaning against the slope was pulled through it.)
 				s = sideHub >= 0 ? 1 : -1;
 			}
 			mx = tnx * s;
 			my = tny * s;
 			mz = tnz * s;
-			dd = tol - ((x - nrx) * mx + (y - nry) * my + (z - nrz) * mz);
+			front = (x - nrx) * mx + (y - nry) * my + (z - nrz) * mz;
+			if (front < -deep) {
+				continue;
+			}
+			dd = tol - front;
 		} else {
 			if (dist > tol || dist < 1e-6) {
 				continue;
@@ -356,8 +369,14 @@ bool TyreShell::contact_at(double x, double y, double z, const Vector3 &hub, Tyr
 				continue;
 			}
 			dd = tol - dist;
+			front = dist;
 		}
-		if (dd > cDepth) {
+		if (dd <= 0) {
+			continue;
+		}
+		bool behind = front < 0;
+		if (behind ? (!inside || dd < cDepth) : (!inside && dd > cDepth)) {
+			inside = behind;
 			cDepth = dd;
 			cTri = t;
 			cNx = mx;
@@ -497,7 +516,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 				}
 			}
 		}
-		double reachB = rad * 1.05 + tol + 0.06 + 0.03 + 1.4 * dt * std::sqrt(bv) * 1.2;
+		double reachB = rad * 1.05 + tol + 0.06 + 0.75 * radius + 0.03 + 1.4 * dt * std::sqrt(bv) * 1.2;
 		std::vector<int> &bList = blockList[bl];
 		bList.clear();
 		for (int t : list) {
@@ -508,7 +527,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 		}
 	}
 	for (int inr = 0; inr < N; inr++) {
-		double reachN = tol + 0.06 + 0.03 + 1.4 * dt * std::sqrt(Vx[inr] * Vx[inr] + Vy[inr] * Vy[inr] + Vz[inr] * Vz[inr]);
+		double reachN = tol + 0.06 + 0.75 * radius + 0.03 + 1.4 * dt * std::sqrt(Vx[inr] * Vx[inr] + Vy[inr] * Vy[inr] + Vz[inr] * Vz[inr]);
 		std::vector<int> &mine = nodeList[inr];
 		const std::vector<int> &fromBlock = blockList[(inr % segs) / blockSize];
 		mine.clear();
@@ -996,7 +1015,23 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 	rCentreAlong = alongSum / sumFn;
 	double rimR = R * std::max(0.3, std::min(0.9, innerRatio)) + 0.01;
 	double hubH = (hub.x - rCentre.x) * sn.x + (hub.y - rCentre.y) * sn.y + (hub.z - rCentre.z) * sn.z;
+	// (the rim strikes a road that lies under the hub. A patch out on the side of the tyre, on the edge of a ramp, has only air under the hub; and a hub
+	// past the plane is no deeper than the road at the rim: a metre there is a million newtons)
+	hubH = std::max(0.0, hubH);
+	bool under = false;
 	if (hubH < rimR) {
+		for (int t : list) {
+			double px, py, pz, tx, ty, tz;
+			int where;
+			ground->closest(t, hub.x, hub.y, hub.z, px, py, pz, where);
+			ground->normal_of(t, tx, ty, tz);
+			if (where == 0 && std::abs(tx * sn.x + ty * sn.y + tz * sn.z) > 0.9) {
+				under = true;
+				break;
+			}
+		}
+	}
+	if (under) {
 		double vnRim = vel.x * sn.x + vel.y * sn.y + vel.z * sn.z;
 		double fRim = rimStiffness * (rimR - hubH) - (vnRim < 0 ? rimDamping * vnRim : 0);
 		hubFx += fRim * sn.x;
