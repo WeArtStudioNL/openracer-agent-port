@@ -41,7 +41,7 @@ func _reset_state() -> void:
 
 
 func build_card() -> void:
-	var c := ed.add_card("Suspension and driveline")
+	var c := ed.add_card("Suspension")
 	var b: VBoxContainer = c["body"]
 	b.add_child(EditorStyle.tipline("Pick a type per axle, drag the mounts", "The suspension built from loose parts (web/parts/<type>/<part>.glb): pick a type for " +
 		"each axle, where the engine is, and drag the mounts in the view. \"From the model\" keeps the parts of your own model (named susp_…)."))
@@ -339,7 +339,7 @@ func _build(cfg: Dictionary, meas: Dictionary) -> void:
 	var missing := PartsLibrary.missing_files(cfg)
 	_missing.text = ("Missing in web/parts: %s (the parts that are there are shown)." % ", ".join(missing)) if not missing.is_empty() else \
 		"%d parts placed from web/parts." % (out["names"] as Array).size()
-	ed.card_of["Suspension and driveline"]["meta"].text = "%s / %s" % [state["front"]["type"], state["rear"]["type"]]
+	ed.card_of["Suspension"]["meta"].text = "%s / %s" % [state["front"]["type"], state["rear"]["type"]]
 	_show_selected()
 
 

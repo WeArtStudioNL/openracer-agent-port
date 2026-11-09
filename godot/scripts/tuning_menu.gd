@@ -52,6 +52,7 @@ var _refreshing := false
 var _wheels: Dictionary = {}
 var _engine: TuningEngine = null    # the engine build of the Engine card
 var _rebuild_timer: Timer = null
+var _group_boxes: Array[VBoxContainer] = []      # (a group of which no row can be used is not shown)
 
 
 func setup(w: Node, c: Car, base_config: Dictionary) -> void:
@@ -280,6 +281,7 @@ func _group(parent: Control, group: Array, card_name: String) -> void:
 	var title: String = group[0] + " settings" if group[0] == card_name else group[0]
 	var id: String = card_name + "/" + group[0]
 	var content := _section(parent, title, id, false)
+	_group_boxes.append(content)
 	var fine: VBoxContainer = null
 	for d in group[1]:
 		var target := content
@@ -1080,6 +1082,18 @@ func _refresh() -> void:
 		_engine.update()
 	_fill_setups()
 	_update_info()
+	_hide_empty_groups()
+
+
+## A group without a row that this car can use is not shown (a kart has no springs).
+func _hide_empty_groups() -> void:
+	for box in _group_boxes:
+		if not is_instance_valid(box):
+			continue
+		var any := false
+		for i in range(1, box.get_child_count()):
+			any = any or (box.get_child(i) as Control).visible
+		(box.get_parent() as Control).visible = any
 
 
 func _update_info() -> void:

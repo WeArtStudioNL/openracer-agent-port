@@ -36,6 +36,8 @@ var _lib_info: Label
 var _lib_same: Button
 var _steering_info: Label
 var _travel_label: Label
+var _drag_row: HBoxContainer
+var _steer_box: VBoxContainer
 var _travel: HSlider
 var _unsprung: CheckBox
 var _diff_info: Label
@@ -336,6 +338,7 @@ func build_wheels_card() -> void:
 	_lib_info = EditorStyle.hint("")
 	b.add_child(_lib_info)
 	var steer := VBoxContainer.new()
+	_steer_box = steer
 	b.add_child(steer)
 	_car_only.append(steer)
 	steer.add_child(EditorStyle.group("Steering wheel"))
@@ -800,6 +803,13 @@ func model_warnings() -> Array:
 
 # ---- Chassis
 
+## What was made with another card but belongs in a card of its own.
+func move_to_their_cards() -> void:
+	_steer_box.get_parent().remove_child(_steer_box)
+	ed.body_of("Steering").add_child(_steer_box)
+	ed.body_of("Aerodynamics").add_child(_drag_row)
+
+
 func build_chassis_card() -> void:
 	var c := ed.add_card("Chassis")
 	var b: VBoxContainer = c["body"]
@@ -811,7 +821,7 @@ func build_chassis_card() -> void:
 	ed.bind_number(r, "chassis.mass", "mass (kg)", 10, 50.0, 6000.0)
 	ed.bind_number(r, "chassis.weight_distribution", "front weight (%)", 0.5, 20.0, 80.0, 100.0)
 	ed.bind_number(r, "chassis.cg_height", "CG height (m)", 0.01, 0.1, 1.5)
-	r = _row(b)
+	r = _row(ed.body_of("Suspension"))
 	var travel_box := VBoxContainer.new()
 	travel_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_travel_label = EditorStyle.label("Suspension travel before the bump stop: 9 cm", 12, Color("#b9c3d0"))
@@ -851,8 +861,11 @@ func build_chassis_card() -> void:
 			_wheels_moved())
 	r = _row(b)
 	_tyre_field = ed.bind_number(r, "chassis.tire_diameter", "tyre diameter (m)", 0.005, NAN, NAN, 1.0, "", _cams_follow)
-	ed.bind_number(r, "chassis.drag_coefficient", "drag coefficient", 0.01, 0.1, 1.0)
-	ed.bind_number(r, "chassis.max_steer_deg", "steering lock (°)", 1, 10.0, 60.0)
+	_drag_row = HBoxContainer.new()
+	_drag_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ed.bind_number(_drag_row, "chassis.drag_coefficient", "drag coefficient", 0.01, 0.1, 1.0)
+	var lock := _row(ed.body_of("Steering"))
+	ed.bind_number(lock, "chassis.max_steer_deg", "steering lock (°)", 1, 10.0, 60.0)
 	var flow := HFlowContainer.new()
 	flow.add_theme_constant_override("h_separation", 8)
 	b.add_child(flow)
@@ -870,8 +883,7 @@ func build_chassis_card() -> void:
 		ed.update_helpers()
 		ed.changed())
 	flow.add_child(cfw)
-	b.add_child(EditorStyle.group("Brakes (per wheel)"))
-	r = _row(b)
+	r = _row(ed.body_of("Brakes"))
 	ed.bind_number(r, "brakes.front", "front (Nm)", 50, 1.0, 6000.0)
 	ed.bind_number(r, "brakes.rear", "rear (Nm)", 50, 1.0, 6000.0)
 	r.add_child(Control.new())

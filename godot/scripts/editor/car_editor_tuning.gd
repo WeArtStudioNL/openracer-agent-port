@@ -17,8 +17,9 @@ const EDITOR_HAS := ["mass", "front_weight", "cg_height", "drag_coefficient", "m
 	"rim_front", "rim_rear", "tyre_front", "tyre_rear", "susp_front", "susp_rear", "engine_place", "es_convolution",
 	"body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "rim_pattern", "body_uv", "rim_uv", "body_flake", "rim_flake"]
 ## The card each group of the table goes into.
-const HOMES := {"Chassis": "Chassis", "Brakes": "Chassis", "Aerodynamics and steering": "Chassis", "Size and steering wheel": "Chassis", "Tyres": "Wheels",
-	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Suspension and driveline": "Suspension and driveline", "Engine sound": "Engine sound"}
+const HOMES := {"Chassis": "Chassis", "Brakes": "Brakes", "Aerodynamics": "Aerodynamics", "Steering": "Steering", "Tyres": "Wheels", "Paint": "Materials",
+	"Springs and dampers": "Suspension", "Ride height and travel": "Suspension", "Wheel alignment": "Suspension", "Suspension geometry": "Suspension", "Suspension parts": "Suspension",
+	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Engine sound": "Engine sound"}
 const PAINT := ["body", "rim"]
 const TYRE_KEYS := ["tyre_section_front", "tyre_section_rear", "tyre_aspect_front", "tyre_aspect_rear", "tyre_rim_front", "tyre_rim_rear", "tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
 	"tyre_width", "tyre_width_rear", "tyre_inner_ratio", "tyre_rings", "tyre_segments", "tyre_carcass"]
@@ -35,6 +36,7 @@ var _tune_menu: MenuButton
 var _ship: Button
 var _paths := {}                     # tune name -> its file
 var _refreshing := false
+var _folds: Array = []               # the bodies of the groups: one without a row that this car can use is not shown
 var _tyres_root: Node3D = null
 var _tyres: Variant = null
 var _shown_for := ""                 # the car that the list of tunes was made for
@@ -425,6 +427,7 @@ func render_groups() -> void:
 		if is_instance_valid(g):
 			g.queue_free()
 	_groups = []
+	_folds = []
 	_rows = []
 	_features = []
 	for group in Tuning.GROUPS:
@@ -435,13 +438,14 @@ func render_groups() -> void:
 		for item in group[1]:
 			if not item[0] in EDITOR_HAS:
 				items.append(item)
-		if items.is_empty() and gname != "Chassis":
+		if items.is_empty() and gname != "Paint":
 			continue
 		var body := ed.body_of(HOMES[gname])
 		var title := gname + " settings" if HOMES[gname] == gname else gname
 		var fold := EditorStyle.fold(body, title)
 		_groups.append(fold.get_parent().get_parent())
-		if gname == "Chassis":
+		_folds.append(fold)
+		if gname == "Paint":
 			_paint(fold)
 		var fine: VBoxContainer = null
 		for item in items:
@@ -676,6 +680,13 @@ func refresh() -> void:
 		(f["inner"] as Control).visible = on
 		(f["wrap"] as Control).visible = Tuning.visible_feature(f["feature"], v)
 	_refreshing = false
+	for fold: VBoxContainer in _folds:
+		if not is_instance_valid(fold):
+			continue
+		var any := false
+		for c in fold.get_children():
+			any = any or (c as Control).visible
+		(fold.get_parent().get_parent() as Control).visible = any
 	_preview_tyres()
 
 
