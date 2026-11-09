@@ -16,6 +16,7 @@ extends RefCounted
 const SHELL_TEAL := Color(0.3, 0.8, 0.8)
 const SHELL_DIM := Color(0.35, 0.4, 0.45)
 const MAX_RUB := 8.0             # the most that a tyre rubs, as a share of how hard it is pressed
+const SHOULDER := 0.1            # how far the edge of the tread lies below its middle, as a share of the width (a road or race tyre: flat, with a rounded shoulder)
 const STEPS := 3                 # steps of the car in a step of Godot (1/360 s; Vehicle.js steps at 1/300 s or less)
 
 static var _ground: Object = null           # TyreGround: the triangles of the ground of the scene
@@ -218,9 +219,13 @@ func _configure() -> void:
 		if not car.unsprung and car.bike == null:
 			# (the spring carries the body: the wheel stands on its tyre by itself, so the car stands where it was made)
 			w.free_length = car.susp_length + (car.ride_front if w.front else car.ride_rear) + maxf(0.0, w.rest_load - unsprung_mass * Car.G) / w.spring
+		var rings := minf(float(sh["rings"]), 1.0 if detail == "low" else 2.0) if lighter else float(sh["rings"])
+		var tread_width := float(sh["width"]) if float(sh["width"]) > 0.0 else maxf(0.1, 0.7 * w.radius)
 		(tyres[i] as Object).call("configure", {
 			"round": false, "tyre_mass": maxf(1.5, 0.3 * unsprung_mass), "pressure": p, "inner_ratio": sh["inner_ratio"], "carcass": sh["carcass"],
-			"rings": minf(float(sh["rings"]), 1.0 if detail == "low" else 2.0) if lighter else float(sh["rings"]),
+			"rings": rings,
+			# (with three rings or more the outer ones lie on the shoulder; with two there is no middle ring to carry the tyre, so they stay at the full radius)
+			"shoulder": SHOULDER * tread_width if rings >= 3.0 else 0.0,
 			"segments": minf(float(sh["segments"]), 12.0) if lighter and detail == "low" else float(sh["segments"]),
 			"width": sh["width"],
 			"stiff_x": float(ty.get("stiff_x", 20.0)),

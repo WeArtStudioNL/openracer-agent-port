@@ -111,13 +111,15 @@ static func tyre_mesh(outer_r: float, inner_r: float, width: float, segments := 
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var hw := width / 2.0
-	var shoulder := minf(0.025, (outer_r - inner_r) * 0.3)
+	# (the shoulder of the shell tyre, ShellTyres.SHOULDER: the same curve, but never more than a third of the side wall)
+	var shoulder := minf(0.1 * width, (outer_r - inner_r) * 0.3)
 	# the profile from the inner edge of one side wall, round the shoulder, over the tread, back down the other
-	var profile: Array[Vector2] = [
-		Vector2(-hw, inner_r), Vector2(-hw, outer_r - shoulder), Vector2(-hw + shoulder * 0.4, outer_r - shoulder * 0.25),
-		Vector2(-hw + shoulder, outer_r), Vector2(hw - shoulder, outer_r),
-		Vector2(hw - shoulder * 0.4, outer_r - shoulder * 0.25), Vector2(hw, outer_r - shoulder), Vector2(hw, inner_r),
-	]
+	var profile: Array[Vector2] = [Vector2(-hw, inner_r)]
+	for t in [1.0, 0.92, 0.8, 0.65, 0.45]:
+		profile.append(Vector2(-hw * t, outer_r - shoulder * pow(t, 4.0)))
+	for t in [0.45, 0.65, 0.8, 0.92, 1.0]:
+		profile.append(Vector2(hw * t, outer_r - shoulder * pow(t, 4.0)))
+	profile.append(Vector2(hw, inner_r))
 	for s in segments:
 		var a0 := TAU * s / segments
 		var a1 := TAU * (s + 1) / segments
