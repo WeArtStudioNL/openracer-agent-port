@@ -8,7 +8,7 @@ extends RefCounted
 ## car as made (car.json); Save writes to what is chosen; + New tune, Delete, Export and Import of a tune file.
 
 ## The rows of the tuning menu that the form has as its own fields.
-const EDITOR_HAS := ["mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
+const EDITOR_HAS := ["wheels_mode", "mass", "front_weight", "cg_height", "drag_coefficient", "max_steer_deg", "idle_rpm", "limiter_rpm", "engine_inertia",
 	"final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel",
 	"efficiency", "length", "width", "height", "steering_degrees", "steering_stop", "sb_max_nodes", "sb_wheel_strength", "unsprung",
 	"cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing",

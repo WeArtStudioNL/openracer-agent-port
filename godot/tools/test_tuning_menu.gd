@@ -73,6 +73,41 @@ func _run() -> void:
 	menu._change("suspension_travel", was_travel)
 	menu._change("suspension_length", was_length)
 	await get_tree().process_frame
+	# ---- the wheels: from the model or dynamic, in the menu, and the tyres can be changed with both
+	var mode_was := str(menu.values.get("wheels_mode", "default"))
+	var nodes_was: Variant = Tuning.read(car.config, "wheels.nodes")
+	var four := {"FL": ["wheel_FL"], "FR": ["wheel_FR"], "RL": ["wheel_RL"], "RR": ["wheel_RR"]}
+	var with_parts: Dictionary = car.config.duplicate(true)
+	Tuning.write(with_parts, "wheels.nodes", four)
+	menu._apply(with_parts, "wheels of the model")
+	_check(Tuning.visible("wheels_mode", menu.values), "the menu offers dynamic wheels or wheels from the model")
+	for mode in ["default", "model"]:
+		menu._change("wheels_mode", mode)
+		await _wait(0.8)
+		car = world.car
+		menu = world.tuning_layer.get_child(0)
+		_check(str(Tuning.read(car.config, "wheels.mode")) == mode, "wheels: " + mode)
+		_check(Tuning.visible("tread_front", menu.values) and Tuning.visible("rubber_front", menu.values), "the tyre can be changed with wheels: " + mode)
+		menu._change("tread_front", 60.0)
+		_check(str(Tuning.read(car.config, "wheels.library.front.tyre")) == "custom" and float(Tuning.read(car.config, "wheels.library.front.custom.tread")) == 60.0,
+			"a tread with wheels %s makes it a tyre of its own" % mode)
+		var clean: Dictionary = car.config.duplicate(true)
+		Tuning.erase(clean, "wheels.library.front.tyre")
+		Tuning.erase(clean, "wheels.library.front.custom")
+		menu._apply(clean, "tyre as it was")
+		await _wait(0.8)
+		car = world.car
+		menu = world.tuning_layer.get_child(0)
+	menu._change("wheels_mode", mode_was)
+	var back: Dictionary = car.config.duplicate(true)
+	if nodes_was == null:
+		Tuning.erase(back, "wheels.nodes")
+	else:
+		Tuning.write(back, "wheels.nodes", nodes_was)
+	menu._apply(back, "the wheels as they were")
+	await _wait(0.8)
+	car = world.car
+	menu = world.tuning_layer.get_child(0)
 	# ---- the Engine card
 	var eng: TuningEngine = menu._engine
 	_check(eng != null, "the Engine card has the engine build")

@@ -13,6 +13,7 @@ const NOT_YET := "Not in the Godot version yet: the value is kept in the tune (t
 
 const GROUPS := [
 	["Tyres", [
+		["wheels_mode", "Wheels", "", 0, 0, 0],
 		["compound", "Tyre compound", "", 0, 0, 0],
 		["tyre_damage", "Tyre damage", "", 0, 0, 0],
 		["rim_front", "Rim at the front (the wheel library)", "", 0, 0, 0],
@@ -391,6 +392,7 @@ const SELECTS := {
 	"gearbox": [["gears", "Manual (a clutch pedal)"], ["imt", "Manual with an automatic clutch (IMT)"], ["amt", "Automated manual (AMT)"],
 		["dct", "Dual clutch (DCT)"], ["torque-converter", "Automatic with a torque converter"], ["cvt", "CVT (continuously variable)"]],
 	"diff": [["open", "Open"], ["lsd", "Limited slip"], ["welded", "Welded (locked)"]],
+	"wheels_mode": [["default", "Dynamic wheels"], ["model", "Wheels from model"]],
 	"compound": [["eco", "Eco (hard, lasts)"], ["road", "Road"], ["sport", "Sport"], ["semislick", "Semi-slick"], ["slick", "Slick (race)"],
 		["winter", "Winter (soft, cold)"], ["offroad", "Off-road (knobbly)"], ["drag", "Drag slick (straight line)"]],
 	"center_diff": [["open", "Open"], ["lsd", "Limited slip"], ["locked", "Locked"]],
@@ -457,7 +459,7 @@ const MAP := {
 	"anti_dive": ["chassis.anti_dive", 0.01, 0.0], "anti_lift_rear": ["chassis.anti_lift_rear", 0.01, 0.0], "anti_squat": ["chassis.anti_squat", 0.01, 0.0],
 	"anti_lift_front": ["chassis.anti_lift_front", 0.01, 0.0], "toe_front": ["chassis.toe_front", 1.0, 0.0], "toe_rear": ["chassis.toe_rear", 1.0, 0.0],
 	"camber_front": ["chassis.camber_front", 1.0, 0.0], "camber_rear": ["chassis.camber_rear", 1.0, 0.0], "roll_camber": ["chassis.roll_camber", 0.01, 0.6],
-	"compound": ["tyres.compound", 0, "road"],
+	"compound": ["tyres.compound", 0, "road"], "wheels_mode": ["wheels.mode", 0, "default"],
 	"rim_front": ["wheels.library.front.rim", 0, ""], "tyre_front": ["wheels.library.front.tyre", 0, ""],
 	"rim_rear": ["wheels.library.rear.rim", 0, ""], "tyre_rear": ["wheels.library.rear.tyre", 0, ""],
 	"tyre_diameter_front": ["wheels.library.front.custom.diameter", 0.001, null], "tyre_diameter_rear": ["wheels.library.rear.custom.diameter", 0.001, null],
@@ -635,6 +637,8 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 		return str(read(cfg, "wheels.library.%s.tyre" % axle)) == "custom" and read(cfg, "wheels.library.%s.custom.rubber" % axle) != null
 	v["compound_used"] = not (custom_rubber.call("front") and custom_rubber.call("rear"))
 	v["model_wheels"] = "on" if str(read(cfg, "wheels.mode")) == "model" else "off"
+	var parts: Variant = read(cfg, "wheels.nodes")
+	v["wheel_parts"] = "all" if parts is Dictionary and ["FL", "FR", "RL", "RR"].all(func(s: String) -> bool: return (parts as Dictionary).get(s) is Array and not (parts[s] as Array).is_empty()) else "some"
 	v["model_tyres"] = "on" if lib.get("front", {}).get("model", false) or lib.get("rear", {}).get("model", false) else "off"
 	var compound := str(v.get("compound", "road"))
 	for axle in ["front", "rear"]:
@@ -766,8 +770,8 @@ static func set_value(cfg: Dictionary, key: String, value: Variant, cam := {}) -
 				var m: Array = MAP[key]
 				var factor := float(m[1])
 				write(cfg, m[0], float(value) * factor if factor != 0.0 and (value is float or value is int) else value)
-				if (key.begins_with("tread_") or key.begins_with("rubber_")) and v.get("model_wheels") == "on":
-					# (a tyre of the model that gets a rubber or a tread: the grip follows them, as a custom tyre)
+				if (key.begins_with("tread_") or key.begins_with("rubber_")) and str(v.get("tyre_" + key.substr(key.find("_") + 1), "")) == "":
+					# (a tyre that gets a rubber or a tread: the grip follows them, as a custom tyre)
 					var ax := key.substr(key.find("_") + 1)
 					write(cfg, "wheels.library.%s.custom.rubber" % ax, float(value) if key.begins_with("rubber_") else float(v["rubber_" + ax]))
 					write(cfg, "wheels.library.%s.custom.tread" % ax, float(value) if key.begins_with("tread_") else float(v["tread_" + ax]))
@@ -815,8 +819,7 @@ static func use_transmission(cfg: Dictionary, p: Dictionary) -> void:
 static func custom_tyre(v: Dictionary, axle: String) -> bool:
 	var t := str(v.get("tyre_" + axle, ""))
 	var bike: bool = v.get("vehicle_type") == "motorcycle"
-	return t == "custom" or (t == "" and not bike and (str(v.get("rim_" + axle, "")) != "" or v.get("model_tyres") == "on" or v.get("model_wheels") == "on")) \
-		or (t == "" and bike and v.get("model_tyres") == "on")
+	return t == "custom" or (t == "" and not bike) or (t == "" and bike and v.get("model_tyres") == "on")
 
 
 static func library_tyre(v: Dictionary, axle: String) -> bool:
@@ -839,6 +842,8 @@ static func visible(key: String, v: Dictionary) -> bool:
 	var own_front: bool = library_tyre(v, "front") or str(v.get("tyre_front", "")) == "custom"
 	var own_rear: bool = library_tyre(v, "rear") or str(v.get("tyre_rear", "")) == "custom"
 	match key:
+		"wheels_mode":
+			return not bike and v.get("wheel_parts") == "all"
 		"compound":
 			return v.get("compound_used", true)
 		"cam_follow_dolly":
@@ -886,7 +891,7 @@ static func visible(key: String, v: Dictionary) -> bool:
 		"tyre_front", "tyre_rear":
 			var axle := key.substr(5)
 			var t := str(v.get(key, ""))
-			return (str(v.get("rim_" + axle, "")) != "" and v.get("model_tyres") != "on") if bike else (t != "" and t != "custom" and v.get("model_wheels") != "on")
+			return (str(v.get("rim_" + axle, "")) != "" and v.get("model_tyres") != "on") if bike else v.get("model_wheels") != "on"
 		"tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_rim_offset_front", "rubber_front", "tread_front":
 			return custom_tyre(v, "front")
 		"tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "tyre_rim_offset_rear", "rubber_rear", "tread_rear":
