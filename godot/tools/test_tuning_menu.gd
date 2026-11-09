@@ -73,6 +73,19 @@ func _run() -> void:
 	menu._change("suspension_travel", was_travel)
 	menu._change("suspension_length", was_length)
 	await get_tree().process_frame
+	# ---- the search field: only the rows with the word, and their cards are open
+	menu._search.text_changed.emit("rebound")
+	var found := 0
+	for c in menu._controls:
+		if (c["item"] as Control).visible:
+			found += 1
+	_check(found == 1, "the search finds one setting for a word (%d)" % found)
+	menu._search.text_changed.emit("")
+	found = 0
+	for c in menu._controls:
+		if (c["item"] as Control).visible:
+			found += 1
+	_check(found > 30, "and with an empty field all are back (%d)" % found)
 	# ---- the rings and the nodes of a custom tyre (the hatchback has one of one ring)
 	_check(Tuning.visible("tyre_rings", menu.values) and Tuning.visible("tyre_segments", menu.values), "a custom tyre shows its rings and nodes")
 	var rings_was: Variant = menu.values.get("tyre_rings")

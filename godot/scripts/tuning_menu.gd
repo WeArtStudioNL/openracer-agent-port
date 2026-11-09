@@ -29,6 +29,8 @@ var world: Node
 var car: Car
 var base: Dictionary = {}           # the car as car.json makes it
 var values := {}                    # the values of the car as it is now, in the units of the menu
+var _search: LineEdit
+var _filter := ""                   # what is typed in the search field: only the rows with it are shown, and their cards are open
 var _checks: VBoxContainer          # the warnings about the numbers (TuningChecks)
 var _reference := {}                # the setup that is chosen (or the car as made): a value that differs is orange, ↺ goes back to it
 var _controls: Array = []
@@ -141,6 +143,14 @@ func _ready() -> void:
 	_message = _label("", 13, ACCENT2)
 	body.add_child(_message)
 	body.add_child(_setup_line())
+	_search = LineEdit.new()
+	_search.placeholder_text = "Find a setting…"
+	_search.clear_button_enabled = true
+	_search.text_changed.connect(func(t: String):
+		_filter = t.strip_edges().to_lower()
+		_refresh())
+	_search.text_submitted.connect(func(_t: String): _search.release_focus())
+	body.add_child(_search)
 	for card in Tuning.CARDS:
 		_card(body, card)
 	_refresh()
@@ -255,7 +265,7 @@ func _section(parent: Control, title: String, id: String, card: bool, open := fa
 		content.visible = not content.visible
 		opened[id] = content.visible
 		shown.call())
-	_sections.append([wrap, content])
+	_sections.append([wrap, content, id, open, shown])
 	return content
 
 
@@ -423,7 +433,7 @@ func _select_row(parent: Control, key: String, text: String) -> void:
 	pick.focus_mode = Control.FOCUS_NONE
 	pick.fit_to_longest_item = false
 	pick.clip_text = true
-	pick.custom_minimum_size.x = 170
+	pick.custom_minimum_size.x = 240
 	for o in _options(key):
 		pick.add_item(o[1])
 		pick.set_item_metadata(pick.item_count - 1, o[0])
@@ -1050,6 +1060,8 @@ func _refresh() -> void:
 		var key: String = c["key"]
 		var item: Control = c["item"]
 		item.visible = Tuning.visible_feature(c["feature"], values) if c["kind"] == "feature" else Tuning.visible(key, values)
+		if _filter != "" and item.visible and not (c["label"] as Label).text.to_lower().contains(_filter):
+			item.visible = false
 		var v: Variant = values.get(key)
 		var changed := not _same(v, _reference.get(key))
 		match c["kind"]:
@@ -1097,6 +1109,8 @@ func _refresh() -> void:
 	# a group whose settings are all hidden goes too, and so does a card with nothing left in it
 	for i in range(_sections.size() - 1, -1, -1):
 		var content: Control = _sections[i][1]
+		content.visible = true if _filter != "" else bool(opened.get(_sections[i][2], _sections[i][3]))
+		(_sections[i][4] as Callable).call()
 		var any := false
 		for ch in content.get_children():
 			if ch is Control and (ch as Control).visible:

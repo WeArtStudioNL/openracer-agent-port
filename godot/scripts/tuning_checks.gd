@@ -25,6 +25,7 @@ static func all(cfg: Dictionary) -> Array:
 		_suspension(cfg, out)
 		_track(cfg, out)
 	_wheel_parts(cfg, out)
+	_rims(cfg, out)
 	_shifting(cfg, out)
 	if not bike:
 		_wheelie(cfg, out)
@@ -76,6 +77,17 @@ static func _track(cfg: Dictionary, out: Array) -> void:
 		out.append({"id": "track_apart", "keys": [],
 			"text": "The track is %.2f m at the front and %.2f m at the rear: a wheel is probably measured wrong (look at the parts of the wheels)." % [front, rear],
 			"short": "", "fix": {}, "fix_text": ""})
+
+
+## A rim much narrower than its tyre: the bead has nothing to sit on.
+static func _rims(cfg: Dictionary, out: Array) -> void:
+	for axle in ["front", "rear"]:
+		var width := _n(cfg, "wheels.library.%s.custom.width" % axle, 0.0)
+		var offset := _n(cfg, "wheels.library.%s.custom.rim_offset" % axle, 0.0) / 1000.0
+		if width > 0.0 and width + 2.0 * offset < 0.6 * width:
+			out.append({"id": "narrow_rim_" + axle, "keys": ["tyre_rim_offset_" + axle],
+				"text": "The %s rim is %d mm wide on a tyre of %d mm: a rim that narrow leaves the tyre with nothing to sit on." % [axle, roundi((width + 2.0 * offset) * 1000.0), roundi(width * 1000.0)],
+				"short": "narrow for this tyre", "fix": {"wheels.library.%s.custom.rim_offset" % axle: 0.0}, "fix_text": "Rim as wide as the tyre"})
 
 
 ## Parts in the list of a wheel without its corner in their name, beside parts that have it: spare tyres of the model that were taken for that wheel.
