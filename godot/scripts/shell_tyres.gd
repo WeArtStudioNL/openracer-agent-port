@@ -210,6 +210,10 @@ func _configure() -> void:
 		var w := car.wheels[i]
 		var sh := shell_of(w)
 		var p := maxf(minf(0.15, w.pressure), w.pressure - w.pressure_loss)
+		# (the gas law: the pressure is set for a tyre at its best temperature; colder it is lower, hotter higher. The air follows the rubber for a good part)
+		var air := 25.0 + 0.6 * (w.temp - 25.0)
+		var air_best := 25.0 + 0.6 * (float(w.kind.get("optimum", 85.0)) - 25.0)
+		p = maxf(minf(0.15, w.pressure), (p + 1.013) * (air + 273.0) / (air_best + 273.0) - 1.013)
 		var size_corner := pow(clampf(float(sh["width"]) / 0.245, 0.5, 2.0), 0.35) if sh["sized"] and float(sh["width"]) > 0.0 else 1.0
 		var static_load := car.mass * (car.weight_front if w.front else 1.0 - car.weight_front) / 2.0 * Car.G
 		if not car.unsprung and car.bike == null:

@@ -479,7 +479,9 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 	// ---- the constants of the beams from the pressure and the stiffness
 	double Pa = std::max(0.15, pressure) * 1e5, An = (2 * M_PI * R / segs) * (width / rings), pA = Pa * An;
 	double softness = carcass > 0 ? std::max(0.003, carcass / 1000) : std::max(0.003, softShare * staticLoad / std::max(1e4, verticalStiffness));
-	double kr = pA / softness;
+	// (the air, and what the carcass carries by itself, about 34 N/mm for a whole tyre: without air it does not fold flat at once. Shared by the nodes of a patch.)
+	double patchNodes = rings * std::max(1.0, 0.27 / (2 * M_PI * R / segs));
+	double kr = pA / softness + 34000.0 / patchNodes;
 	double spacing = 2 * M_PI * R / segs, nominal = std::max(4.0, rings * 0.19 / spacing);
 	double Kt = torsion > 0 ? torsion * 1000 / (R * R) : 3 * stiffX * staticLoad / 0.095, Ky = 3 * stiffY * staticLoad / 0.095;
 	double inertia = wheelInertia != 0 ? wheelInertia : 1.6;
