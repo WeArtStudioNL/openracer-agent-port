@@ -239,6 +239,8 @@ var esc_brake := [0.0, 0.0, 0.0, 0.0]   # the brake torque of the stability cont
 var esc_cut := 0.0              # the power that it takes off
 var _box: CollisionShape3D
 var _hulls: Array[CollisionShape3D] = []     # the convex shapes of the body that the model brings (objects collision..., CarCollision)
+var speedometer: Node = null     # the digital speedometer on an object of the model (car_speedometer.gd)
+var in_cockpit := false          # the camera is the one in the cockpit (ChaseCamera)
 var tyres_of_model: Variant = null   # the tyres of the model for the tread and the size that are chosen (CarTyres), or null
 var collision: Variant = null    # the balls on the suspension (CarCollision), or null
 var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
@@ -275,6 +277,24 @@ func setup(id: String, cfg: Dictionary) -> void:
 	_make_shell()
 	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
 		parts = CarParts.new(self)
+
+
+## The speedometer that a model has in its dashboard: an object speedometer.
+func _add_speedometer(body: Node3D) -> void:
+	if body == null or is_ghost:
+		return
+	var S: GDScript = load("res://scripts/car_speedometer.gd")
+	var mi: MeshInstance3D = S.find(body)
+	if mi == null:
+		return
+	speedometer = S.new()
+	add_child(speedometer)
+	speedometer.setup(self, mi)
+
+
+## The driver reads the speed in the dashboard: the HUD does not need to show it.
+func reads_dashboard() -> bool:
+	return in_cockpit and is_instance_valid(speedometer) and speedometer.enabled()
 
 
 ## The objects "collision..." of the model: the convex shapes of the body in the place of the box, the balls on the parts that move.
@@ -689,6 +709,9 @@ func _diameters(cfg: Dictionary) -> Array[float]:
 
 func _build_visual() -> void:
 	tyres_of_model = null
+	if is_instance_valid(speedometer):
+		speedometer.queue_free()
+	speedometer = null
 	var m: Dictionary = config.get("model", {})
 	var wcfg: Dictionary = config.get("wheels", {})
 	var nodes: Dictionary = wcfg.get("nodes", {})
@@ -778,6 +801,7 @@ func _build_visual() -> void:
 		_library_wheel(w, lib.get("front" if w.front else "rear", {}))
 	if tyres_of_model != null:
 		tyres_of_model.apply(config)
+	_add_speedometer(body)
 	if bike != null:
 		bike_model = MotorcycleModel.new(self, body)
 	else:

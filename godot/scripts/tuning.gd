@@ -163,6 +163,9 @@ const GROUPS := [
 		["tc_lockup", "Torque converter: lock-up clutch", "", 0, 0, 0],
 		["engine_place", "Engine placement (the driveline)", "", 0, 0, 0],
 	]],
+	["Cockpit", [
+		["cockpit_speedometer", "Show speedometer (drawn on the object speedometer of the model; in the cockpit the HUD gauge is hidden)", "", 0, 0, 0],
+	]],
 	["Cameras", [
 		["cam_follow_distance", "Follow camera: distance", "m", 1, 20, 0.1],
 		["cam_follow_height", "Follow camera: height", "m", 0, 10, 0.05],
@@ -337,6 +340,7 @@ const CARDS := [
 	["Engine", ["Fuel", "Engine"]],
 	["Engine sound", ["Engine sound"]],
 	["Assists and extras", []],
+	["Cockpit", ["Cockpit"]],
 	["Cameras", ["Cameras"]],
 	["Soft body", ["Soft body"]],
 	["Motorcycle", ["Motorcycle"]],
@@ -492,7 +496,7 @@ const MAP := {
 	"cam_follow_fov_fast": ["cameras.follow.fov_fast", 1.0, null], "cam_follow_fov_full_speed": ["cameras.follow.fov_full_speed", 1.0, 70.0],
 	"cam_follow_dolly": ["cameras.follow.dolly", 1.0, 1.0], "cam_follow_distance_fast": ["cameras.follow.distance_fast", 1.0, 0.0], "cam_follow_height_fast": ["cameras.follow.height_fast", 1.0, 0.0],
 	"cam_bonnet_fov": ["cameras.bonnet.fov", 1.0, 72.0], "cam_cockpit_fov": ["cameras.cockpit.fov", 1.0, null],
-	"cam_cockpit_hide_driver": ["cameras.cockpit.hide_driver", 0, false],
+	"cam_cockpit_hide_driver": ["cameras.cockpit.hide_driver", 0, false], "cockpit_speedometer": ["cockpit.show_speedometer", 0, false],
 	"sb_max_nodes": ["softbody.max_nodes", 1.0, 90.0], "sb_anchor_yield": ["softbody.anchor.yield_force", 1000.0, 80000.0],
 	"sb_anchor_break": ["softbody.anchor.break_force", 1000.0, 250000.0], "sb_beam_yield": ["softbody.beam.yield_force", 1000.0, 40000.0],
 	"sb_beam_break": ["softbody.beam.break_force", 1000.0, 120000.0], "sb_hardening": ["softbody.hardening", 0.01, 0.2],

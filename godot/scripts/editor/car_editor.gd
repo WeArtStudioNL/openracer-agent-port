@@ -241,6 +241,7 @@ func _build_cards() -> void:
 	engine.build_engine_card()
 	engine.build_sound_card()
 	add_card("Assists and extras")
+	add_card("Cockpit")
 	form.build_cameras_card()
 	for hook_name in ["Soft body", "Driver"]:
 		_hook_card(hook_name)

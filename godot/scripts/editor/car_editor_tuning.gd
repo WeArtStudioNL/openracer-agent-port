@@ -19,7 +19,7 @@ const EDITOR_HAS := ["mass", "front_weight", "cg_height", "drag_coefficient", "m
 ## The card each group of the table goes into.
 const HOMES := {"Chassis": "Chassis", "Brakes": "Brakes", "Aerodynamics": "Aerodynamics", "Steering": "Steering", "Tyres": "Wheels", "Paint": "Materials",
 	"Springs and dampers": "Suspension", "Ride height and travel": "Suspension", "Wheel alignment": "Suspension", "Suspension geometry": "Suspension", "Suspension parts": "Suspension",
-	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Engine sound": "Engine sound"}
+	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Engine sound": "Engine sound", "Cockpit": "Cockpit"}
 const PAINT := ["body", "rim"]
 const TYRE_KEYS := ["tyre_section_front", "tyre_section_rear", "tyre_aspect_front", "tyre_aspect_rear", "tyre_rim_front", "tyre_rim_rear", "tyre_rim_offset_front", "tyre_rim_offset_rear", "tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
 	"tyre_width", "tyre_width_rear", "tyre_inner_ratio", "tyre_rings", "tyre_segments", "tyre_carcass"]
@@ -506,17 +506,18 @@ func _row(parent: Control, d: Array) -> void:
 		item.set_meta("tyre_key", true)
 	if Tuning.SELECTS.has(key) or float(d[4]) <= float(d[3]):
 		var items: Array = Tuning.SELECTS.get(key, [])
-		if key == "tyre_damage":
+		if key == "tyre_damage" or key == "cockpit_speedometer":
 			var tick := CheckBox.new()
 			tick.text = ""
 			tick.focus_mode = Control.FOCUS_NONE
 			tick.toggled.connect(func(on: bool):
 				if not _refreshing:
-					_change(key, "on" if on else "off"))
+					_change(key, on if key == "cockpit_speedometer" else ("on" if on else "off")))
 			line.add_child(tick)
 			entry["kind"] = "tick"
 			entry["check"] = tick
-			label.text = "Tyre damage (a hard hit can puncture a tyre)"
+			if key == "tyre_damage":
+				label.text = "Tyre damage (a hard hit can puncture a tyre)"
 		else:
 			var pick := EditorStyle.options(items)
 			pick.custom_minimum_size.x = 170
@@ -691,7 +692,7 @@ func refresh() -> void:
 			"select":
 				EditorStyle.select_value(r["pick"], value if value != null else "")
 			"tick":
-				(r["check"] as CheckBox).set_pressed_no_signal(value == "on")
+				(r["check"] as CheckBox).set_pressed_no_signal(str(value) in ["on", "true"])
 			"color":
 				(r["pick"] as ColorPickerButton).color = Color(str(value)) if value is String and str(value) != "" else Color(0.53, 0.53, 0.53)
 	for f in _features:

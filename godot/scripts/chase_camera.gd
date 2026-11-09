@@ -160,6 +160,7 @@ func _process(delta: float) -> void:
 	var xf := car.get_global_transform_interpolated()
 	var spd := absf(car.speed)
 	CarDriver.camera_inside(car, mode == Mode.COCKPIT)
+	car.in_cockpit = mode == Mode.COCKPIT and current
 	if _crash_view(delta):
 		return
 	match mode:

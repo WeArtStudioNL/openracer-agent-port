@@ -409,7 +409,7 @@ func _process(delta: float) -> void:
 	if car == null:
 		return
 	var on := bool(Settings.get_value("hud"))
-	gauge.visible = on
+	gauge.visible = on and not car.reads_dashboard()
 	_lap_panel.visible = on
 	_hint.visible = on
 	_place_gauges()
