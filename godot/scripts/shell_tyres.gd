@@ -235,7 +235,7 @@ func _configure() -> void:
 			# (with three rings or more the outer ones lie on the shoulder; with two there is no middle ring to carry the tyre, so they stay at the full radius)
 			# (a motorcycle: a round crown, ring by ring, from TyreShell.build)
 			"shoulder": SHOULDER * tread_width if rings >= 3.0 and car.bike == null else 0.0,
-			"segments": maxf(float(sh["segments"]), 36.0) if car.bike != null else (minf(float(sh["segments"]), 12.0) if lighter and detail == "low" else float(sh["segments"])),       # (a motorcycle: its patch is short, with fewer nodes the load hops from node to node)
+			"segments": minf(float(sh["segments"]), 12.0) if lighter and detail == "low" else float(sh["segments"]),
 			"width": minf(float(sh["width"]), MAX_BIKE_WIDTH) if car.bike != null and float(sh["width"]) > 0.0 else sh["width"],
 			"stiff_x": float(ty.get("stiff_x", 20.0)),
 			"stiff_y": float(ty.get("stiff_y", 18.0)) * car.cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner * size_corner,

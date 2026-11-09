@@ -27,6 +27,7 @@ const CRASH_DEFAULTS := {
 	"lowside": {"on": true, "slip": 25.0, "lean": 25.0, "time": 2.0},
 	"spin": {"on": true, "rate": 4.0},
 	"over": {"on": true},
+	"rider": {"on": true},
 	"blow": {"on": true, "g": 7.0},
 	"hit": {"on": true, "loss": 8.0},
 	"wall": {"on": true, "kmh": 20.0},
@@ -874,14 +875,27 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	dbg_values = {"lean": absf(lean) / DEG, "slide": absf(beta) / DEG, "slide_time": slide_time, "spin": yaw, "g": _accel.length() / G, "lost": lost_now, "wall": impact * 3.6, "kN": dbg_force / 1000.0, "kmh": v.length() * 3.6}
 	var leaned: bool = absf(lean) > 0.7 if limp else (r["lean"]["on"] and absf(lean) > lean_limit)
 	var still := limp and absf(u) < 0.5
-	if leaned or still or over or lowside or spin or blow or hit or wall:
+	var rider_down: bool = r["rider"]["on"] and not limp and state != null and (absf(lean) > 25.0 * DEG or car.global_transform.basis.y.y < 0.8) and _rider_on_ground(car, state)
+	if leaned or still or over or lowside or spin or blow or hit or wall or rider_down:
 		crashed = true
-		crash_reason = "lean" if leaned else ("limp-still" if still else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow
+		crash_reason = ("limp-lean" if limp else "lean") if leaned else ("rider" if rider_down else "limp-still" if still else ("over" if over else ("lowside" if lowside else ("spin" if spin else ("blow" if blow
 			else ("wall" if wall else "hit"))))))
 		RunLog.event("motorcycle %s down (%s) at %.0f km/h, lean %.0f deg" % [car.name, crash_reason, v.length() * 3.6, lean / DEG])
 		var limits := {"lean": rad_to_deg(lean_limit), "lowside": float(low["time"]), "spin": float(r["spin"]["rate"]), "blow": float(r["blow"]["g"]), "hit": loss, "wall": float(r["wall"]["kmh"])}
 		_note_crash(limits.get(crash_reason, -1.0))
 		_crash_speed = vo if hit else v
+
+
+## The head, the chest, the hips or a shoulder of the rider touch the ground (a knee or a foot may).
+func _rider_on_ground(car: Car, state: PhysicsDirectBodyState3D) -> bool:
+	if car.bike_model == null or car.bike_model.rider == null:
+		return false
+	for point: Array in car.bike_model.rider.body_points():
+		var at: Vector3 = point[0]
+		var ask := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.6, at - Vector3.UP * float(point[1]), 1, [car.get_rid()])
+		if not state.get_space_state().intersect_ray(ask).is_empty():
+			return true
+	return false
 
 
 ## What the crash panel shows of the last crash: its rule and what the bike measured at that moment (kept after a reset).

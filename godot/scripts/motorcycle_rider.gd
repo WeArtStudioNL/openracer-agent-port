@@ -217,6 +217,21 @@ func _complete() -> bool:
 
 
 ## The rider can be thrown off as a ragdoll.
+## The head, the chest, the hips and the shoulders where they are now (world) and how far the body goes round them: [[point, radius], ...]. None for a ragdoll.
+func body_points() -> Array:
+	var out := []
+	if skel == null or ragdoll != null:
+		return out
+	var to_world := car.global_transform * CarModel.relative(skel, car)
+	for part: Array in [["head", 0.13], ["chest", 0.16], ["hips", 0.14]]:
+		if bones.has(part[0]):
+			out.append([to_world * BoneIK.global(skel, bones[part[0]]).origin, part[1]])
+	for arm in ["armL", "armR"]:
+		if bones.has(arm):
+			out.append([to_world * BoneIK.global(skel, bones[arm][0]).origin, 0.22])     # (with the arm and the bars round it: the first of him that a bike on its side has on the road)
+	return out
+
+
 func can_ragdoll() -> bool:
 	return skel != null and _complete() and bones.has("hips")
 

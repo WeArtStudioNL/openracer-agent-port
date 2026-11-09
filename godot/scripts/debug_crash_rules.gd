@@ -13,6 +13,7 @@ const ROWS := [
 	["lowside", "Lowside: for", "time", 0.2, 8.0, 0.1, "s"],
 	["spin", "Spin faster than", "rate", 1.0, 20.0, 0.5, "rad/s"],
 	["over", "On its back", null, 0.0, 0.0, 0.0, ""],
+	["rider", "The head, the chest, the hips or a shoulder of the rider touch the ground", null, 0.0, 0.0, 0.0, ""],
 	["blow", "A blow of more than", "g", 2.0, 40.0, 0.5, "g"],
 	["hit", "Speed lost in 0.1 s more than", "loss", 2.0, 40.0, 0.5, "m/s"],
 	["wall", "The body hits something faster than", "kmh", 5.0, 150.0, 1.0, "km/h"],
@@ -21,11 +22,11 @@ const ROWS := [
 const FEEL_ROWS := [["amount", "Rider gives with the g-forces", 0.0, 3.0, 0.05, ""], ["hz", "Comes back at", 0.3, 4.0, 0.05, "Hz"],
 	["damping", "Damping", 0.05, 1.5, 0.05, ""]]
 ## The name of each rule on its tick (the panel is narrow: the limits have the long text).
-const TICKS := {"lean": "Lean", "lowside": "Lowside", "spin": "Spin", "over": "On its back", "blow": "Blow", "hit": "Hit",
+const TICKS := {"lean": "Lean", "lowside": "Lowside", "spin": "Spin", "over": "On its back", "rider": "Rider on the ground", "blow": "Blow", "hit": "Hit",
 	"wall": "Wall", "force": "Only hard hits"}
 const MUTED := Color(0.62, 0.69, 0.77)
 ## The rule of a crash in words, and the unit of its limit.
-const NAMES := {"lean": "Lean", "lowside": "Lowside", "spin": "Spin", "over": "On its back", "blow": "Blow", "hit": "Hit", "wall": "Wall", "limp-still": "Limp rider stopped", "limp-off": "Rider off (limp)"}
+const NAMES := {"lean": "Lean", "lowside": "Lowside", "spin": "Spin", "over": "On its back", "blow": "Blow", "hit": "Hit", "wall": "Wall", "rider": "Rider on the ground", "limp-lean": "Limp rider tipped it over", "limp-still": "Limp rider stopped", "limp-off": "Rider off (limp)"}
 const UNITS := {"lean": "°", "lowside": "s", "spin": "rad/s", "blow": "g", "hit": "m/s", "wall": "km/h"}
 
 var world: Node
