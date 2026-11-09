@@ -29,6 +29,7 @@ var world: Node
 var car: Car
 var base: Dictionary = {}           # the car as car.json makes it
 var values := {}                    # the values of the car as it is now, in the units of the menu
+var _checks: VBoxContainer          # the warnings about the numbers (TuningChecks)
 var _reference := {}                # the setup that is chosen (or the car as made): a value that differs is orange, ↺ goes back to it
 var _controls: Array = []
 var _sections: Array = []           # [the section, its content] of the cards and the groups, outer first
@@ -124,6 +125,9 @@ func _ready() -> void:
 	var sub := _label("%s. Change the car while you drive (in a race the game waits while this menu is open). U shows or hides this menu. "
 		% car.config.get("name", car.car_id) + "The tuning of this car is kept as a setup (Save, Save as new…); Default is car.json.", 12, MUTED)
 	body.add_child(sub)
+	_checks = VBoxContainer.new()
+	_checks.add_theme_constant_override("separation", 4)
+	body.add_child(_checks)
 	var info_box := PanelContainer.new()
 	var ib := _box(BG2, 5, 0)
 	ib.content_margin_left = 8
@@ -1027,8 +1031,19 @@ func _differs(ref: Dictionary) -> bool:
 	return false
 
 
+func _fix_check(e: Dictionary) -> void:
+	var cfg := car.config.duplicate(true)
+	for path: String in e["fix"]:
+		Tuning.write(cfg, path, e["fix"][path])
+	_apply(cfg, "fix " + str(e["id"]))
+
+
 func _refresh() -> void:
 	_refreshing = true
+	var warnings := TuningChecks.all(car.config)
+	var check_notes := TuningChecks.notes_of(warnings)
+	if _checks != null:
+		TuningChecks.show_in(_checks, warnings, EditorStyle.WARN, _fix_check, func(t: String): return _button(t))
 	if _gear_grid != null and _gear_boxes.size() != int(values.get("gear_count", 0)):
 		_build_gear_grid()
 	for c in _controls:
@@ -1039,6 +1054,7 @@ func _refresh() -> void:
 		var changed := not _same(v, _reference.get(key))
 		match c["kind"]:
 			"slider":
+				TuningChecks.note(item, str(check_notes.get(key, "")), EditorStyle.WARN)
 				var d: Array = c["def"]
 				var slider: HSlider = c["slider"]
 				var x := float(v) if v != null else 0.0

@@ -68,6 +68,7 @@ var delete_button: Button
 var save_drive_button: Button
 var summary_label: Label
 var wheelie_label: Label
+var checks_box: VBoxContainer       # the warnings about the numbers (TuningChecks)
 var existing_pick: OptionButton
 var save_where: OptionButton
 var tuning_bar_parent: VBoxContainer
@@ -226,6 +227,9 @@ func _build_cards() -> void:
 	tuning_bar_parent.add_child(summary_label)
 	wheelie_label = EditorStyle.hint("", EditorStyle.WARN)
 	tuning_bar_parent.add_child(wheelie_label)
+	checks_box = VBoxContainer.new()
+	checks_box.add_theme_constant_override("separation", 4)
+	tuning_bar_parent.add_child(checks_box)
 	form.build_car_card()
 	form.build_model_card()
 	form.build_wheels_card()
@@ -966,6 +970,7 @@ func update_summary() -> void:
 	summary_label.text = " · ".join(parts)
 	wheelie_label.text = io.wheelie_text() if is_bike() else ""
 	wheelie_label.visible = wheelie_label.text != ""
+	tuning.show_checks()
 
 
 # ---- saving

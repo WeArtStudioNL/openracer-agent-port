@@ -48,6 +48,30 @@ func _run() -> void:
 	var car := world.car
 	world.open_tuning()
 	var menu: TuningMenu = world.tuning_layer.get_child(0)
+	# the warnings about the numbers: more travel than the spring has room for shows under the row and over the menu, its button cures it
+	var was_travel: Variant = menu.values.get("suspension_travel")
+	var was_length: Variant = menu.values.get("suspension_length")
+	_check(menu._checks.get_child_count() == 0, "no warning for the hatchback as made")
+	menu._change("suspension_travel", 60.0)
+	_check(menu._checks.get_child_count() == 1 and menu._checks.visible, "a travel the spring has no room for is warned about")
+	var warned: Button = null
+	for n in menu._checks.get_child(0).get_children():
+		if n is Button:
+			warned = n
+	var row_note := ""
+	for c in menu._controls:
+		if c["key"] == "suspension_travel":
+			var note: Label = c["item"].get_node_or_null("CheckNote")
+			row_note = note.text if note != null else ""
+	_check(row_note.contains("can be used"), "the row of the travel says so too")
+	_check(warned != null, "the warning has a button")
+	if warned != null:
+		warned.pressed.emit()
+		_check(is_equal_approx(float(car.config["chassis"]["suspension_length"]), 0.65), "the button gives the spring the room")
+		await get_tree().process_frame
+		_check(menu._checks.get_child_count() == 0, "and the warning is gone")
+	menu._change("suspension_travel", was_travel)
+	menu._change("suspension_length", was_length)
 	await get_tree().process_frame
 	# ---- the Engine card
 	var eng: TuningEngine = menu._engine

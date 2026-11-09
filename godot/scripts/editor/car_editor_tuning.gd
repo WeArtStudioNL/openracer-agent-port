@@ -667,6 +667,35 @@ func _change(key: String, value: Variant) -> void:
 	ed.changed()
 
 
+## The warnings about the numbers (TuningChecks): over the cards, and a word under the rows they are about.
+func show_checks() -> void:
+	if ed.checks_box == null:
+		return
+	var c := ed.cfg.duplicate(true)
+	Tuning.write(c, "wheels.nodes", ed.wheel_parts)
+	var list := TuningChecks.all(c)
+	TuningChecks.show_in(ed.checks_box, list, EditorStyle.WARN, _fix_check, func(t: String): return EditorStyle.button(t, "small ghost"))
+	var notes := TuningChecks.notes_of(list)
+	for r in _rows:
+		if is_instance_valid(r["item"]) and r["kind"] == "slider":
+			TuningChecks.note(r["item"], str(notes.get(r["key"], "")), EditorStyle.WARN)
+
+
+func _fix_check(e: Dictionary) -> void:
+	for path: String in e["fix"]:
+		Tuning.write(ed.cfg, path, e["fix"][path])
+	if (e["fix"] as Dictionary).has("wheels.nodes"):
+		var nodes: Dictionary = e["fix"]["wheels.nodes"]
+		for s in CarEditor.SLOTS:
+			ed.wheel_parts[s] = (nodes.get(s, []) as Array).duplicate()
+		ed.form._select_lists()
+		ed.update_helpers()
+	ed.refresh_fields()
+	refresh()
+	ed.changed()
+	ed.status(str(e["fix_text"]), "ok")
+
+
 ## Every row shows the car; a setting that cannot do anything with the others is hidden (Tuning.visible).
 func refresh() -> void:
 	_refreshing = true
