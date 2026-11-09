@@ -698,6 +698,11 @@ func _moved() -> void:
 		return
 	var c := driver.cfg
 	var t: Node3D = _node_of(selected)
+	if _moved_on_bike(t):
+		_refresh_keys()
+		_sync_fields()
+		_changed(false)
+		return
 	if TORSO.has(selected) and driver.keys_any():
 		driver.set_torso_key(selected, steer, BoneIK.euler_deg(t.basis))
 	elif HAND_SIDE.has(selected) and driver.keys_active():
@@ -725,6 +730,17 @@ func _moved() -> void:
 	_refresh_keys()
 	_sync_fields()
 	_changed(false)
+
+
+## A motorcycle: a hand or a foot is where it is from its grip or its peg (the offset that the game uses). The turn goes in as on a car.
+func _moved_on_bike(t: Node3D) -> bool:
+	if not ed.is_bike() or mode != "move" or not (HAND_SIDE.has(selected) or selected == "footL" or selected == "footR") or not _find_bike_parts():
+		return false
+	var hand := HAND_SIDE.has(selected)
+	var side: String = HAND_SIDE[selected] if hand else ("left" if selected == "footL" else "right")
+	var part: Node3D = _bike_parts[("grip_" if hand else "peg_") + side]
+	driver.cfg["hands" if hand else "feet"]["offset"][side] = BoneIK.arr(CarModel.relative(part, body).affine_inverse() * t.position)
+	return true
 
 
 func _sync_targets() -> void:
@@ -1001,15 +1017,27 @@ func _pose_on_bike() -> void:
 	for e in [[left_arm, "left", 1.0], ["armR" if left_arm == "armL" else "armL", "right", -1.0]]:
 		var chain: Array = driver.bones[e[0]]
 		var target: Vector3 = CarModel.relative(_bike_parts["grip_" + e[1]], body) * BoneIK.vec(hand_off.get(e[1], [0, 0, 0]))
-		BoneIK.solve(skel, chain, to_skel * target, to_skel * (driver._body_pos(chain[0]) + Vector3(float(e[2]) * 0.45, -0.25, -0.35)))
+		BoneIK.solve(skel, chain, to_skel * target, to_skel * driver._pole(e[0], driver._body_pos(chain[0]) + Vector3(float(e[2]) * 0.45, -0.25, -0.35)))
+		_marker_at("handL" if e[1] == "left" else "handR", target, hand_turn.get(e[1], [0, 0, 0]))
 		var hand := to_body.basis.orthonormalized() * BoneIK.global(skel, chain[2]).basis.orthonormalized()
 		BoneIK.set_global_basis(skel, chain[2], rot * (BoneIK.euler(BoneIK.vec(hand_turn.get(e[1], [0, 0, 0]))) * hand))
 	var feet: Dictionary = cfg.get("feet", {}) if cfg.get("feet") is Dictionary else {}
 	var foot_off: Dictionary = feet.get("offset", {}) if feet.get("offset") is Dictionary else {}
+	var foot_turn: Dictionary = feet.get("rotation", {}) if feet.get("rotation") is Dictionary else {}
 	for e in [[left_leg, "left", 1.0], ["legR" if left_leg == "legL" else "legL", "right", -1.0]]:
 		var chain: Array = driver.bones[e[0]]
 		var target: Vector3 = CarModel.relative(_bike_parts["peg_" + e[1]], body) * BoneIK.vec(foot_off.get(e[1], [0, 0, 0]))
-		BoneIK.solve(skel, chain, to_skel * target, to_skel * (driver._body_pos(chain[0]) + Vector3(float(e[2]) * 0.3, 0.1, 0.8)))
+		BoneIK.solve(skel, chain, to_skel * target, to_skel * driver._pole(e[0], driver._body_pos(chain[0]) + Vector3(float(e[2]) * 0.3, 0.1, 0.8)))
+		var foot := to_body.basis.orthonormalized() * BoneIK.global(skel, chain[2]).basis.orthonormalized()
+		BoneIK.set_global_basis(skel, chain[2], rot * (BoneIK.euler(BoneIK.vec(foot_turn.get(e[1], [0, 0, 0]))) * foot))
+		_marker_at("footL" if e[1] == "left" else "footR", target, foot_turn.get(e[1], [0, 0, 0]))
+
+
+## A ball of a hand or a foot stands where that hand or foot is (not while it is being dragged).
+func _marker_at(key: String, at: Vector3, turn: Variant) -> void:
+	if ed.view.gizmo.dragging and selected == key:
+		return
+	(targets[key] as Node3D).transform = Transform3D(BoneIK.euler(BoneIK.vec(turn)), at)
 
 
 ## The grips and the pegs of the model (grip_L/R, footpeg_L/R), looked for once per model; false when one is missing.

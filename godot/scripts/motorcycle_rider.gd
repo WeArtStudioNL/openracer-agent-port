@@ -727,7 +727,8 @@ func update(dt: float, bike: Motorcycle) -> void:
 		if road != null and tw.y < float(road) + FOOT_ANKLE:
 			tw.y = float(road) + FOOT_ANKLE
 			target = car_xf.affine_inverse() * tw
-		var pole := _car_pos(chain[0]) + Vector3(float(e[2]) * 0.3, 0.1, 0.8)
+		var given: Variant = cfg["poles"].get(e[0]) if cfg.get("poles") is Dictionary else null
+		var pole := BoneIK.vec(given) if given is Array else _car_pos(chain[0]) + Vector3(float(e[2]) * 0.3, 0.1, 0.8)
 		var knee := float(p["knee"])
 		if knee > 0.01:
 			var inside := float(p["inside"]) * float(e[2]) > 0.0
@@ -735,6 +736,10 @@ func update(dt: float, bike: Motorcycle) -> void:
 			if inside:
 				pole.y -= float(st["knee_down"]) * knee
 		BoneIK.solve(skel, chain, to_skel * target, to_skel * pole)
+		var foot_turns: Dictionary = feet.get("rotation", {}) if feet.get("rotation") is Dictionary else {}
+		if foot_turns.has(e[1]):
+			var foot := to_car.basis.orthonormalized() * BoneIK.global(skel, chain[2]).basis.orthonormalized()
+			BoneIK.set_global_basis(skel, chain[2], rot * (BoneIK.euler(BoneIK.vec(foot_turns[e[1]])) * foot))
 
 
 ## The road under a point (the world height of the ground, a ray down from a metre above it), smoothed and held per
@@ -755,8 +760,9 @@ func _road_under(key: String, at: Vector3) -> Variant:
 
 ## The pole of an elbow (the space of the car): out, down and back from the shoulder; flat track: the inside elbow
 ## goes up and out.
-func _arm_pole(chain: Array, _key: String, side: float, p: Dictionary) -> Vector3:
-	var pole := _car_pos(chain[0]) + Vector3(side * 0.45, -0.25, -0.35)
+func _arm_pole(chain: Array, key: String, side: float, p: Dictionary) -> Vector3:
+	var given: Variant = cfg["poles"].get(key) if cfg.get("poles") is Dictionary else null
+	var pole := BoneIK.vec(given) if given is Array else _car_pos(chain[0]) + Vector3(side * 0.45, -0.25, -0.35)
 	if float(p["push"]) > 0.01 and float(p["inside"]) * side > 0.0:
 		pole += Vector3(side * 0.2, 0.35, 0.0) * float(p["push"])
 	return pole
