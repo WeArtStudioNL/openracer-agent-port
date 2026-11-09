@@ -101,7 +101,7 @@ public:
 	double setRings = 3, setSegments = 36, setWidth = 0;
 	double stiffX = 20, stiffY = 18, stribeck = 8, tolerance = 0.004;
 	double verticalStiffness = 220000, verticalDamping = 3000, staticLoad = 3000, pressure = 2.2, innerRatio = 0.62, carcass = 0, tyreMass = 0;
-	double roadStiffness = 4, roadDamping = 0.6, theta = 0.6, maxSubstep = 0.00022, maxSubsteps = 14, beamDamping = 0.3;
+	double roadStiffness = 4, roadDamping = 0.05, theta = 0.6, maxSubstep = 0.00022, maxSubsteps = 14, beamDamping = 0.3;
 	bool beltTwoSided = false, lockedSpin = false, round = false, implicit = false;
 	double wheelRadius = 0.33, wheelInertia = 1.6;
 

@@ -478,7 +478,11 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 	double R = radius, mn = std::max(0.01, (tyreMass > 0 ? tyreMass : 8) / N);
 	// ---- the constants of the beams from the pressure and the stiffness
 	double Pa = std::max(0.15, pressure) * 1e5, An = (2 * M_PI * R / segs) * (width / rings), pA = Pa * An;
-	double softness = carcass > 0 ? std::max(0.003, carcass / 1000) : std::max(0.003, softShare * staticLoad / std::max(1e4, verticalStiffness));
+	// (how far a node goes in before the air alone holds it. From the vertical rate of the tyre: the nodes under the wheel, with what their neighbours on the belt add, are that rate in
+	// series with nothing else. With the softness of the load alone a coarse tyre was five times too stiff: 3 mm at 10 kN, the whole landing in one frame)
+	double nodesUnder = rings * std::max(1.0, 0.27 / (2 * M_PI * R / segs));
+	double fromRate = pA * nodesUnder * (1 + 2 * beltMul) / std::max(1e4, verticalStiffness);
+	double softness = carcass > 0 ? std::max(0.003, carcass / 1000) : std::max(0.003, std::min(0.6 * R * (1 - std::max(0.3, std::min(0.9, innerRatio))), std::max(fromRate, softShare * staticLoad / std::max(1e4, verticalStiffness))));
 	// (the air, and what the carcass carries by itself, about 34 N/mm for a whole tyre: without air it does not fold flat at once. Shared by the nodes of a patch.)
 	double patchNodes = rings * std::max(1.0, 0.27 / (2 * M_PI * R / segs));
 	double kr = pA / softness + 34000.0 / patchNodes;
