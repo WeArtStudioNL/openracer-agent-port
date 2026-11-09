@@ -6,7 +6,7 @@ extends RefCounted
 ## keeps the box.
 ##
 ## Parented to a part that moves (susp_lowerarm_FL, susp_upright_FL, steer_tierod_FL, coilover_cylinder_FL, wheel_FL ...): a ball that goes
-## with that part, its radius the size of the object (an empty: 5 cm times its scale). A ball meets the walls of the track
+## with that part, its radius the size of the object (an empty: 5 cm times its scale). A ball meets the road and the walls of the track
 ## (WallGrid, what the nodes of the shell meet) and gives the blow to the body at that point. It does not bend anything: the damage of
 ## the wheels stays the business of the shell (WheelRig).
 
@@ -16,6 +16,7 @@ const CONTACT_MASS := 150.0         # kg that a ball moves, for its damper
 const CONTACT_DAMPING := 0.6
 const FRICTION := 0.5
 const MAX_FORCE := 300000.0         # N of one ball
+const GROUND_K := 400000.0          # N/m of a ball on the road: many balls carry the car together
 const REFRESH := 0.25               # m that the car moves before the walls near each ball are looked up again
 const MARGIN := 0.35                # m round a ball: the walls it can touch before they are looked up again
 
@@ -23,6 +24,8 @@ var car: Node
 var balls: Array[Dictionary] = []   # { node, r, near (triangles), at }
 var walls: WallGrid = null
 var _floor := -0.2
+var _ray: PhysicsRayQueryParameters3D = null
+var contacts := 0                   # balls that have touched the road (the tests)
 var step_usec := 0                  # how long the last step took (the tests)
 
 
@@ -140,7 +143,32 @@ func step(state: PhysicsDirectBodyState3D) -> void:
 				total -= tv / tl * minf(FRICTION * fn, tl * CONTACT_MASS / state.step)
 		if total != Vector3.ZERO:
 			state.apply_force(total.limit_length(MAX_FORCE), p - xf.origin)
+		_on_the_ground(state, p, r, vel)
 	step_usec = Time.get_ticks_usec() - t0
+
+
+## A ball on the road (the road is no wall: it is found with a ray straight down).
+func _on_the_ground(state: PhysicsDirectBodyState3D, p: Vector3, r: float, vel: Vector3) -> void:
+	if _ray == null:
+		_ray = PhysicsRayQueryParameters3D.create(p, p, 1, [(car as RigidBody3D).get_rid()])
+	_ray.from = p + Vector3.UP * r
+	_ray.to = p + Vector3.DOWN * r * 1.2
+	var hit := state.get_space_state().intersect_ray(_ray)
+	if hit.is_empty():
+		return
+	var n: Vector3 = hit["normal"]
+	var depth := r - (p - (hit["position"] as Vector3)).dot(n)
+	if n.y < 0.5 or depth <= 0.0:
+		return
+	var vn := vel.dot(n)
+	var fn := maxf(0.0, GROUND_K * depth - 2.0 * CONTACT_DAMPING * sqrt(GROUND_K * CONTACT_MASS) * vn)
+	var tv := vel - n * vn
+	var tl := tv.length()
+	var f := n * fn
+	if tl > 1e-6:
+		f -= tv / tl * minf(FRICTION * fn, tl * CONTACT_MASS / state.step)
+	state.apply_force(f.limit_length(MAX_FORCE), p - state.transform.origin)
+	contacts += 1
 
 
 func _grid() -> WallGrid:

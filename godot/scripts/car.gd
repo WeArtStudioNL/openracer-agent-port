@@ -606,7 +606,7 @@ func _read_config() -> void:
 		if fresh:
 			w.temp = float(w.kind.get("optimum", 85))
 		w.pressure = pressure
-		set_pressure(w, maxf(0.15, pressure - w.pressure_loss))
+		set_pressure(w, maxf(minf(0.15, pressure), pressure - w.pressure_loss))
 		if fresh:
 			wheels.append(w)
 	for i in 4:

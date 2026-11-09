@@ -207,7 +207,7 @@ func _configure() -> void:
 	for i in 4:
 		var w := car.wheels[i]
 		var sh := shell_of(w)
-		var p := maxf(0.15, w.pressure - w.pressure_loss)
+		var p := maxf(minf(0.15, w.pressure), w.pressure - w.pressure_loss)
 		var size_corner := pow(clampf(float(sh["width"]) / 0.245, 0.5, 2.0), 0.35) if sh["sized"] and float(sh["width"]) > 0.0 else 1.0
 		var static_load := car.mass * (car.weight_front if w.front else 1.0 - car.weight_front) / 2.0 * Car.G
 		(tyres[i] as Object).call("configure", {
@@ -277,6 +277,11 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 		# ---- the tyres find the road (Vehicle.js: the shell of every wheel)
 		for i in 4:
 			var w := car.wheels[i]
+			if w.lost:                  # (a wheel that is off stands on nothing)
+				touched[i] = false
+				tyre_load[i] = 0.0
+				tyre_torque[i] = 0.0
+				continue
 			w.steer = angles[i] + w.toe_bend
 			var r_top := basis * (w.hub + Vector3.UP * car.susp_length)
 			var top := origin + v * t + r_top + rot.cross(r_top)
@@ -409,6 +414,10 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 		comp[i] = car.susp_length - car.wheels[i].length
 	for i in 4:
 		var w := car.wheels[i]
+		if w.lost:                      # (no wheel: the arms stay where they are at rest, the car goes down on them)
+			w.length = car.susp_length - w.offset
+			sus_vel[i] = 0.0
+			continue
 		var fs := 0.0
 		if car.unsprung:
 			w.length = car.susp_length - w.offset
