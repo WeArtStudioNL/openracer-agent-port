@@ -150,7 +150,7 @@ static func _hidden_name(raw: String) -> bool:
 	for ch in nm:
 		if ch >= "a" and ch <= "z":
 			letters += ch
-	return letters in ["beams", "beam", "softbodybeams", "shellbeams", "softbodybeam", "shellbeam"]
+	return letters.begins_with("collision") or letters in ["beams", "beam", "softbodybeams", "shellbeams", "softbodybeam", "shellbeam"]
 
 
 ## An object of the model that is not part of the car's shape: the drawing of the shell ("beams") and the broken

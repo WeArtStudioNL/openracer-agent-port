@@ -236,6 +236,8 @@ var bike_model: MotorcycleModel = null
 var esc_brake := [0.0, 0.0, 0.0, 0.0]   # the brake torque of the stability control on each wheel
 var esc_cut := 0.0              # the power that it takes off
 var _box: CollisionShape3D
+var _hulls: Array[CollisionShape3D] = []     # the convex shapes of the body that the model brings (objects collision..., CarCollision)
+var collision: Variant = null    # the balls on the suspension (CarCollision), or null
 var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
 var _box_shell := Vector3.ZERO  # and inside what the nodes can be crushed to
 var _axle_fy := [0.0, 0.0]      # the side force of each axle in the last step (the geometric load transfer)
@@ -266,9 +268,36 @@ func setup(id: String, cfg: Dictionary) -> void:
 	collision_mask = 1 | Track.SCENERY_LAYER       # (the road and the scenery of the track, Track)
 	_box = col
 	_build_visual()
+	_use_model_collision()
 	_make_shell()
 	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
 		parts = CarParts.new(self)
+
+
+## The objects "collision..." of the model: the convex shapes of the body in the place of the box, the balls on the parts that move.
+func _use_model_collision() -> void:
+	for h in _hulls:
+		h.queue_free()
+	_hulls.clear()
+	_box.disabled = false
+	collision = null
+	if model_root == null or is_ghost or bike != null:
+		return
+	var CC: GDScript = load("res://scripts/car_collision.gd")
+	var found: Dictionary = CC.read_model(self, self)
+	for points: PackedVector3Array in found["hulls"]:
+		var shape := ConvexPolygonShape3D.new()
+		shape.points = points
+		var col := CollisionShape3D.new()
+		col.name = "collision-hull"
+		col.shape = shape
+		add_child(col)
+		_hulls.append(col)
+	if not _hulls.is_empty():
+		_box.disabled = true
+	collision = CC.make(self, found["moving"])
+	if not _hulls.is_empty() or collision != null:
+		RunLog.event("collision of the model %s: %d convex shapes, %d balls" % [car_id, _hulls.size(), (found["moving"] as Array).size()])
 
 
 ## The shell that dents (SoftBody, CarShell), with damage on (Settings) and unless car.json says
@@ -349,6 +378,7 @@ func rebuild(cfg: Dictionary) -> bool:
 	_read_config()
 	engine.omega = rpm_omega
 	_build_visual()
+	_use_model_collision()
 	_make_shell()
 	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
 		parts = CarParts.new(self)
@@ -963,6 +993,9 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 				add_child.call_deferred(fumes)
 		engine_damage.update(dt)
 	_traction_control(dt)
+
+	if collision != null:
+		collision.step(state)
 
 	# ---- the air: the drag, and the downforce (or lift) of each axle along the up axis of the body, at the axle
 	var vv := v.length()

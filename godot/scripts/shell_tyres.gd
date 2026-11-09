@@ -67,7 +67,8 @@ func _init(c: Car) -> void:
 
 
 ## The triangles of the ground for the tyres: the collision shapes of the static bodies that the wheels drive on
-## (layer 1: the road of the track, the curbs, the floor of the bench), made again when a shape comes or goes.
+## (layer 1: the road of the track, the curbs, the floor of the bench), and the steep faces of the scenery: the tyre meets a wall with its
+## own nodes. Made again when a shape comes or goes.
 static func ground(tree: SceneTree) -> Object:
 	if not _watching:
 		_watching = true
@@ -82,13 +83,28 @@ static func ground(tree: SceneTree) -> Object:
 		for n in tree.root.find_children("*", "CollisionShape3D", true, false):
 			var col := n as CollisionShape3D
 			var body := col.get_parent() as StaticBody3D
-			if body == null or col.disabled or col.shape == null or (body.collision_layer & 1) == 0 or not col.is_inside_tree():
+			if body == null or col.disabled or col.shape == null or (body.collision_layer & (1 | Track.SCENERY_LAYER)) == 0 or not col.is_inside_tree():
 				continue
 			var faces := _faces_of(col.shape)
+			var wall := (body.collision_layer & 1) == 0
+			if wall:
+				faces = _steep(faces, col.global_transform)
 			if not faces.is_empty():
-				_ground.call("add_faces", faces, col.global_transform, str(body.get_meta("surface", "road")))
+				_ground.call("add_faces", faces, col.global_transform, "road" if wall else str(body.get_meta("surface", "road")))
 		RunLog.event("the ground of the shell tyres: %d triangles in %d ms" % [int(_ground.call("get_count")), Time.get_ticks_msec() - t0])
 	return _ground
+
+
+## The faces of a shape that a tyre meets as a wall.
+static func _steep(faces: PackedVector3Array, xf: Transform3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for i in range(0, faces.size() - 2, 3):
+		var n := (xf.basis * faces[i + 1] - xf.basis * faces[i]).cross(xf.basis * faces[i + 2] - xf.basis * faces[i])
+		if n.length_squared() > 1e-12 and absf(n.normalized().y) < 0.7:
+			out.append(faces[i])
+			out.append(faces[i + 1])
+			out.append(faces[i + 2])
+	return out
 
 
 static func _node_changed(n: Node) -> void:

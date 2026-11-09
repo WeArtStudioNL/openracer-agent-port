@@ -181,7 +181,7 @@ func _tip_of(node: Node3D, origin: Vector3) -> Variant:
 		list.append(node)
 	for m in list:
 		var mi := m as MeshInstance3D
-		if mi.mesh == null:
+		if mi.mesh == null or not mi.visible:
 			continue
 		var xf := CarModel.relative(mi, car)
 		for si in mi.mesh.get_surface_count():
@@ -208,6 +208,8 @@ func _inner_parts(node: Node3D, axis: Vector3, rest_length: float) -> Array:
 	for c in node.find_children("*", "Node3D", true, false):
 		var child := c as Node3D
 		var n := clean(str(child.name))
+		if n.begins_with("collision"):
+			continue
 		var kind := "piston" if piston_re.search(n) != null else ("coil" if coil_re.search(n) != null else "")
 		if kind == "":
 			continue
@@ -344,7 +346,7 @@ func _long_axis(node: Node3D) -> Dictionary:
 	var out := {}
 	for m in list:
 		var mi := m as MeshInstance3D
-		if mi.mesh == null:
+		if mi.mesh == null or not mi.visible:
 			continue
 		var box := mi.mesh.get_aabb()
 		var xf := CarModel.relative(mi, car)
@@ -385,6 +387,8 @@ func _attach_calipers(roots: Array[Node3D]) -> void:
 		list.append_array(r.find_children("*", "Node3D", true, false))
 	for n in list:
 		var c := stem(str(n.name))
+		if c.begins_with("collision"):
+			continue
 		var wheel: int = CORNERS.get(c.right(2), -1)
 		var joint := _re("^ball(lowerarm|upperarm|tierod|toelink(?!mount))").search(c) != null        # (a ball joint is bolted to the upright: it goes with it, not with its arm)
 		var mount := c.begins_with("balltierodmount")                                 # (but this one is on the rack, at the inner end of the rod)
