@@ -321,9 +321,11 @@ func _run_script(dt: float) -> void:
 			if t > 0.8:
 				sc["start_z"] = _along()
 				car.gear = -1
+				car.reverse_on_brake = true       # (this test drives back with the brake pedal)
 				_next("back", "a metre back")
 		"back":
 			car.gear = -1
+			car.reverse_on_brake = true       # (this test drives back with the brake pedal)
 			var d := float(sc["start_z"]) - _along()
 			if d < 0.45:
 				car.brake_input = minf(0.2, t * 0.2)      # (the brake pedal drives in reverse)

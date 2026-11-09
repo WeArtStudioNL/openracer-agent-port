@@ -179,6 +179,7 @@ var cvt_low := 3.0              # the ratios of a CVT (the first and the last of
 var cvt_high := 1.0
 var cvt_rate := 1.8             # the ratio changes by at most e^rate a second
 var shift_duration := 0.3       # the shift that is going on takes this long
+var reverse_on_brake := false   # reverse came from holding the brake (the automatic, the AI): the brake pedal drives it
 var shift_up := false           # the shift that is going on is an upshift
 var last_gear_key := -99
 var limiter_time := 0.0
@@ -871,10 +872,12 @@ func _fit_box() -> void:
 
 
 func _controls(dt: float) -> void:
-	# reverse: hold the brake at a standstill to put it in reverse; then the brake drives and the throttle brakes
+	# reverse that came from holding the brake at a standstill: the brake drives and the throttle brakes. R that was chosen: the throttle drives
 	var t := throttle_input
 	var b := brake_input
-	if gear < 0:
+	if gear >= 0:
+		reverse_on_brake = false
+	if gear < 0 and reverse_on_brake:
 		t = brake_input
 		b = throttle_input
 	if bike != null:
@@ -890,8 +893,9 @@ func _controls(dt: float) -> void:
 			reverse_hold += dt
 			if reverse_hold > 0.35:
 				gear = -1
+				reverse_on_brake = true
 				reverse_hold = 0.0
-		elif gear < 0 and absf(speed) < 0.6 and throttle_input > 0.3 and brake_input < 0.1:
+		elif gear < 0 and reverse_on_brake and absf(speed) < 0.6 and throttle_input > 0.3 and brake_input < 0.1:
 			gear = 1
 		else:
 			reverse_hold = 0.0

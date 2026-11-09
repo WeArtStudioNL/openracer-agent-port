@@ -294,6 +294,7 @@ func _recover(dt: float, v: float, cap: float, xf: Transform3D, in_pits: bool) -
 	if _reverse_for > 0.0:
 		_reverse_for -= dt
 		car.gear = -1
+		car.reverse_on_brake = true
 		car.throttle_input = 0.0
 		car.brake_input = 0.6               # (in reverse the brake pedal drives: Car._controls)
 		car.steer_input = -_reverse_steer
