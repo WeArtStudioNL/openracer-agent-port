@@ -460,6 +460,11 @@ func num(path: String, fallback := 0.0) -> float:
 
 
 ## A change of the car: Save lights up, the ready check and the summary follow, and a step of undo is kept.
+var preview_tyres: Variant = null    # the tyres of the model in the view (CarTyres), or null
+var _tyres_seen := ""
+var _tyres_for := ""
+
+
 func changed(step := true) -> void:
 	set_dirty(true)
 	bench.form_changed()
@@ -853,6 +858,48 @@ func wheel_mode() -> String:
 	return "default" if library_only() else wheel_radio
 
 
+## The tyres and the rims of the model in the view as the settings have them (CarTyres, as in the game), when the wheels are of the model. Made again for a new model or other wheel parts.
+func _tyres_follow_the_sliders() -> void:
+	if bench.car != null:
+		return
+	var seen := str(cfg.get("wheels")) + wheel_mode() + str(model_root.get_instance_id() if model_root != null else 0) + str(wheel_parts)
+	if seen == _tyres_seen:
+		return
+	_tyres_seen = seen
+	var parts_key := str(model_root.get_instance_id() if model_root != null else 0) + str(wheel_parts)
+	if model_root == null or wheel_mode() != "model":
+		_tyres_back()
+		return
+	if preview_tyres == null or parts_key != _tyres_for:
+		_tyres_back()
+		_tyres_for = parts_key
+		preview_tyres = load("res://scripts/car_tyres.gd").new()
+		preview_tyres.collect(model_root)
+		for s: String in SLOTS:
+			if is_bike() and s[1] == "R":       # (a motorcycle: the one wheel of an end is FL and RL)
+				continue
+			var parts := wheel_part_nodes(s)
+			var choice := CarModel.rim_variants(model_root, s)
+			for list: Array in choice.values():
+				for n: Node3D in list:
+					if not parts.has(n):
+						parts.append(n)
+			if not parts.is_empty():
+				preview_tyres.add_wheel(s, parts, model_root, 0.0, choice)
+		Tuning.model_rims = preview_tyres.rim_names()
+	preview_tyres.apply(cfg)
+
+
+## The tyres of the model as it was made again.
+func _tyres_back() -> void:
+	if preview_tyres != null:
+		for s: String in preview_tyres.wheels:
+			var w: Dictionary = preview_tyres.wheels[s]
+			if is_instance_valid(w["tyre"]):
+				w["tyre"].mesh = w["orig"]
+	preview_tyres = null
+
+
 ## The middle of a wheel where the Chassis card puts it (Dynamic wheels).
 func form_hub(slot: String) -> Vector3:
 	var front := slot[0] == "F"
@@ -1224,6 +1271,7 @@ func _process(delta: float) -> void:
 		_tick = 0.0
 		update_summary()
 		refresh_ready()
+	_tyres_follow_the_sliders()
 	layers.frame()
 	layers.flames_frame(delta)
 	engine.frame(delta)
