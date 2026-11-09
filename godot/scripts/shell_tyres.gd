@@ -451,7 +451,8 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 				sus_vel[i] = minf(0.0, float(sus_vel[i]))
 		w.comp_rate = -float(sus_vel[i])
 		var r_top := basis * (w.hub + Vector3.UP * car.susp_length)
-		var push := fs + unsprung_mass * g_down
+		# (on the ground the weight of the wheel goes through the tyre; a wheel in the air falls with the car and pushes on nothing)
+		var push := fs + unsprung_mass * (g_down if touched[i] else g_down - _acc_down)
 		var fsv := up * push
 		if rest_hold > 0.0 and w.contact:
 			fsv += (w.normal * up.dot(w.normal) * push - fsv) * rest_hold
