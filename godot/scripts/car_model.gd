@@ -206,6 +206,10 @@ static func library_rim(rim_id: String, diameter: float, width: float) -> Node3D
 	var across := maxf(size.x, maxf(size.y, size.z))
 	if across > 0.0:
 		turn.scale = Vector3.ONE * (diameter / across)
+		# (as wide as asked, along its axle: the round of the rim keeps its size)
+		var axle := 0 if size.x <= size.y and size.x <= size.z else (1 if size.y <= size.z else 2)
+		if size[axle] > 1e-5:
+			turn.scale[axle] = width / size[axle]
 	return holder
 
 

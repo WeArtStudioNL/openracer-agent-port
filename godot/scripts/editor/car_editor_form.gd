@@ -558,7 +558,7 @@ func update_library_preview() -> void:
 		tyre.mesh = CarModel.tyre_mesh(dia / 2.0, dia / 2.0 * inner, width)
 		holder.add_child(tyre)
 		if str(a.get("rim", "")) != "":
-			var rim := CarModel.library_rim(str(a["rim"]), dia * inner * 1.02, width)
+			var rim := CarModel.library_rim(str(a["rim"]), dia * inner * 1.02, maxf(0.02, width + 2.0 * float(Tuning.read(a, "custom.rim_offset") if Tuning.read(a, "custom.rim_offset") != null else 0.0) / 1000.0))
 			if s[1] != "L":
 				rim.rotation.y = PI
 			holder.add_child(rim)
