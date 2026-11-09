@@ -43,6 +43,7 @@ const ACTIONS := [
 	["start_engine", "Start the engine", "Other"], ["telemetry", "Telemetry", "Other"], ["mute", "Engine sound on/off", "Other"],
 	["calibrate", "Calibrate the wheel", "Other"], ["wheel_toggle", "Wheel on/off", "Other"],
 	["debug_view", "Debug view: what the physics sees", "Other"], ["debug_models", "Debug view: hide the car", "Other"],
+	["free_cam", "Free camera on/off (off: back to the camera you had)", "Other"],
 	["free_cam_aim", "Free camera: look at the car or not", "Other"],
 	["free_cam_follow", "Free camera: move with the car or stay here", "Other"],
 	["take", "Take: start a recording, and stop it (then: save it as a replay or a video)", "Other"],
@@ -51,10 +52,10 @@ const ACTIONS := [
 
 ## The keys of the browser game (Settings.js), and Esc for the pause, F8 for a mark in the log, Home back to the start.
 const KEYS := {
-	"throttle": [KEY_W, KEY_UP],
-	"brake": [KEY_S, KEY_DOWN],
-	"steer_left": [KEY_A, KEY_LEFT],
-	"steer_right": [KEY_D, KEY_RIGHT],
+	"throttle": [KEY_UP],
+	"brake": [KEY_DOWN],
+	"steer_left": [KEY_LEFT],
+	"steer_right": [KEY_RIGHT],
 	"handbrake": [KEY_SPACE],
 	"parking_brake": [KEY_P],
 	"reverse": [KEY_PERIOD],
@@ -89,6 +90,7 @@ const KEYS := {
 	"wheel_toggle": [KEY_M],
 	"debug_view": [KEY_0, KEY_KP_0],
 	"debug_models": [KEY_MINUS, KEY_KP_SUBTRACT],
+	"free_cam": [KEY_BACKSLASH],
 	"free_cam_aim": [KEY_P],
 	"free_cam_follow": [KEY_O],
 	"take": [KEY_5],
@@ -163,10 +165,26 @@ func _ready() -> void:
 				if not taken:
 					kept.append(b)
 			_bindings[a[0]] = kept
+	_drop_wasd()
 	Input.joy_connection_changed.connect(func(_d: int, _c: bool): rebind())
 	# the menus with a gamepad (PadNav.js): A chooses, B goes back, in every menu from the start
 	SettingsMenu.pad_ui()
 	rebind()
+
+
+## Once: W A S D no longer drive the car (the arrows do), also when they were saved with the controls of the player.
+func _drop_wasd() -> void:
+	if Settings.get_value("wasd_dropped"):
+		return
+	var old := {"throttle": KEY_W, "brake": KEY_S, "steer_left": KEY_A, "steer_right": KEY_D}
+	var saved: Variant = Settings.get_value("controls")
+	for action: String in old:
+		_bindings[action] = (_bindings[action] as Array).filter(func(b: Dictionary) -> bool: return not (b.get("type") == "key" and int(b.get("code", 0)) == int(old[action])))
+		if saved is Dictionary and saved.has(action):
+			saved[action] = _bindings[action]
+	if saved is Dictionary and not saved.is_empty():
+		Settings.set_value("controls", saved)
+	Settings.set_value("wasd_dropped", true)
 
 
 ## The bindings as the game comes.

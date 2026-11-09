@@ -4,7 +4,7 @@ extends RefCounted
 ## Display and sound, Mobile (with the touch controls), Graphics, Simulation, Tools. (Controls: SettingsControlsPage.)
 
 const R := preload("res://scripts/settings_rows.gd")
-const CAMERAS := [[0, "Follow (smooth, FOV with speed)"], [1, "Cockpit"], [2, "Bonnet"], [3, "Free camera"]]
+const CAMERAS := [[0, "Follow (smooth, FOV with speed)"], [1, "Cockpit"], [2, "Bonnet"]]
 
 var menu: SettingsMenu
 var world: Node = null              # the drive behind the menu, or null in the main menu

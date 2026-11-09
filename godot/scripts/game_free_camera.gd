@@ -1,15 +1,14 @@
 class_name GameFreeCamera
 extends Camera3D
-## The fourth camera of the game (web/js/FreeCam.js; the camera switcher C: follow, cockpit, bonnet, free). It is not
-## tied to the car: W A S D move it (W the way it looks, also up and down with the look), Space and Z up, Alt and X
+## The free camera of the game (web/js/FreeCam.js), on its own key. It starts fixed to the car where the camera of the moment is, and off
+## goes back to that camera. It is not tied to the car: W A S D move it (W the way it looks, also up and down with the look), Space and Z up, Alt and X
 ## down, the mouse looks around (click the scene: the pointer is caught, Escape lets it go), Q and E roll the picture,
 ## 3 and 4 slower and faster (a hundredth to three times), 7 and 8 the smoothing of the mouse look, [ and ] the field
 ## of view. These keys do not drive the car while this camera is on (they are taken from the controls); the arrows
 ## still do. P looks at the car (it keeps its place and turns to the car), O goes with the car (its place against the
 ## car, its own direction), I fixes it to the car as a part of it (its place and turn go with the car; the keys move
 ## it in the frame of the car). Fixed or moving with the car it does not go through a wall: rays from the car to it
-## bring it in front of what is in the way. The camera is remembered per car (VideoPrefs, freecam/<car>): its place,
-## its look, the field of view, the speed, the smoothing and the toggles; the next time it is back where it was.
+## bring it in front of what is in the way. Remembered per car (VideoPrefs, freecam/<car>): only its speed and smoothing, not its place.
 ## The panel at the top right (with the HUD) has the toggles, a slider for every setting and Record (Take).
 
 signal left_camera
@@ -76,19 +75,17 @@ func enter(from: Camera3D, c: Car) -> void:
 	vel = Vector3.ZERO
 	_last_car = c.global_position
 	_place_behind = false
-	if not _restore(c.global_position):
-		pos = from.global_position + Vector3.UP * 10.0
-		var e := from.global_transform.basis.get_euler()
-		yaw = e.y
-		pitch = e.x
-		roll = 0.0
-		roll_t = 0.0
-		fov_now = from.fov
-		_place_behind = from.global_position.distance_to(c.global_position) > 60.0
-		if _place_behind:
-			_fix_when_placed = true
-		else:
-			_set_fixed(true)
+	_restore()
+	pos = from.global_position
+	var e := from.global_transform.basis.get_euler()
+	yaw = e.y
+	pitch = e.x
+	roll = e.z
+	roll_t = e.z
+	fov_now = from.fov
+	follow = false
+	aim = false
+	_set_fixed(true)
 	_take_keys()
 	make_current()
 	_panel.visible = _hud_on()
@@ -328,31 +325,18 @@ func _keep_in_view(cp: Vector3, world: Vector3, delta: float) -> Vector3:
 func _save() -> void:
 	if car == null:
 		return
-	VideoPrefs.set_value("freecam", car.car_id, {"pos": pos, "yaw": yaw, "pitch": pitch, "roll": roll, "fov": fov_now, "speed": speed, "look": look_rate,
-		"move": move_smooth, "roll_rate": roll_rate, "roll_smooth": roll_smooth, "follow": follow, "aim": aim, "fixed": fixed, "car": _last_car})
+	VideoPrefs.set_value("freecam", car.car_id, {"speed": speed, "look": look_rate, "move": move_smooth, "roll_rate": roll_rate, "roll_smooth": roll_smooth})
 
 
-func _restore(car_pos: Vector3) -> bool:
+func _restore() -> void:
 	var s: Variant = VideoPrefs.get_value("freecam", car.car_id, {})
-	if not (s is Dictionary) or not (s.get("pos") is Vector3):
-		return false
-	pos = s["pos"]
-	if s.get("follow", false) and s.get("car") is Vector3:
-		pos += car_pos - (s["car"] as Vector3)
-	yaw = float(s.get("yaw", 0.0))
-	pitch = float(s.get("pitch", 0.0))
-	roll = float(s.get("roll", 0.0))
-	roll_t = roll
-	fov_now = float(s.get("fov", 60.0))
-	speed = clampf(float(s.get("speed", 1.0)), 0.01, 3.0)
-	look_rate = clampf(float(s.get("look", 20.0)), LOOK_RANGE[0], LOOK_RANGE[1])
-	move_smooth = clampf(float(s.get("move", 6.0)), MOVE_RANGE[0], MOVE_RANGE[1])
-	roll_rate = clampf(float(s.get("roll_rate", 0.9)), ROLL_RANGE[0], ROLL_RANGE[1])
-	roll_smooth = clampf(float(s.get("roll_smooth", 8.0)), TILT_RANGE[0], TILT_RANGE[1])
-	follow = bool(s.get("follow", false))
-	aim = bool(s.get("aim", true))
-	fixed = bool(s.get("fixed", false))
-	return true
+	if not (s is Dictionary):
+		return
+	speed = clampf(float(s.get("speed", speed)), 0.01, 3.0)
+	look_rate = clampf(float(s.get("look", look_rate)), LOOK_RANGE[0], LOOK_RANGE[1])
+	move_smooth = clampf(float(s.get("move", move_smooth)), MOVE_RANGE[0], MOVE_RANGE[1])
+	roll_rate = clampf(float(s.get("roll_rate", roll_rate)), ROLL_RANGE[0], ROLL_RANGE[1])
+	roll_smooth = clampf(float(s.get("roll_smooth", roll_smooth)), TILT_RANGE[0], TILT_RANGE[1])
 
 
 # ---- the panel

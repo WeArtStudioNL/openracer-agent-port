@@ -18,7 +18,7 @@ var line: RacingLine
 var ai: AIDriver = null
 var race: Race = null
 var replay: Replay = null
-var free_cam: GameFreeCamera = null    # the fourth camera (C: follow, cockpit, bonnet, free)
+var free_cam: GameFreeCamera = null    # the free camera, on its own key (the action free_cam)
 var take: Take = null                  # the 5 key (Take)
 var recorder: LineRecorder = null      # the racing line is recorded for the track editor (options record_line)
 var options := {}
@@ -303,10 +303,9 @@ func _ready() -> void:
 	RunLog.car = car
 	RunLog.on_mark = hud.toast
 	WheelInput.calibration_text.connect(hud.calibration)
-	camera.mode = mini(int(Settings.get_value("camera")), 2) as ChaseCamera.Mode
+	var first_camera := int(Settings.get_value("camera"))
+	camera.mode = (first_camera if first_camera <= 2 else 0) as ChaseCamera.Mode      # (the free camera is not one of them any more)
 	camera.snap()
-	if int(Settings.get_value("camera")) == 3 and options.get("mode", "") != "replay":
-		set_free_camera(true)
 	audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
 	if Content.arg("settings") != "":
 		pause()
@@ -599,14 +598,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_after_cine = false
 			replay.live_cine_off()
 			camera.make_current()
-		elif free_cam != null and free_cam.active:
-			set_free_camera(false)
-		elif camera.mode == ChaseCamera.Mode.BONNET:
-			set_free_camera(true)
-		else:
+		elif free_cam == null or not free_cam.active:
 			camera.next_mode()
 			audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)
 			RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
+	elif event.is_action_pressed("free_cam"):
+		set_free_camera(free_cam == null or not free_cam.active)
 	elif event.is_action_pressed("reset"):
 		recover()
 	elif event.is_action_pressed("restart"):
@@ -783,11 +780,10 @@ func set_free_camera(on: bool) -> void:
 		audio.set_inside(false)
 	elif free_cam != null and free_cam.active:
 		free_cam.leave()
-		camera.mode = ChaseCamera.Mode.FOLLOW
 		camera.make_current()
 		camera.snap()
-		audio.set_inside(false)
-		RunLog.event("camera FOLLOW")
+		audio.set_inside(camera.mode != ChaseCamera.Mode.FOLLOW)      # (back to the camera that was chosen)
+		RunLog.event("camera %s" % ChaseCamera.Mode.keys()[camera.mode])
 
 
 ## The replay of what was driven (Replay.js): the pause menu goes, the game stays paused behind it.
