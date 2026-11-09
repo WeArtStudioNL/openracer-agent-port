@@ -4,6 +4,9 @@ extends Camera3D
 
 enum Mode { FOLLOW, COCKPIT, BONNET }
 
+const CATCH_UP := 3.0                # how much faster the follow camera turns per radian that it is behind the car
+const CLEARANCE := 0.3               # m: what the follow camera keeps free around it
+
 var car: Car
 var mode := Mode.FOLLOW
 var distance := 6.0
@@ -28,7 +31,10 @@ var cockpit := Vector3(0.35, 0.9, -0.2)
 var cockpit_fov := 75.0
 var orbit := 0.0                  # rad: the follow camera turned round the car (the keys [ and ], ` back behind it)
 var _pos := Vector3.ZERO
-var _look_dir := Vector3.FORWARD
+var _ball: PhysicsShapeQueryParameters3D = null
+var _turn := Quaternion.IDENTITY    # the follow camera: how the car stands, smoothed (it goes all the way round with a somersault)
+var _anchor := Vector3.ZERO          # the follow camera: where the car is, smoothed
+var _room := 1.0                     # 0..1: how much of the way out to its place the follow camera has free
 var _fov := -1.0                  # the field of view of the follow camera now (it follows the speed, smoothed)
 var _crash_off: Variant = null    # a motorcycle that went down: the camera follows the rider at this offset (Car.js)
 var _orbiting := false            # the right mouse button is down: a drag turns the camera
@@ -70,9 +76,10 @@ func read_config(c: Car) -> void:
 
 func snap() -> void:
 	var xf := car.get_global_transform_interpolated()
-	var back := _flat_forward(xf)
-	_pos = xf.origin - back * distance + Vector3.UP * height
-	_look_dir = back
+	_turn = Quaternion(xf.basis.orthonormalized())
+	_anchor = xf.origin
+	_room = 1.0
+	_pos = xf.origin + xf.basis.orthonormalized() * Vector3(0.0, height, -distance)
 	reset_physics_interpolation()
 
 
@@ -100,6 +107,38 @@ func _crash_view(delta: float) -> bool:
 	global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(at, Vector3.UP)
 	fov = 50.0
 	return true
+
+
+## How the car stands, smoothed, whole: the camera goes along with its pitch and its roll, all the way round in a somersault. The further behind it is, the faster it
+## catches up, or a fast turn gets more than half a turn ahead and the camera goes the wrong way round. On its wheels the camera turns after the direction the car
+## moves, so a slide is seen from behind the car.
+func _turn_after(xf: Transform3D, delta: float) -> void:
+	var b := xf.basis.orthonormalized()
+	var vel := car.linear_velocity
+	vel.y = 0.0
+	if vel.length() > 3.0 and car.gear >= 0 and b.y.y > 0.6 and car._any_contact():
+		var ahead := _flat_forward(xf)
+		b = b.rotated(Vector3.UP, ahead.signed_angle_to(ahead.lerp(vel.normalized(), 0.35).normalized(), Vector3.UP))
+	var want := Quaternion(b)
+	var behind := _turn.angle_to(want)
+	_turn = _turn.slerp(want, 1.0 - exp(-delta * smoothing * (1.0 + CATCH_UP * behind))).normalized()
+
+
+## The place of the camera, with nothing between it and the car: the road, a wall, a fence, a thing that lies about. A ball goes out from the car to the place it wants;
+## where the ball stops the camera stands. It comes in at once and goes back out slowly.
+func _keep_clear(focus: Vector3, place: Vector3, delta: float) -> Vector3:
+	if _ball == null:
+		_ball = PhysicsShapeQueryParameters3D.new()
+		var round_shape := SphereShape3D.new()
+		round_shape.radius = CLEARANCE
+		_ball.shape = round_shape
+		_ball.collision_mask = 0xFFFFFFFF
+	_ball.exclude = [car.get_rid()]
+	_ball.transform = Transform3D(Basis.IDENTITY, focus)
+	_ball.motion = place - focus
+	var free_share: float = get_world_3d().direct_space_state.cast_motion(_ball)[0]
+	_room = free_share if free_share < _room else minf(free_share, _room + delta * 1.5)
+	return focus + (place - focus) * _room
 
 
 func _flat_forward(xf: Transform3D) -> Vector3:
@@ -165,30 +204,25 @@ func _process(delta: float) -> void:
 		return
 	match mode:
 		Mode.FOLLOW:
-			# the camera turns after the direction the car moves, so a slide is seen from behind the car
-			var want := _flat_forward(xf)
-			var vel := car.linear_velocity
-			vel.y = 0.0
-			if vel.length() > 3.0 and car.gear >= 0:
-				want = want.lerp(vel.normalized(), 0.35).normalized()
-			_look_dir = _look_dir.slerp(want, 1.0 - exp(-delta * smoothing)).normalized()
+			_turn_after(xf, delta)
 			# the faster, the wider the field of view (fov_fast from fov_full_speed), and the camera comes closer in the same
 			# measure (dolly 1: the car keeps its size in the picture, a dolly zoom; Car.js); it looks look_z ahead of the car
 			var fov_want := lerpf(fov_standing, fov_fast, clampf(spd / fov_full_speed, 0.0, 1.0))
 			_fov = fov_want if _fov < 0.0 else _fov + (fov_want - _fov) * (1.0 - exp(-4.0 * minf(delta, 0.1)))
 			var scale := 1.0 + dolly * (tan(deg_to_rad(fov_standing) / 2.0) / tan(deg_to_rad(_fov) / 2.0) - 1.0)
-			var dir := _look_dir.rotated(Vector3.UP, orbit)
 			var far := distance * scale * zoom
 			var up_by := look_height + (height - look_height) * scale
 			if distance_fast > 0.0:             # (the place at full speed is given: between the two with the speed)
 				_fast += (clampf(spd / fov_full_speed, 0.0, 1.0) - _fast) * (1.0 - exp(-4.0 * minf(delta, 0.1)))
 				far = lerpf(distance, distance_fast, _fast) * zoom
 				up_by = lerpf(height, height_fast, _fast)
-			var target := xf.origin - dir * far + Vector3.UP * (up_by + tan(elev) * far)
-			_pos = _pos.lerp(target, 1.0 - exp(-delta * smoothing * 2.5))
-			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + dir * look_z + Vector3.UP * look_height, Vector3.UP)
-			if car.bike != null:
-				rotate_object_local(Vector3.BACK, car.bike.camera_roll(delta))      # (a motorcycle: the camera rolls with the lean)
+			var frame := Basis(_turn)
+			var round_car := frame * Basis(Vector3.UP, orbit)
+			_anchor = _anchor.lerp(xf.origin, 1.0 - exp(-delta * smoothing * 2.5))
+			var focus := xf.origin + frame.y * look_height
+			_pos = _keep_clear(focus, _anchor + round_car * Vector3(0.0, up_by + tan(elev) * far, -far), delta)
+			var look := xf.origin + round_car * Vector3(0.0, look_height, look_z)
+			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(look, frame.y)
 			fov = _fov
 		Mode.COCKPIT:
 			global_transform = xf * Transform3D(Basis(Vector3.UP, PI), cockpit)
