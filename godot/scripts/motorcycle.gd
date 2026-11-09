@@ -152,6 +152,8 @@ var _foot_still := false
 var _foot_wait := 0.0
 var _road := Vector3.UP
 var _accel := Vector3.ZERO
+var _v_before := Vector3.ZERO      # the speed and the turn of the last step (the speed into a contact: _impact)
+var _av_before := Vector3.ZERO
 var _v_prev := Vector3.ZERO
 var _have_prev := false
 var _hist: Array = []             # [t, velocity, position] of the last tenth of a second
@@ -808,9 +810,11 @@ func _push_now(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> float:
 ## lastImpact). (The bike reports its contacts: contact_monitor, set at its first step.)
 func _impact(state: PhysicsDirectBodyState3D) -> float:
 	var best := 0.0
+	var cg := state.transform.origin + state.center_of_mass
 	for i in state.get_contact_count():
 		var n := state.get_contact_local_normal(i)
-		var vp := state.get_contact_local_velocity_at_position(i) - state.get_contact_collider_velocity_at_position(i)
+		# (the speed it had before this step: the solver has already taken the speed into the contact out of the speed of now)
+		var vp := _v_before + _av_before.cross(state.get_contact_local_position(i) - cg) - state.get_contact_collider_velocity_at_position(i)
 		best = maxf(best, absf(vp.dot(n)))
 	return best
 
@@ -831,7 +835,9 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	dbg_accel = _accel.length()
 	var hard: bool = not r["force"]["on"] or dbg_force > float(r["force"]["kN"]) * 1000.0
 	var impact := _impact(state) if state != null else 0.0
-	var wall: bool = r["wall"]["on"] and hard and impact > float(r["wall"]["kmh"]) / 3.6
+	if state != null:
+		_v_before = state.linear_velocity
+		_av_before = state.angular_velocity
 	_now += dt
 	_hist.append([_now, v, pos])
 	while _hist.size() > 2 and float(_hist[1][0]) < _now - 0.1:
@@ -845,6 +851,10 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	var speed_old := Vector2(vo.x, vo.z).length()
 	var speed_now := Vector2(v.x, v.z).length()
 	var lost3 := vo.length() - v.length()
+	# (a bike with a soft body meets a wall with the nodes of that body, not with its box: then the hit is the speed it lost to it)
+	if car.shell != null and car.shell.hit > 2000.0:
+		impact = maxf(impact, (vo - v).length())
+	var wall: bool = r["wall"]["on"] and hard and impact > float(r["wall"]["kmh"]) / 3.6
 	var loss := float(r["hit"]["loss"])
 	var hit: bool = r["hit"]["on"] and hard and speed_old - speed_now > loss and lost3 > loss and speed_old > 5.5
 	var over: bool = r["over"]["on"] and float(st["up_n"]) < -0.17
