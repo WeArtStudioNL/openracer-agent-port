@@ -352,7 +352,7 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 				w.normal = res["surface_normal"]
 				w.surface = str(res["surface"])
 				if car.bike != null:
-					w.point = _crown_patch(i, hub, left, w.point, w.normal)
+					w.point = _crown_patch(i, hub, left, w.point, w.normal, up_s)
 				w.load = tyre_load[i]
 				_tyre_forces(i, res, h, cg, v, av, basis_s, hub - cg)
 				n_touch[i] += 1
@@ -494,14 +494,14 @@ func _tyre_forces(i: int, res: Dictionary, h: float, cg: Vector3, v: Vector3, av
 
 
 ## Where a round crown stands on the road: where its surface is parallel to the road, across the wheel from the hub. Worked out: the nodes hop from ring to ring and round the
-## wheel, and a patch that hops rocks the bike from side to side. On the road plane through the patch that the nodes found.
-func _crown_patch(i: int, hub: Vector3, side: Vector3, found: Vector3, n: Vector3) -> Vector3:
+## wheel, and a patch that hops rocks the bike from side to side. Down the plane of the wheel (leaned with the bike) to the road plane through the patch that the nodes found.
+func _crown_patch(i: int, hub: Vector3, side: Vector3, found: Vector3, n: Vector3, up: Vector3) -> Vector3:
 	var w := float(_crown_width[i])
 	var s := side.dot(n)
 	var slope := absf(s) / maxf(0.05, sqrt(1.0 - s * s))
 	var x := -signf(s) * minf(0.46 * w, w * slope / 2.836)         # (the crown of TyreShell.build: 0.3 w (x / 0.46 w)^2 lower at x across)
 	var above := hub + side * x
-	return above + n * (found - above).dot(n)
+	return above - up * ((above - found).dot(n) / maxf(0.2, up.dot(n)))
 
 
 ## The road force of a motorcycle tyre on the bike, whole, at the patch (which on a round crown lies to the inside of the lean). The press of the road comes through the spring
