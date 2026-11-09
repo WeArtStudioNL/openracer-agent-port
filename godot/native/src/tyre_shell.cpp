@@ -1110,7 +1110,9 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 	rSurfaceName = ground->surface_name(bestTri);
 	rPatch = 2 * halfPatch;
 	rCentreAlong = alongSum / sumFn;
-	double rimR = R * std::max(0.3, std::min(0.9, innerRatio)) + 0.01;
+	// (the rim is a short cylinder: the road meets it at its radius across the axle, and at its half width along the axle, for a wheel lying flat)
+	double along_axle = std::min(1.0, (double)std::abs(sn.x * L.x + sn.y * L.y + sn.z * L.z));
+	double rimR = (R * std::max(0.3, std::min(0.9, innerRatio)) + 0.01) * std::sqrt(1 - along_axle * along_axle) + 0.42 * width * along_axle;
 	double hubH = (hub.x - rCentre.x) * sn.x + (hub.y - rCentre.y) * sn.y + (hub.z - rCentre.z) * sn.z;
 	// (the rim strikes a road that lies under the hub. A patch out on the side of the tyre, on the edge of a ramp, has only air under the hub; and a hub
 	// past the plane is no deeper than the road at the rim: a metre there is a million newtons)

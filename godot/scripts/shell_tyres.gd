@@ -467,6 +467,9 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 			if w.length < 0.02:
 				w.length = 0.02
 				sus_vel[i] = maxf(0.0, float(sus_vel[i]))
+				# (at the end of its travel the wheel is a part of the body: all that the tyre gives along the suspension goes in. With only the spring
+				# the rest was lost and the part across it, which does go in, turned the force forward: a ramp gave the car energy)
+				fs = maxf(fs, float(tyre_load[i]))
 			if w.length > max_len + 0.06:
 				w.length = max_len + 0.06
 				sus_vel[i] = minf(0.0, float(sus_vel[i]))
