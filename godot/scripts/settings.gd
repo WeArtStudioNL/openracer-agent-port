@@ -49,6 +49,7 @@ const DEFAULTS := {
 	"bike_steering": "lean",      # lean: the lean only; counter: countersteering and the lean
 	"bike_camera": "lean",        # lean: the picture rolls with the bike; classic: as a car
 	"wheelie_control": true,
+	"bike_shell_tyres": false,
 	"bike_fast_lean": 30.0,       # degrees of lean the keys ask for at top speed
 	"bike_push": false,           # flat-track style
 	"wheel_range": 1.0,           # the part of the turn of the wheel that is used for the lock (1: all)

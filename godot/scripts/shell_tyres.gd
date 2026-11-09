@@ -17,6 +17,7 @@ const SHELL_TEAL := Color(0.3, 0.8, 0.8)
 const SHELL_DIM := Color(0.35, 0.4, 0.45)
 const MAX_RUB := 8.0             # the most that a tyre rubs, as a share of how hard it is pressed
 const SHOULDER := 0.1            # how far the edge of the tread lies below its middle, as a share of the width (a road or race tyre: flat, with a rounded shoulder)
+const MAX_BIKE_WIDTH := 0.24     # m: a motorcycle tyre is no wider: the width is the span of the crown, and the patch runs far from the middle of a wider one when it leans
 const STEPS := 3                 # steps of the car in a step of Godot (1/360 s; Vehicle.js steps at 1/300 s or less)
 
 static var _ground: Object = null           # TyreGround: the triangles of the ground of the scene
@@ -42,6 +43,9 @@ var _sum_fy := [0.0, 0.0, 0.0, 0.0]
 var _axle_fy := [0.0, 0.0]
 var _ready := false
 var _frame := 0                  # (the physics frame of the last step)
+var _bike_load := [0.0, 0.0, 0.0, 0.0]          # N: what presses a motorcycle tyre on the road, smoothed (its grip)
+var _bike_fx := 0.0                             # N: the force along the wheel of the tyre of this small step (a motorcycle)
+var _road_up := 0.0                             # N: what the road force of this small step gives along the spring (a motorcycle)
 var _deform: Array = []          # a TyreDeform per wheel
 var _frozen: Array = []                         # (the debug view in a replay: the shape of every tyre in the frame of its wheel)
 
@@ -52,12 +56,14 @@ static func available() -> bool:
 
 ## Whether a car drives on the shell tyre now (the player's car: Car.player_tyres is checked by the caller).
 static func wanted(c: Car) -> bool:
-	if c.bike != null or c.is_ghost or not available():
+	if c.is_ghost or not available():
 		return false
 	var forced := Content.arg("tyres")
 	if forced != "":
 		return forced == "shell"
 	if Content.arg("ai") != "":
+		return false
+	if c.bike != null and not bool(Settings.get_value("bike_shell_tyres")):      # (not yet stable in a long bend from about 100 km/h)
 		return false
 	return str(Settings.get_value("sim_player_tyres")) == "shell"
 
@@ -204,7 +210,7 @@ func _configure() -> void:
 	var light := car.mass / 1230.0 if car.mass < 600.0 else 1.0
 	unsprung_mass = float(ch.get("unsprung_mass", maxf(2.0, 0.0285 * car.mass) if light < 1.0 else 35.0))
 	var detail := str(Settings.get_value("sim_tyre_detail"))
-	var lighter := not car.unsprung and (detail == "medium" or detail == "low")
+	var lighter := not car.unsprung and car.bike == null and (detail == "medium" or detail == "low")
 	for i in 4:
 		var w := car.wheels[i]
 		var sh := shell_of(w)
@@ -215,19 +221,20 @@ func _configure() -> void:
 		var air_best := 25.0 + 0.6 * (float(w.kind.get("optimum", 85.0)) - 25.0)
 		p = maxf(minf(0.15, w.pressure), (p + 1.013) * (air + 273.0) / (air_best + 273.0) - 1.013)
 		var size_corner := pow(clampf(float(sh["width"]) / 0.245, 0.5, 2.0), 0.35) if sh["sized"] and float(sh["width"]) > 0.0 else 1.0
-		var static_load := car.mass * (car.weight_front if w.front else 1.0 - car.weight_front) / 2.0 * Car.G
-		if not car.unsprung and car.bike == null:
+		var static_load := car.mass * (car.weight_front if w.front else 1.0 - car.weight_front) / (1.0 if car.bike != null else 2.0) * Car.G       # (a motorcycle: the one wheel of an end carries it all)
+		if not car.unsprung:
 			# (the spring carries the body: the wheel stands on its tyre by itself, so the car stands where it was made)
 			w.free_length = car.susp_length + (car.ride_front if w.front else car.ride_rear) + maxf(0.0, w.rest_load - unsprung_mass * Car.G) / w.spring
 		var rings := minf(float(sh["rings"]), 1.0 if detail == "low" else 2.0) if lighter else float(sh["rings"])
 		var tread_width := float(sh["width"]) if float(sh["width"]) > 0.0 else maxf(0.1, 0.7 * w.radius)
 		(tyres[i] as Object).call("configure", {
-			"round": false, "tyre_mass": maxf(1.5, 0.3 * unsprung_mass), "pressure": p, "inner_ratio": sh["inner_ratio"], "carcass": sh["carcass"],
+			"round": car.bike != null, "tyre_mass": maxf(1.5, 0.3 * unsprung_mass), "pressure": p, "inner_ratio": sh["inner_ratio"], "carcass": sh["carcass"],
 			"rings": rings,
 			# (with three rings or more the outer ones lie on the shoulder; with two there is no middle ring to carry the tyre, so they stay at the full radius)
-			"shoulder": SHOULDER * tread_width if rings >= 3.0 else 0.0,
-			"segments": minf(float(sh["segments"]), 12.0) if lighter and detail == "low" else float(sh["segments"]),
-			"width": sh["width"],
+			# (a motorcycle: a round crown, ring by ring, from TyreShell.build)
+			"shoulder": SHOULDER * tread_width if rings >= 3.0 and car.bike == null else 0.0,
+			"segments": maxf(float(sh["segments"]), 36.0) if car.bike != null else (minf(float(sh["segments"]), 12.0) if lighter and detail == "low" else float(sh["segments"])),       # (a motorcycle: its patch is short, with fewer nodes the load hops from node to node)
+			"width": minf(float(sh["width"]), MAX_BIKE_WIDTH) if car.bike != null and float(sh["width"]) > 0.0 else sh["width"],
 			"stiff_x": float(ty.get("stiff_x", 20.0)),
 			"stiff_y": float(ty.get("stiff_y", 18.0)) * car.cornering * float(w.kind.get("lateral", 1.0)) * w.stiffness_bias * w.pressure_corner * size_corner,
 			"vertical_stiffness": car.tyre_rate * pow(p / 2.2, 0.8), "vertical_damping": car.tyre_damping, "static_load": static_load,
@@ -269,6 +276,8 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 	_v_prev = v
 	_has_prev = true
 	car._kart_frame(dt, car.speed * av.dot(up))
+	if car.bike != null:
+		car.bike.before_tyres(car, dt)
 	var h := dt / STEPS
 	var rest_hold := 1.0 - smoothstep(0.5, 2.0, v.length())
 	_force = Vector3.ZERO
@@ -302,13 +311,15 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 			var vm := v + av.cross(r_top - com)
 			var dir := (basis_s * Vector3(sin(w.steer), 0.0, cos(w.steer))).normalized()
 			var left := up_s.cross(dir)
-			var lean := car._lean(w)
+			var lean := 0.0 if car.bike != null else car._lean(w)       # (a motorcycle: its wheels lean with it and nothing more)
 			w.lean = lean
 			var u_axis := up_s * cos(lean) + left * sin(lean)
 			var l_axis := left * cos(lean) - up_s * sin(lean)
 			var tb: Object = tyres[i]
 			var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
 			var fr := friction_for(w, float(tb.call("friction_load")), surf)
+			if car.bike != null:                # (a motorcycle: the shell carries it, and the grip comes from the slip curve that its balance is made for: _tyre_forces)
+				fr = Vector2(0.001, 0.001)
 			# (however fast it came: the hub does not go through the road. Looked for along the spring, from the mount, so also when no node of the tyre is left above the road)
 			var fence := PhysicsRayQueryParameters3D.create(top, top - up_s * (w.length + w.rim_r), 1, [car.get_rid()])
 			var road_hit := state.get_space_state().intersect_ray(fence)
@@ -332,21 +343,24 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 			tyre_torque[i] = 0.0
 			if touched[i]:
 				tyre_load[i] = maxf(0.0, ((res["normal"] as Vector3) + (res["friction"] as Vector3)).dot(up_s))
+				_road_up = 0.0
 				w.contact = true
 				w.point = res["centre"]
 				w.normal = res["surface_normal"]
 				w.surface = str(res["surface"])
 				w.load = tyre_load[i]
 				_tyre_forces(i, res, h, cg, v, av, basis_s, hub - cg)
+				tyre_load[i] = maxf(0.0, float(tyre_load[i]) + _road_up)
+				w.load = tyre_load[i]
 				n_touch[i] += 1
 				sum_load[i] += tyre_load[i]
-				tyre_torque[i] = (float(res["omega_out"]) - w.omega) * w.inertia / h
+				tyre_torque[i] = -_bike_fx * w.radius if car.bike != null else (float(res["omega_out"]) - w.omega) * w.inertia / h
 			else:
 				w.contact = false
 		_springs(h, basis, up, com, tyre_load, rest_hold)
 		# ---- the wheels and the drivetrain (the shell turned the wheel: the torque that gives that turn)
 		for i in 4:
-			car.wheels[i].omega_from_tyre = touched[i]
+			car.wheels[i].omega_from_tyre = touched[i] and car.bike == null
 			car.wheels[i].tyre_slope = 0.0
 		car._drivetrain(h, tyre_torque)
 		for w in car.wheels:
@@ -359,7 +373,7 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 		var w := car.wheels[i]
 		w.contact = n_touch[i] > 0
 		w.load = float(sum_load[i]) / maxf(1, n_touch[i])
-		w.grip_load = w.load
+		w.grip_load = float(_bike_load[i]) if car.bike != null else w.load
 		w.fx = float(_sum_fx[i]) / STEPS
 		w.fy = float(_sum_fy[i]) / STEPS
 		if w.contact and (car.tyre_damage or w.leak > 0.0) and Settings.get_value("damage"):
@@ -382,7 +396,7 @@ func _limit_on_its_side(res: Dictionary, up: Vector3, w: Car.Wheel) -> void:
 	if fric.length() > MAX_RUB * pressed:
 		res["friction"] = fric.normalized() * MAX_RUB * pressed
 	var size := n.length()
-	if size > 1.0:                          # (a tyre on its side wall hardly grips: the car slides, it is not flung round on it)
+	if size > 1.0 and car.bike == null:     # (a tyre on its side wall hardly grips: the car slides, it is not flung round on it)
 		res["friction"] = (res["friction"] as Vector3) * smoothstep(0.45, 0.9, absf(n.dot(up)) / size)
 
 
@@ -438,14 +452,32 @@ func _tyre_forces(i: int, res: Dictionary, h: float, cg: Vector3, v: Vector3, av
 	var fric: Vector3 = res["friction"]
 	var fx := fric.dot(w.fp)
 	var fy := fric.dot(w.lf)
-	var used := float(res["used"])
-	var share := float(res["sliding_share"])
-	w.s = used / 0.92 if share < 0.05 else maxf(used / 0.92, 1.0 + 0.9 * share)
+	if car.bike != null:
+		_bike_load[i] = float(_bike_load[i]) + (maxf(0.0, (res["normal"] as Vector3).dot(n)) - float(_bike_load[i])) * minf(1.0, h / 0.025)       # (the nodes come and go: a moment of smoothing)
+		var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
+		w.camber_slip = 0.0
+		CarWear.tyre_force(w, _bike_load[i], surf, w.vref, car.cornering)
+		w.fy_slip = w.fy
+		w.camber_slip = car.bike.camber_slip * car.bike.lean if car.bike.v2 else 0.0
+		CarWear.tyre_force(w, _bike_load[i], surf, w.vref, car.cornering)
+		fx = w.fx + 400.0 * clampf(w.omega * w.radius - vl, -0.3, 0.3)       # (the slip speed damped a little, or a wheel at a walking pace rings: as on the ray)
+		fy = w.fy
+		w.tyre_slope = 0.0
+		_bike_fx = fx
+		_road_up = (w.fp * fx + w.lf * fy).dot(up)
+	else:
+		var used := float(res["used"])
+		var share := float(res["sliding_share"])
+		w.s = used / 0.92 if share < 0.05 else maxf(used / 0.92, 1.0 + 0.9 * share)
 	_sum_fx[i] += fx
 	_sum_fy[i] += fy
 	# the rolling resistance (more on soft ground), on the body
 	var fx_body := fx - CarWear.rolling_force(car, w, vl)
 	var anti := (car.anti_dive if fx_body < 0.0 else car.anti_lift_front) if w.front else (car.anti_lift_rear if fx_body < 0.0 else car.anti_squat)
+	if car.bike != null:
+		_bike_forces(w, res, fx_body, fy, anti, cg, up, r_hub)
+		_axle_fy[0 if w.front else 1] += fy
+		return
 	var below := (cg - w.point).dot(up)
 	_force += w.fp * fx_body + w.lf * fy
 	_torque += (w.point + up * (anti * below) - cg).cross(w.fp * fx_body)
@@ -457,6 +489,21 @@ func _tyre_forces(i: int, res: Dictionary, h: float, cg: Vector3, v: Vector3, av
 	var perp := nrm - up * nrm.dot(up)
 	_force += perp
 	_torque += r_hub.cross(perp)
+
+
+## The tyre of a motorcycle on the bike: everything at the patch, which on a round crown lies to the inside of the lean: that is what makes a leaned bike fall in and
+## stand up again. A frame in one piece: what goes along the spring goes through the spring (at the mount); only the arm from there to the patch is added here. Nothing is counted twice.
+func _bike_forces(w: Car.Wheel, res: Dictionary, fx_body: float, fy: float, anti: float, cg: Vector3, up: Vector3, r_hub: Vector3) -> void:
+	var patch: Vector3 = w.point - cg
+	var flat := func(f: Vector3) -> Vector3: return f - up * f.dot(up)
+	var along_wheel: Vector3 = flat.call(w.fp * fx_body)
+	var across: Vector3 = flat.call(w.lf * fy + (res["normal"] as Vector3))
+	var along := maxf(0.0, (res["normal"] as Vector3).dot(up) + (w.fp * fx_body + w.lf * fy).dot(up))
+	_force += along_wheel + across
+	_torque += (patch + up * (anti * maxf(0.0, -patch.dot(up)))).cross(along_wheel)      # (the share of the pitch that the linkage takes: as on a car)
+	_torque += patch.cross(across)
+	var side: Vector3 = up.cross(w.fp).normalized()
+	_torque += (side * (patch - r_hub).dot(side)).cross(up * along)      # (only the arm across the wheel: along it the patch hops from node to node)
 
 
 ## The springs (Vehicle.js): the wheel is a mass of its own between the spring and the damper and the tyre; the damper
@@ -473,18 +520,23 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 	for i in 4:
 		var w := car.wheels[i]
 		var fs := 0.0
+		if car.bike != null and w.lost:           # (a motorcycle: the second wheel of a pair goes with the live one, for what is drawn on it)
+			w.length = car.wheels[i - 1].length
+			sus_vel[i] = sus_vel[i - 1]
+			w.comp_rate = car.wheels[i - 1].comp_rate
+			continue
 		if car.unsprung:
 			w.length = car.susp_length - w.offset
 			sus_vel[i] = 0.0
 			fs = tyre_load[i]
 		else:
-			var k := car.arb_front if w.front else car.arb_rear
+			var k := 0.0 if car.bike != null else (car.arb_front if w.front else car.arb_rear)
 			var il := 0 if w.front else 2
 			var arb: float = k * ((comp[il] - comp[il + 1]) if w.left else (comp[il + 1] - comp[il]))
 			var xdot := -float(sus_vel[i])              # + while the spring is pushed in
-			var c_use := w.damper if xdot > 0.0 else w.damper * w.rebound
+			var c_use := w.damper if xdot > 0.0 else w.damper * w.rebound * (1.25 if car.bike != null else 1.0)
 			var mag := absf(xdot)
-			var blow := 0.35 if xdot > 0.0 else 0.7
+			var blow := 1.0 if car.bike != null else (0.35 if xdot > 0.0 else 0.7)       # (a fork or a shock: no blow-off)
 			var damper := (c_use * mag if mag <= 0.3 else c_use * (0.3 + blow * (mag - 0.3))) * signf(xdot)
 			var c_eff := absf(damper / xdot) if absf(xdot) > 1e-4 else c_use
 			var stop_rate := 12.0 * w.spring
@@ -497,9 +549,10 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 			var used := maxf(0.0, car.susp_length + (car.ride_front if w.front else car.ride_rear) - w.length)
 			var progressive := car.spring_progression * w.spring * used * used / maxf(0.01, car.susp_travel) if car.spring_progression > 0.0 else 0.0
 			var fs0 := w.spring * (w.free_length - w.length - w.offset) + progressive + bump + droop + arb
-			var accel0 := (fs0 - float(tyre_load[i]) - w.ball_load) / unsprung_mass + g_down - _acc_down
+			var fork := car.bike.fork_load(car, w, h) if car.bike != null else 0.0       # (the part of the road force along the travel: the rest goes through the rigid part of the fork)
+			var accel0 := (fs0 - float(tyre_load[i]) - w.ball_load - fork) / unsprung_mass + g_down - _acc_down
 			sus_vel[i] = (float(sus_vel[i]) + accel0 * h) / (1.0 + c_tot * h / unsprung_mass)
-			fs = fs0 - c_tot * float(sus_vel[i])
+			fs = fs0 - c_tot * float(sus_vel[i]) - fork
 			w.length += float(sus_vel[i]) * h
 			if w.length < 0.02:
 				w.length = 0.02
