@@ -609,6 +609,8 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 	var up := b.y
 	var u := car.speed
 	var airborne := not (car.wheels[0].contact or car.wheels[2].contact)
+	if airborne and _wheel_on_the_road(car, state):
+		airborne = false
 	var st := _lean_of(b, av, _road_of(car, dt))
 	lean = float(st["lean"])
 	if airborne:
@@ -702,7 +704,8 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 		var nose_rate := -av.dot(left_axis)
 		var nose := float(st["nose_up"])
 		var auto_p := smooth(0.34, 0.6, nose + pitch_lead * nose_rate * sqrt(maxf(0.0, 1.0 - nose * nose)))
-		var p_t := pitch_assist * rider_mass * G * pitch_arm * (key if key != 0.0 else auto_p)
+		# (his weight goes back or forward on the bike: it pulls as far as it lies beside the wheel, less and less as the bike stands up)
+		var p_t := pitch_assist * rider_mass * G * pitch_arm * (key * sqrt(maxf(0.0, 1.0 - nose * nose)) if key != 0.0 else auto_p)
 		if absf(p_t) > 0.01:
 			state.apply_torque(left_axis * p_t)
 	# the yaw that the lean does not give is damped (a balanced bend: r = g tan(lean) / u)
@@ -949,6 +952,16 @@ func posture_step(dt: float, u: float, thr: float, brk: float, lean_want: float)
 	p["long"] += ((-0.22 * float(p["sit"]) + 0.12 * float(p["tuck"])) - float(p["long"])) * minf(1.0, dt / 0.3)
 	p["drop"] += ((-0.09 * float(p["tuck"]) + 0.05 * float(p["sit"])) - float(p["drop"])) * minf(1.0, dt / 0.3)
 	p["look"] += (clampf(lean_want / (35.0 * DEG), -1.0, 1.0) * smooth(2.0, 6.0, absf(u)) - float(p["look"])) * minf(1.0, dt / 0.2)
+
+
+## In a wheelie the look of a wheel down its spring goes past the road while the wheel is still on it: that is not a flight, and the rider has no air under him to turn the bike with.
+func _wheel_on_the_road(car: Car, state: PhysicsDirectBodyState3D) -> bool:
+	for w: Car.Wheel in [car.wheels[0], car.wheels[2]]:
+		var hub := state.transform * w.anchor(car.susp_length - w.length)
+		var ask := PhysicsRayQueryParameters3D.create(hub, hub + Vector3.DOWN * (w.radius + 0.2), 1, [car.get_rid()])
+		if not state.get_space_state().intersect_ray(ask).is_empty():
+			return true
+	return false
 
 
 ## The rider in the air: the gas turns the nose up, the brake down, the lean keys roll the bike; without input he
