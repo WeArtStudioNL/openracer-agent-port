@@ -765,8 +765,8 @@ func _build_visual() -> void:
 				if tyres_of_model == null:
 					tyres_of_model = load("res://scripts/car_tyres.gd").new()
 					tyres_of_model.collect(body)
-				tyres_of_model.add_wheel(w.slot, parts, w.spin_node)
-			if add_tyre:
+				tyres_of_model.add_wheel(w.slot, parts, w.spin_node, w.radius)
+			if add_tyre and tyres_of_model == null:
 				var tyre := MeshInstance3D.new()
 				var made: Dictionary = lib.get("front" if w.front else "rear", {}).get("custom", {})
 				tyre.mesh = CarModel.tyre_mesh(w.radius, w.radius * float(made.get("inner_ratio", 0.68)), float(made.get("width", 0.24)))

@@ -688,7 +688,7 @@ func _preview_tyres() -> void:
 		_tyres = load("res://scripts/car_tyres.gd").new()
 		_tyres.collect(ed.model_root)
 		for slot: String in CarEditor.SLOTS:
-			_tyres.add_wheel(slot, ed.wheel_part_nodes(slot), ed.model_root)
+			_tyres.add_wheel(slot, ed.wheel_part_nodes(slot), ed.model_root, ed.num("chassis.tire_diameter", 0.65) / 2.0)
 	_tyres.apply(ed.cfg)
 
 

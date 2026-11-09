@@ -57,12 +57,14 @@ static func _dims(mesh: Mesh, b: Basis) -> Dictionary:
 	return {"centre": c, "outer": outer, "inner": minf(inner, outer * 0.95), "width": maxf(1e-3, hi.x - lo.x)}
 
 
-## The parts of the wheel of a corner: the biggest mesh is the tyre, what is called a rim goes with its size.
-func add_wheel(slot: String, parts: Array, frame: Node3D) -> void:
+## The parts of the wheel of a corner: the biggest mesh is the tyre (never a rim or a brake), what is called a rim goes with its size. Without a tyre
+## of its own (a model that has only loose tyres) a tyre is made round the rim, of this radius.
+func add_wheel(slot: String, parts: Array, frame: Node3D, radius: float) -> void:
 	var tyre: MeshInstance3D = null
 	var best := 0.0
 	var meshes: Array[MeshInstance3D] = []
 	var rim_re := RegEx.create_from_string("(?i)rim|felg|velg")
+	var not_tyre := RegEx.create_from_string("(?i)rim|felg|velg|disc|disk|rotor|brake|caliper|hub")
 	var rims := []
 	for part: Node3D in parts:
 		if not is_instance_valid(part):
@@ -74,18 +76,30 @@ func add_wheel(slot: String, parts: Array, frame: Node3D) -> void:
 		if rim_re.search(str(part.name)) != null:
 			rims.append({"node": part, "rel": CarModel.relative(part, frame)})
 	for mi in meshes:
-		if mi.mesh == null or not mi.mesh is ArrayMesh or rim_re.search(str(mi.name)) != null:
+		if mi.mesh == null or not mi.mesh is ArrayMesh or not_tyre.search(str(mi.name)) != null:
 			continue
 		var size := CarModel.bounds(mi, frame).size
 		if maxf(size.y, size.z) > best:
 			best = maxf(size.y, size.z)
 			tyre = mi
+	var made := false
 	if tyre == null:
-		return
+		if rims.is_empty() or radius <= 0.0:
+			return
+		var box := CarModel.bounds(rims[0]["node"], frame)
+		for e: Dictionary in rims:
+			box = box.merge(CarModel.bounds(e["node"], frame))
+		var rim_r := maxf(box.size.y, box.size.z) / 2.0
+		tyre = MeshInstance3D.new()
+		tyre.name = "tyre-made-" + slot
+		tyre.mesh = CarModel.tyre_mesh(radius, clampf(rim_r, radius * 0.3, radius * 0.95), maxf(0.05, box.size.x))
+		frame.add_child(tyre)
+		tyre.position = box.get_center()
+		made = true
 	var rel := CarModel.relative(tyre, frame)
 	var d := _dims(tyre.mesh, rel.basis)
 	d["centre"] = rel.origin + (d["centre"] as Vector3)
-	wheels[slot] = {"tyre": tyre, "orig": tyre.mesh, "frame": frame, "dims": d, "rims": rims, "key": ""}
+	wheels[slot] = {"tyre": tyre, "orig": tyre.mesh, "frame": frame, "dims": d, "rims": rims, "key": "", "made": made}
 
 
 ## Every wheel as the configuration says (only what has changed is made again).
@@ -97,7 +111,7 @@ func apply(cfg: Dictionary) -> void:
 			continue
 		var axle := "front" if slot[0] == "F" else "rear"
 		var band := band_of(float(v.get("tread_" + axle, 0.0)), float(v.get("rubber_" + axle, 50.0)))
-		var ex: Variant = _exemplar(band, slot, axle)
+		var ex: Variant = _exemplar(band, slot, axle, bool(w["made"]))
 		var custom: Variant = Tuning.read(cfg, "wheels.library.%s.custom" % axle)
 		var sized: bool = custom is Dictionary and str(Tuning.read(cfg, "wheels.library.%s.tyre" % axle)) == "custom" and float(custom.get("diameter", 0.0)) > 0.0
 		var d0: Dictionary = w["dims"]
@@ -115,10 +129,16 @@ func apply(cfg: Dictionary) -> void:
 		_fit_rims(w, target, sized)
 
 
-func _exemplar(band: String, slot: String, axle: String) -> Variant:
-	for k in [band + slot.to_lower(), band + axle, band]:
-		if exemplars.has(k):
-			return [exemplars[k], k]
+## The tyre of a band for a corner; a wheel that has no tyre of its own takes the nearest one that the model has.
+func _exemplar(band: String, slot: String, axle: String, any: bool) -> Variant:
+	var order: Array = [band]
+	if any:
+		order = {"road": ["road", "slick", "allterrain", "knobbly"], "slick": ["slick", "road", "allterrain", "knobbly"],
+			"allterrain": ["allterrain", "road", "knobbly", "slick"], "knobbly": ["knobbly", "allterrain", "road", "slick"]}[band]
+	for b: String in order:
+		for k in [b + slot.to_lower(), b + axle, b]:
+			if exemplars.has(k):
+				return [exemplars[k], k]
 	return null
 
 
