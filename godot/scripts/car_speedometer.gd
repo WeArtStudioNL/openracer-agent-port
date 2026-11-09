@@ -27,6 +27,8 @@ func setup(c: Node3D, mi: MeshInstance3D) -> void:
 	face = mi
 	name = "Speedometer"
 	face.mesh = _with_uv(face.mesh, CarModel.relative(face, c).basis)
+	face.set_meta("no_bend", true)          # (the soft body would draw a copy of it, with the material of the model)
+	face.visible = false                    # (off: the object is not there)
 
 
 func enabled() -> bool:
@@ -115,6 +117,7 @@ func _process(_delta: float) -> void:
 		if on and _view == null:
 			_build()
 		face.material_override = _material if on else null
+		face.visible = on
 	if not on:
 		return
 	var metric := str(Settings.get_value("units")) != "imperial"
