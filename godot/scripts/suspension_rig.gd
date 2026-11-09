@@ -24,6 +24,8 @@ var car: Car
 var root: Node3D                  # "SuspensionRig": the holders and the parts of the library that the rig did not take
 var parts: Array[Dictionary] = []
 var uprights := {}                # wheel -> the entry of its upright
+const ARC_LOW := -0.6              # m of travel: the table of the way in or out of the hub (fill_arcs)
+const ARC_STEP := 0.02
 var corners := {}                 # wheel -> {lower, upper, up, a, moved, camber}: wishbones and upright, solved as rigid parts
 var rack: Dictionary = {}
 var rack_travel := 0.1            # m per radian of the front wheels (car.json steering.rack_travel)
@@ -577,6 +579,40 @@ func _axle_travel_at(rear: bool, x: float) -> float:
 ## The steer of a wheel (positive to the left, as Car.Wheel.steer).
 func _steer(i: int) -> float:
 	return car.wheels[i].steer if i < 2 else 0.0
+
+
+## The way in or out of the middle of each wheel with the travel, for the physics (Car.Wheel.set_arc): the same arms as the picture.
+func fill_arcs() -> void:
+	for w: int in corners:
+		var wheel: Car.Wheel = car.wheels[w]
+		var c: Dictionary = corners[w]
+		var rest := Vector3(wheel.hub.x, wheel.visual_offset.y, wheel.hub.z)
+		var bl0: Vector3 = c["lower"]["far"]
+		var a := 0.0
+		var last := 0.0
+		var table := PackedFloat32Array()
+		var count := int(round(-2.0 * ARC_LOW / ARC_STEP)) + 1
+		for k in count:
+			var want: float = (c["up"]["origin"] as Vector3).y + ARC_LOW + k * ARC_STEP
+			for _i in 12:
+				var s := _corner_at(c, a)
+				var s2 := _corner_at(c, a + 1e-3)
+				if s.is_empty() or s2.is_empty():
+					break
+				var slope: float = (s2["hub"].y - s["hub"].y) / 1e-3
+				if absf(slope) < 1e-4 or absf(s["hub"].y - want) < 1e-5:
+					break
+				a = clampf(a - (s["hub"].y - want) / slope, -1.3, 1.3)
+			var got := _corner_at(c, a)
+			if not got.is_empty():
+				var turn := Basis(Vector3.BACK, got["camber"])
+				var moved := Transform3D(turn, Vector3(got["bl"].x, got["bl"].y, bl0.z) - turn * bl0)
+				last = (moved * rest).x - rest.x
+			table.append(last)
+		var mid: float = table[int(round(-ARC_LOW / ARC_STEP))]
+		for k in count:
+			table[k] -= mid
+		wheel.arc = table
 
 
 func _solved(wheel: int) -> bool:

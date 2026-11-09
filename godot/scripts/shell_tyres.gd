@@ -212,6 +212,9 @@ func _configure() -> void:
 		var p := maxf(minf(0.15, w.pressure), w.pressure - w.pressure_loss)
 		var size_corner := pow(clampf(float(sh["width"]) / 0.245, 0.5, 2.0), 0.35) if sh["sized"] and float(sh["width"]) > 0.0 else 1.0
 		var static_load := car.mass * (car.weight_front if w.front else 1.0 - car.weight_front) / 2.0 * Car.G
+		if not car.unsprung and car.bike == null:
+			# (the spring carries the body: the wheel stands on its tyre by itself, so the car stands where it was made)
+			w.free_length = car.susp_length + (car.ride_front if w.front else car.ride_rear) + maxf(0.0, w.rest_load - unsprung_mass * Car.G) / w.spring
 		(tyres[i] as Object).call("configure", {
 			"round": false, "tyre_mass": maxf(1.5, 0.3 * unsprung_mass), "pressure": p, "inner_ratio": sh["inner_ratio"], "carcass": sh["carcass"],
 			"rings": minf(float(sh["rings"]), 1.0 if detail == "low" else 2.0) if lighter else float(sh["rings"]),
@@ -285,7 +288,8 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 				tyre_torque[i] = 0.0
 				continue
 			w.steer = angles[i] + w.toe_bend
-			var r_top := basis * (w.hub + Vector3.UP * car.susp_length)
+			w.set_arc(car.susp_length - w.length + w.offset)
+			var r_top := basis * w.anchor(car.susp_length)
 			var top := origin + v * t + r_top + rot.cross(r_top)
 			var vm := v + av.cross(r_top - com)
 			var dir := (basis_s * Vector3(sin(w.steer), 0.0, cos(w.steer))).normalized()
@@ -298,7 +302,7 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 			var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
 			var fr := friction_for(w, float(tb.call("friction_load")), surf)
 			var hub := top - up_s * w.length
-			touched[i] = bool(tb.call("step", h, hub, vm - up_s * float(sus_vel[i]), l_axis, dir, u_axis, w.omega, gnd, fr.x, fr.y, w.lat_grip))
+			touched[i] = bool(tb.call("step", h, hub, vm - up_s * float(sus_vel[i]) - basis_s.x * w.arc_slope * float(sus_vel[i]), l_axis, dir, u_axis, w.omega, gnd, fr.x, fr.y, w.lat_grip))
 			var res: Dictionary = tb.call("result")
 			_limit_on_its_side(res, up_s, w)
 			results[i] = res
@@ -467,7 +471,7 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 				w.length = max_len + 0.06
 				sus_vel[i] = minf(0.0, float(sus_vel[i]))
 		w.comp_rate = -float(sus_vel[i])
-		var r_top := basis * (w.hub + Vector3.UP * car.susp_length)
+		var r_top := basis * w.anchor(car.susp_length)
 		# (on the ground the weight of the wheel goes through the tyre; a wheel in the air falls with the car and pushes on nothing)
 		var push := fs + unsprung_mass * (g_down if touched[i] else g_down - _acc_down)
 		var fsv := up * push

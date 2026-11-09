@@ -20,6 +20,8 @@ func _init(c: Car, model_body: Node3D) -> void:
 	body = model_body
 	process_priority = 100                 # (after the car has placed its wheels, and after the cameras)
 	rig = SuspensionRig.build(c, model_body)
+	if rig != null:
+		rig.fill_arcs()
 	if c.bike == null:
 		mirrors = CarMirrors.find(c, model_body)
 		if mirrors != null:
@@ -61,5 +63,7 @@ func _reconfigure() -> void:
 			if rig != null:
 				rig.dispose()
 			rig = SuspensionRig.build(car, body)
+			if rig != null:
+				rig.fill_arcs()
 	if rebuilt or old.get("materials") != cfg.get("materials") or old.get("colors") != cfg.get("colors"):
 		CarPaint.apply(car, cfg)

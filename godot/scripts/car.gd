@@ -83,6 +83,10 @@ class Wheel:
 	var lf := Vector3.LEFT
 	var vref := 1.5
 	var visual_offset := Vector3.ZERO
+	var rest_load := 0.0            # N: what the wheel carries at rest, itself included (the free length of the spring: the shell takes the wheel off)
+	var arc := PackedFloat32Array() # the way in or out of the hub with the travel, along the arms (SuspensionRig.fill_arcs): every ARC_STEP from ARC_LOW
+	var arc_x := 0.0                # m, along the car's x: where the arms have the hub now
+	var arc_slope := 0.0            # m of x per m of travel
 	var lost := false               # a motorcycle: the second wheel of a pair is not there (no road, spring, drive, brake)
 	var lat_grip := 1.0             # a share of the grip across (a motorcycle in flat-track style: the tail steps out)
 	var fe_load := 0.0              # a motorcycle: the load of the road force along the travel of the fork or the swingarm (N)
@@ -93,6 +97,22 @@ class Wheel:
 	var hub_node: Node3D
 	var steer_node: Node3D
 	var spin_node: Node3D
+
+	## The hub of the physics follows the arms of the suspension, not a straight line (travel: m up from the car as made).
+	func set_arc(travel: float) -> void:
+		if arc.is_empty():
+			arc_x = 0.0
+			arc_slope = 0.0
+			return
+		var f := clampf((travel - SuspensionRig.ARC_LOW) / SuspensionRig.ARC_STEP, 0.0, float(arc.size() - 1) - 0.001)
+		var k := int(f)
+		arc_x = lerpf(arc[k], arc[k + 1], f - k)
+		arc_slope = (arc[k + 1] - arc[k]) / SuspensionRig.ARC_STEP
+
+
+	func anchor(height: float) -> Vector3:
+		return hub + Vector3(arc_x, height, 0.0)
+
 
 var config: Dictionary = {}
 var car_id := ""
@@ -647,7 +667,8 @@ func _read_config() -> void:
 				w.inertia = maxf(w.inertia, 1.2)
 		w.rebound = maxf(1.0, float(ch.get("damping_rebound", 1.7)))
 		# (the ride height: the wheel sits further out at rest, the body higher)
-		w.free_length = susp_length + (ride_front if w.front else ride_rear) + (static_front if w.front else static_rear) / w.spring
+		w.rest_load = static_front if w.front else static_rear
+		w.free_length = susp_length + (ride_front if w.front else ride_rear) + w.rest_load / w.spring
 		if fresh:
 			w.length = susp_length
 		w.max_brake = float(br.get("front" if w.front else "rear", 1500))
@@ -1103,7 +1124,8 @@ func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> vo
 	for i in 4:
 		var w := wheels[i]
 		w.steer = angles[i] + w.toe_bend
-		var top := xf * (w.hub + Vector3.UP * susp_length)
+		w.set_arc(susp_length - w.length + w.offset)
+		var top := xf * w.anchor(susp_length)
 		var reach := max_len + w.radius + (0.25 if bike != null else 0.0)
 		var q := PhysicsRayQueryParameters3D.create(top, top - up * reach, 1, exclude)
 		var hit := {} if w.lost else space.intersect_ray(q)
@@ -1172,7 +1194,7 @@ func _ray_tyres(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> vo
 			w.s = 0.0
 			w.tyre_slope = 0.0
 			continue
-		var hub_world := xf * (w.hub + Vector3.UP * (susp_length - w.length))
+		var hub_world := xf * w.anchor(susp_length - w.length)
 		if bike != null:
 			# (a motorcycle: the road pushes along its normal at the contact; a leaned spring carries load / cos(lean))
 			w.load *= maxf(0.3, w.normal.dot(up))
