@@ -505,7 +505,7 @@ func _row(parent: Control, d: Array) -> void:
 	if key in CarEditorTyreNodes.KEYS:
 		item.set_meta("tyre_key", true)
 	if Tuning.SELECTS.has(key) or float(d[4]) <= float(d[3]):
-		var items: Array = Tuning.SELECTS.get(key, [])
+		var items: Array = Tuning.model_rim_choices(key) if key.begins_with("rim_model_") else Tuning.SELECTS.get(key, [])
 		if key == "tyre_damage" or key == "cockpit_speedometer":
 			var tick := CheckBox.new()
 			tick.text = ""

@@ -17,8 +17,10 @@ const GROUPS := [
 		["wheels_mode", "Wheels", "", 0, 0, 0],
 		["compound", "Tyre compound", "", 0, 0, 0],
 		["tyre_damage", "Tyre damage", "", 0, 0, 0],
+		["rim_model_front", "Rim at the front (from the model)", "", 0, 0, 0],
 		["rim_front", "Rim at the front (the wheel library)", "", 0, 0, 0],
 		["tyre_front", "Tyre at the front (a tyre of the wheel library: only for the cars that have one)", "", 0, 0, 0],
+		["rim_model_rear", "Rim at the rear (from the model)", "", 0, 0, 0],
 		["rim_rear", "Rim at the rear", "", 0, 0, 0],
 		["tyre_rear", "Tyre at the rear", "", 0, 0, 0],
 		["tyre_section_front", "Tyre at the front: width", "mm", 95, 500, 5],
@@ -247,8 +249,8 @@ const GROUPS := [
 ## "<name> settings". (Motorcycle: only for a motorcycle.)
 ## How the rows of a group are bundled in the menus: [title, keys]; the rows of a group that are not named come first, without a title.
 const LAYOUT := {
-	"Tyres": [["Front", ["rim_front", "tyre_front", "tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_rim_offset_front", "tyre_width", "rubber_front", "tread_front", "pressure_front"]],
-		["Rear", ["rim_rear", "tyre_rear", "tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "tyre_rim_offset_rear", "tyre_width_rear", "rubber_rear", "tread_rear", "pressure_rear"]],
+	"Tyres": [["Front", ["rim_model_front", "rim_front", "tyre_front", "tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_rim_offset_front", "tyre_width", "rubber_front", "tread_front", "pressure_front"]],
+		["Rear", ["rim_model_rear", "rim_rear", "tyre_rear", "tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "tyre_rim_offset_rear", "tyre_width_rear", "rubber_rear", "tread_rear", "pressure_rear"]],
 		["Tyre model", ["tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass"]]],
 	"Springs and dampers": [["Front", ["spring_front", "damping_front", "roll_front"]], ["Rear", ["spring_rear", "damping_rear"]], ["Both axles", ["spring_progression", "damping_rebound"]]],
 	"Ride height and travel": [["Ride height", ["ride_front", "ride_rear"]], ["Travel", ["suspension_travel", "suspension_droop", "suspension_length"]]],
@@ -279,7 +281,7 @@ const SHORT := {
 	"tyre_section_front": "Width", "tyre_section_rear": "Width", "tyre_aspect_front": "Sidewall, as a share of the width", "tyre_aspect_rear": "Sidewall, as a share of the width",
 	"tyre_rim_front": "Rim", "tyre_rim_rear": "Rim", "tyre_rim_offset_front": "Width of the rim (added on each side)", "tyre_rim_offset_rear": "Width of the rim (added on each side)",
 	"tyre_width": "Width of the shell (0: from the wheel)", "tyre_width_rear": "Width of the shell (0: as the front)",
-	"rim_front": "Rim (the wheel library)", "rim_rear": "Rim (the wheel library)", "tyre_front": "Tyre (of the wheel library)", "tyre_rear": "Tyre (of the wheel library)",
+	"rim_model_front": "Rim (from the model)", "rim_model_rear": "Rim (from the model)", "rim_front": "Rim (the wheel library)", "rim_rear": "Rim (the wheel library)", "tyre_front": "Tyre (of the wheel library)", "tyre_rear": "Tyre (of the wheel library)",
 	"rubber_front": "Rubber", "rubber_rear": "Rubber", "tread_front": "Tread (grip on grass, sand and mud)", "tread_rear": "Tread (grip on grass, sand and mud)",
 	"pressure_front": "Pressure", "pressure_rear": "Pressure",
 	"spring_front": "Springs (wheel rate)", "spring_rear": "Springs (wheel rate)", "damping_front": "Dampers", "damping_rear": "Dampers", "roll_front": "Roll stiffness",
@@ -461,6 +463,7 @@ const MAP := {
 	"anti_lift_front": ["chassis.anti_lift_front", 0.01, 0.0], "toe_front": ["chassis.toe_front", 1.0, 0.0], "toe_rear": ["chassis.toe_rear", 1.0, 0.0],
 	"camber_front": ["chassis.camber_front", 1.0, 0.0], "camber_rear": ["chassis.camber_rear", 1.0, 0.0], "roll_camber": ["chassis.roll_camber", 0.01, 0.6],
 	"compound": ["tyres.compound", 0, "road"], "wheels_mode": ["wheels.mode", 0, "default"],
+	"rim_model_front": ["wheels.library.front.model_rim", 0, ""], "rim_model_rear": ["wheels.library.rear.model_rim", 0, ""],
 	"rim_front": ["wheels.library.front.rim", 0, ""], "tyre_front": ["wheels.library.front.tyre", 0, ""],
 	"rim_rear": ["wheels.library.rear.rim", 0, ""], "tyre_rear": ["wheels.library.rear.tyre", 0, ""],
 	"tyre_diameter_front": ["wheels.library.front.custom.diameter", 0.001, null], "tyre_diameter_rear": ["wheels.library.rear.custom.diameter", 0.001, null],
@@ -534,7 +537,13 @@ const NOT_IN_GODOT: Array[String] = []
 ## browser (Car.rebuild); a motorcycle at the next start.
 const AT_NEXT_START := ["rim_front", "tyre_front", "rim_rear", "tyre_rear", "susp_front", "susp_rear"]
 const NEXT_START := "The car is built again with this at once (a motorcycle: at the next start, save the setup first)."
+static var model_rims := {}                 # the rims that the model of the car brings to choose from, per axle (CarTyres.rim_names)
 static var tunes_root := "user://tunes"     # (the tests put the tunes of the player in a folder of their own)
+
+
+## The choices of the rims of the model for a row: as modelled, or one of those that it brings.
+static func model_rim_choices(key: String) -> Array:
+	return [["", "As modelled"]] + (model_rims.get(key.substr(10), []) as Array)
 
 
 ## The value at a path of car.json ("chassis.mass", "drivetrain.gear_ratios.2"), or null when it is not there.
@@ -912,6 +921,8 @@ static func visible(key: String, v: Dictionary) -> bool:
 			return not (library_tyre(v, "front") and library_tyre(v, "rear"))         # (a custom tyre has them too: they go to its own numbers, Tuning.set_value)
 		"rim_front", "rim_rear":
 			return v.get("model_tyres") != "on" and v.get("model_wheels") != "on"
+		"rim_model_front", "rim_model_rear":
+			return not (model_rims.get(key.substr(10), []) as Array).is_empty()
 		"tyre_front", "tyre_rear":
 			var axle := key.substr(5)
 			var t := str(v.get(key, ""))

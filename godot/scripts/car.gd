@@ -815,6 +815,16 @@ func _build_visual() -> void:
 		var named := CarModel.named_wheel_parts(body, w.slot)
 		var own_wheel := model_wheels and not parts.is_empty()
 		var add_tyre := false
+		# (the rims to choose from: they are not the wheel itself, and only one is seen: CarTyres)
+		var rim_choice := CarModel.rim_variants(body, w.slot)
+		for list: Array in rim_choice.values():
+			for n: Node3D in list:
+				named.erase(n)
+				parts.erase(n)
+		var library_rim_chosen := str(lib.get("front" if w.front else "rear", {}).get("rim", "")) != ""
+		if not own_wheel and named.is_empty() and not rim_choice.is_empty() and not library_rim_chosen:
+			own_wheel = true
+			add_tyre = true
 		if not own_wheel and not named.is_empty():
 			own_wheel = true
 			add_tyre = not CarModel.has_named_tyre(named, w.slot)
@@ -823,8 +833,12 @@ func _build_visual() -> void:
 					parts.append(part)
 		if own_wheel:
 			# the wheel parts of the model: their middle is the hub (the model knows best where its wheels are)
+			var own_parts := parts.size()
+			for list: Array in rim_choice.values():
+				for n: Node3D in list:
+					parts.append(n)
 			var box := AABB()
-			for p in parts.size():
+			for p in (own_parts if own_parts > 0 else parts.size()):
 				var b := CarModel.relative(parts[p], self) * CarModel.bounds(parts[p], parts[p])
 				box = b if p == 0 else box.merge(b)
 			var centre := box.get_center()
@@ -836,23 +850,29 @@ func _build_visual() -> void:
 				part.owner = null
 				w.spin_node.add_child(part)
 				part.transform = Transform3D(Basis.IDENTITY, -w.hub_node.position) * t
-			if bike == null and body != null and not is_ghost:
+			if body != null and not is_ghost:
 				if tyres_of_model == null:
 					tyres_of_model = load("res://scripts/car_tyres.gd").new()
 					tyres_of_model.collect(body)
-				tyres_of_model.add_wheel(w.slot, parts, w.spin_node, w.radius)
+				tyres_of_model.add_wheel(w.slot, parts, w.spin_node, w.radius, rim_choice)
+			else:
+				CarTyres.show_rim(parts.slice(0, own_parts), rim_choice, "")
 			if add_tyre and tyres_of_model == null:
 				var tyre := MeshInstance3D.new()
 				var made: Dictionary = lib.get("front" if w.front else "rear", {}).get("custom", {})
 				tyre.mesh = CarModel.tyre_mesh(w.radius, w.radius * float(made.get("inner_ratio", 0.68)), float(made.get("width", 0.24)))
 				w.spin_node.add_child(tyre)
 			continue
+		for list: Array in rim_choice.values():
+			parts.append_array(list)
 		for part in parts:
 			part.get_parent().remove_child(part)
 			part.queue_free()
 		_library_wheel(w, lib.get("front" if w.front else "rear", {}))
 	if tyres_of_model != null:
 		tyres_of_model.apply(config)
+	if player_tyres:
+		Tuning.model_rims = tyres_of_model.rim_names() if tyres_of_model != null else {}
 	_add_speedometer(body)
 	if bike != null:
 		bike_model = MotorcycleModel.new(self, body)

@@ -1,3 +1,4 @@
+class_name CarTyres
 extends RefCounted
 ## The tyre of a wheel of the model, for the tread and the size that are chosen. A model can bring its tyres as loose objects: tyre_road, tyre_slick,
 ## tyre_allterrain, tyre_knobbly (one of each, made as the left tyre with its origin in the middle and its axle along x; tyre_knobbly_rear or
@@ -59,7 +60,7 @@ static func _dims(mesh: Mesh, b: Basis) -> Dictionary:
 
 ## The parts of the wheel of a corner: the biggest mesh is the tyre (never a rim or a brake), what is called a rim goes with its size. Without a tyre
 ## of its own (a model that has only loose tyres) a tyre is made round the rim, of this radius.
-func add_wheel(slot: String, parts: Array, frame: Node3D, radius: float) -> void:
+func add_wheel(slot: String, parts: Array, frame: Node3D, radius: float, rim_choice := {}) -> void:
 	var tyre: MeshInstance3D = null
 	var best := 0.0
 	var meshes: Array[MeshInstance3D] = []
@@ -100,7 +101,39 @@ func add_wheel(slot: String, parts: Array, frame: Node3D, radius: float) -> void
 	var rel := CarModel.relative(tyre, frame)
 	var d := _dims(tyre.mesh, rel.basis)
 	d["centre"] = rel.origin + (d["centre"] as Vector3)
-	wheels[slot] = {"tyre": tyre, "orig": tyre.mesh, "frame": frame, "dims": d, "rims": rims, "key": "", "made": made}
+	var own := parts.filter(func(p: Variant) -> bool:
+		return not rim_choice.values().any(func(list: Array) -> bool: return list.has(p)))
+	wheels[slot] = {"tyre": tyre, "orig": tyre.mesh, "frame": frame, "dims": d, "rims": rims, "key": "", "made": made, "own": own, "rim_choice": rim_choice}
+
+
+## One rim of those that the model brings is seen: the one that is chosen; else the rim of the wheel itself, and when that has none the first of them.
+static func show_rim(own: Array, rim_choice: Dictionary, want: String) -> void:
+	var has_rim := own.any(func(p: Variant) -> bool: return is_instance_valid(p) and RegEx.create_from_string("(?i)rim|felg|velg").search(str(p.name)) != null)
+	var names := rim_choice.keys()
+	names.sort()
+	var seen := want if rim_choice.has(want) else ("" if has_rim or names.is_empty() else str(names[0]))
+	for id: String in rim_choice:
+		for n: Node3D in rim_choice[id]:
+			if is_instance_valid(n):
+				n.visible = id == seen
+	if rim_choice.is_empty() or seen == "":
+		return
+	for p: Variant in own:
+		if is_instance_valid(p) and RegEx.create_from_string("(?i)rim|felg|velg").search(str(p.name)) != null:
+			(p as Node3D).visible = false
+
+
+## The names of the rims of the model per axle: { front: [[id, text], ...], rear: [...] }.
+func rim_names() -> Dictionary:
+	var out := {"front": [], "rear": []}
+	for slot: String in wheels:
+		var axle := "front" if slot[0] == "F" else "rear"
+		for id: String in wheels[slot]["rim_choice"]:
+			if not (out[axle] as Array).any(func(e: Array) -> bool: return e[0] == id):
+				out[axle].append([id, id.capitalize() if not id[0].is_valid_int() else id])
+	for axle: String in out:
+		(out[axle] as Array).sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	return out
 
 
 ## Every wheel as the configuration says (only what has changed is made again).
@@ -111,6 +144,7 @@ func apply(cfg: Dictionary) -> void:
 		if not is_instance_valid(w["tyre"]):
 			continue
 		var axle := "front" if slot[0] == "F" else "rear"
+		show_rim(w["own"], w["rim_choice"], str(Tuning.read(cfg, "wheels.library.%s.model_rim" % axle)) if Tuning.read(cfg, "wheels.library.%s.model_rim" % axle) != null else "")
 		var band := band_of(float(v.get("tread_" + axle, 0.0)), float(v.get("rubber_" + axle, 50.0)))
 		var ex: Variant = _exemplar(band, slot, axle, bool(w["made"]))
 		var custom: Variant = Tuning.read(cfg, "wheels.library.%s.custom" % axle)

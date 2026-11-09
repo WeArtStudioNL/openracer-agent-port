@@ -157,6 +157,36 @@ static func named_wheel_parts(body: Node3D, slot: String) -> Array[Node3D]:
 	return out
 
 
+## The rims that a model brings to choose from for a corner: objects called wheel_FR_rim_duotone, wheel_FR_rim_5-spoke (a motorcycle also wheel_F_rim_duotone, wheel_R_rim_duotone):
+## the name of the choice is what comes after rim_, in small letters. A copy of Blender (.001) or a second mesh of the object goes with it. { name -> [objects] }
+static func rim_variants(body: Node3D, slot: String) -> Dictionary:
+	var out := {}
+	if body == null:
+		return out
+	var re := RegEx.create_from_string("(?i)^wheel[-_. ]?(fl|fr|rl|rr|f|r)[-_. ]rim[-_. ](.+?)(?:[-_. ]?[0-9]{3})?$")
+	var corner := slot.to_lower()
+	for n in body.find_children("*", "Node3D", true, false):
+		var m := re.search(str(n.name))
+		if m == null:
+			continue
+		var at := m.get_string(1).to_lower()
+		if at != corner and at != corner.substr(0, 1):
+			continue
+		var above := n.get_parent()
+		var nested := false
+		while above != null and above != body:
+			if re.search(str(above.name)) != null:
+				nested = true
+				break
+			above = above.get_parent()
+		if not nested:
+			var id := m.get_string(2).to_lower()
+			if not out.has(id):
+				out[id] = []
+			out[id].append(n)
+	return out
+
+
 ## Whether those objects are a whole wheel or a tyre (wheel_FL): else only a rim or a disc, and the tyre is still made.
 static func has_named_tyre(parts: Array[Node3D], slot: String) -> bool:
 	var base := "wheel" + slot.to_lower()

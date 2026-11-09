@@ -341,6 +341,8 @@ func _options(key: String) -> Array:
 		return Tuning.SELECTS[key]
 	if Tuning.SAME_LIST.has(key):
 		return Tuning.SELECTS[Tuning.SAME_LIST[key]]
+	if key in ["rim_model_front", "rim_model_rear"]:
+		return Tuning.model_rim_choices(key)
 	if key in ["rim_front", "rim_rear", "tyre_front", "tyre_rear"]:
 		var rims := key.begins_with("rim")
 		var out := [["", "From the model" if rims else "From the model (tyres.shell of the car)"]]
