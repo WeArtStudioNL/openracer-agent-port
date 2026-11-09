@@ -6,16 +6,21 @@ extends RefCounted
 ## ground (looseGrip, looseRolling, looseSlide), and "lateral" (the stiffness across the tyre, as a factor).
 ## A custom tyre has a rubber (0 to 100, between the kinds) and a tread (0 road to 100 knobbly).
 
+## The tread takes the working window with it: rubber that grips by sticking to the road is lost when it is too hot (hotLoss, at 120 C), a knobbly tyre digs into
+## loose ground, whose strength does not care how warm the knobs are (looseHot: the share of hotLoss that is left on loose ground).
+const ALL_TERRAIN := {"optimum": 55.0, "window": 15.0, "hotLoss": 0.30, "looseHot": 0.10}
+const KNOBBLY := {"optimum": 65.0, "window": 35.0, "hotLoss": 0.35, "looseHot": 0.12}
+
 const KINDS := {
-	"eco": {"grip": 0.88, "optimum": 70, "window": 20, "cold": 55, "coldLoss": 0.16, "heating": 0.8, "life": 1.7, "rolling": 0.8, "smoke": 20},
-	"road": {"grip": 1.0, "optimum": 85, "window": 15, "cold": 45, "coldLoss": 0.22, "heating": 1.0, "life": 1.0, "rolling": 1.0, "smoke": 0},
-	"sport": {"grip": 1.1, "optimum": 90, "window": 14, "cold": 42, "coldLoss": 0.25, "heating": 1.15, "life": 0.7, "rolling": 1.05, "smoke": -5},
-	"semislick": {"grip": 1.25, "optimum": 95, "window": 12, "cold": 38, "coldLoss": 0.3, "heating": 1.3, "life": 0.45, "rolling": 1.1, "smoke": -12},
-	"slick": {"grip": 1.45, "optimum": 100, "window": 10, "cold": 30, "coldLoss": 0.4, "heating": 1.5, "life": 0.3, "rolling": 1.15, "smoke": -20},
-	"winter": {"grip": 0.9, "optimum": 55, "window": 25, "cold": 55, "coldLoss": 0.2, "heating": 0.9, "life": 1.2, "rolling": 1.1, "smoke": -10},
-	"offroad": {"grip": 0.82, "looseGrip": 1.7, "looseRolling": 0.6, "looseSlide": 0.97, "optimum": 70, "window": 25, "cold": 60, "coldLoss": 0.15,
+	"eco": {"grip": 0.88, "optimum": 60, "window": 15, "hotLoss": 0.40, "looseHot": 0.70, "cold": 55, "coldLoss": 0.16, "heating": 0.8, "life": 1.7, "rolling": 0.8, "smoke": 20},
+	"road": {"grip": 1.0, "optimum": 65, "window": 15, "hotLoss": 0.45, "looseHot": 0.70, "cold": 45, "coldLoss": 0.22, "heating": 1.0, "life": 1.0, "rolling": 1.0, "smoke": 0},
+	"sport": {"grip": 1.1, "optimum": 78, "window": 13, "hotLoss": 0.50, "looseHot": 0.70, "cold": 42, "coldLoss": 0.25, "heating": 1.15, "life": 0.7, "rolling": 1.05, "smoke": -5},
+	"semislick": {"grip": 1.25, "optimum": 88, "window": 12, "hotLoss": 0.58, "looseHot": 0.70, "cold": 38, "coldLoss": 0.3, "heating": 1.3, "life": 0.45, "rolling": 1.1, "smoke": -12},
+	"slick": {"grip": 1.45, "optimum": 95, "window": 10, "hotLoss": 0.65, "looseHot": 0.70, "cold": 30, "coldLoss": 0.4, "heating": 1.5, "life": 0.3, "rolling": 1.15, "smoke": -20},
+	"winter": {"grip": 0.9, "optimum": 48, "window": 18, "hotLoss": 0.50, "looseHot": 0.70, "cold": 55, "coldLoss": 0.2, "heating": 0.9, "life": 1.2, "rolling": 1.1, "smoke": -10},
+	"offroad": {"grip": 0.82, "looseGrip": 1.7, "looseRolling": 0.6, "looseSlide": 0.97, "optimum": 65, "window": 35, "hotLoss": 0.35, "looseHot": 0.12, "cold": 60, "coldLoss": 0.15,
 		"heating": 0.9, "life": 0.9, "rolling": 1.25, "smoke": 5},
-	"drag": {"grip": 1.7, "lateral": 0.5, "optimum": 85, "window": 20, "cold": 28, "coldLoss": 0.45, "heating": 1.4, "life": 0.18, "rolling": 1.4, "smoke": -24},
+	"drag": {"grip": 1.7, "lateral": 0.5, "optimum": 95, "window": 15, "hotLoss": 0.70, "looseHot": 0.70, "cold": 28, "coldLoss": 0.45, "heating": 1.4, "life": 0.18, "rolling": 1.4, "smoke": -24},
 }
 
 ## The rubber of a custom tyre: a slider from 0 to 100 between these kinds.
@@ -37,7 +42,7 @@ static func rubber(r: float, tread := 0.0) -> Dictionary:
 	var b: Dictionary = KINDS[RUBBER_STOPS[i + 1][0]]
 	var f := (at - float(RUBBER_STOPS[i][1])) / (float(RUBBER_STOPS[i + 1][1]) - float(RUBBER_STOPS[i][1]))
 	var out := {}
-	for k in ["grip", "optimum", "window", "cold", "coldLoss", "heating", "life", "rolling", "smoke", "lateral"]:
+	for k in ["grip", "optimum", "window", "cold", "coldLoss", "hotLoss", "looseHot", "heating", "life", "rolling", "smoke", "lateral"]:
 		var x := float(a.get(k, 1.0))
 		var y := float(b.get(k, 1.0))
 		out[k] = x * pow(y / x, f) if k == "life" else lerpf(x, y, f)
@@ -48,6 +53,11 @@ static func rubber(r: float, tread := 0.0) -> Dictionary:
 		out["looseGrip"] = 1.0 + 0.7 * t
 		out["looseRolling"] = 1.0 - 0.4 * t
 		out["looseSlide"] = 0.84 + 0.13 * t
+		var from: Dictionary = out if t < 0.5 else ALL_TERRAIN
+		var to: Dictionary = ALL_TERRAIN if t < 0.5 else KNOBBLY
+		var f2 := t * 2.0 if t < 0.5 else (t - 0.5) * 2.0
+		for k in ["optimum", "window", "hotLoss", "looseHot"]:
+			out[k] = lerpf(float(from[k]), float(to[k]), f2)
 	return out
 
 

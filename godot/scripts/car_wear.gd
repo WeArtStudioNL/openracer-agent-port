@@ -53,16 +53,23 @@ static func wear_step(w: Car.Wheel, dt: float, heating := 1.0, life := 1.0) -> v
 	var spin := w.omega * w.radius - w.forward_speed
 	var slide_power := (absf(w.fx * spin) + absf(w.fy * w.side_speed)) if w.contact else 0.0
 	var heat_in := (slide_power + (w.load * absf(w.forward_speed) * 0.025 if w.contact else 0.0)) * heating * float(k.get("heating", 1.0)) * w.pressure_roll
+	var loose: bool = w.contact and Content.SURFACES.get(w.surface, {}).get("loose", false)
+	if loose:
+		heat_in *= 0.4                  # (the ground gives way and moves: a tyre does not rub on it as on a road, and the ground takes the heat away)
 	var size := clampf(pow(w.radius / 0.315, 3.0), 0.04, 2.5)
-	var cooling := (40.0 + 3.0 * absf(w.forward_speed)) * size * (w.temp - 25.0)
+	var cooling := (40.0 + 3.0 * absf(w.forward_speed)) * size * (w.temp - 25.0) * (1.5 if loose else 1.0)
 	w.temp += (heat_in - cooling) / (20000.0 * size) * dt
 	var optimum := float(k.get("optimum", 85))
 	var window := float(k.get("window", 15))
 	var overheated := clampf((w.temp - (optimum + window)) / 30.0, 0.0, 2.0)
 	var counted := slide_power * 0.35 if absf(w.forward_speed) < 8.0 else slide_power
 	w.wear += counted * (1.0 + 2.0 * overheated) * dt / (4.8e7 * life * float(k.get("life", 1.0))) * scale
-	var off := maxf(0.0, absf(w.temp - optimum) - window) / float(k.get("cold", 45))
-	var by_temp := 1.0 - float(k.get("coldLoss", 0.22)) * minf(1.0, off)
+	var cold := maxf(0.0, optimum - window - w.temp) / float(k.get("cold", 45))
+	var by_temp := 1.0 - float(k.get("coldLoss", 0.22)) * minf(1.0, cold)
+	# (too hot: the most at 120 C; on loose ground only what a soft tread costs)
+	var hi := optimum + window
+	var hot := smoothstep(hi, maxf(hi + 10.0, 120.0), w.temp) * float(k.get("hotLoss", 0.45)) * (float(k.get("looseHot", 0.7)) if loose else 1.0)
+	by_temp *= 1.0 - hot
 	var by_wear := 1.0 - 0.2 * pow(minf(1.0, w.wear), 1.5) - (0.15 if w.wear >= 1.0 else 0.0)
 	w.condition = by_temp * by_wear * w.pressure_grip
 
