@@ -441,6 +441,10 @@ func repair() -> void:
 	if engine_damage != null:
 		engine_damage.repair()
 	TyreDamage.repair(self)
+	fuel = tank
+	for w in wheels:
+		w.temp = float(w.kind.get("optimum", 85))     # (the tyres back at their working temperature)
+		w.surf_t = 25.0
 	if bike != null:
 		bike.recover()
 

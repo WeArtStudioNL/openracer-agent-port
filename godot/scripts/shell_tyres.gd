@@ -16,6 +16,8 @@ extends RefCounted
 const SHELL_TEAL := Color(0.3, 0.8, 0.8)
 const SHELL_DIM := Color(0.35, 0.4, 0.45)
 const MAX_ACROSS := 3.0          # the most that the road pushes a wheel across its suspension, in the weight of the car
+const MAX_RUB := 2.0             # the most that a tyre rubs, as a share of how hard it is pressed
+const MAX_WALL := 2.0            # and from the side against a wall
 const MAX_LOAD := 6.0            # and along it: a tyre that is rammed flat (the wheel at the end of its travel) gives no more
 const STEPS := 3                 # steps of the car in a step of Godot (1/360 s; Vehicle.js steps at 1/300 s or less)
 
@@ -347,6 +349,19 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 ## give is limited, or it would throw the car away. So is a tyre rammed flat under a wheel at the end of its travel. A wall is not limited.
 func _limit_on_its_side(res: Dictionary, up: Vector3) -> void:
 	var n: Vector3 = res.get("normal", Vector3.ZERO)
+	# (against a wall the tyre is stiff and the car hits it hard: what it pushes back with and rubs with is limited, or a touch sends the car spinning)
+	var across := Vector3(n.x, 0.0, n.z)
+	var wall_most := car.mass * Car.G * MAX_WALL
+	if across.length() > wall_most:
+		var kept := wall_most / across.length()
+		n = across * kept + Vector3.UP * n.y
+		res["normal"] = n
+		res["friction"] = (res["friction"] as Vector3) * kept
+	# (rubber cannot rub harder than the tyre is pressed: a peak in one small step sends the car spinning)
+	var fric: Vector3 = res["friction"]
+	var pressed := maxf(n.dot(up), car.mass * Car.G * 0.25)
+	if fric.length() > MAX_RUB * pressed:
+		res["friction"] = fric.normalized() * MAX_RUB * pressed
 	var size := n.length()
 	var most := car.mass * Car.G * (MAX_ACROSS if absf(n.dot(up)) < 0.7 * size else MAX_LOAD)
 	if size <= most or absf(n.y) <= 0.7 * size:
