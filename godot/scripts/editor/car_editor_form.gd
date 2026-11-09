@@ -671,11 +671,11 @@ func size_from_model() -> void:
 	ed.refresh_fields()
 
 
-func chassis_from_wheels() -> void:
+func chassis_from_wheels() -> bool:
 	var c: Variant = ed.wheel_centers()
 	if not c is Dictionary:
 		ed.status("Select the parts of the four wheels first.", "error")
-		return
+		return false
 	var ch: Dictionary = ed.cfg["chassis"]
 	var fz: float = (c["FR"]["c"].z + c["FL"]["c"].z) / 2.0
 	var rz: float = (c["RR"]["c"].z + c["RL"]["c"].z) / 2.0
@@ -688,6 +688,7 @@ func chassis_from_wheels() -> void:
 	ch["rear_axle_offset"] = ch["front_axle_offset"]
 	ed.refresh_fields()
 	ed.update_helpers()
+	return true
 
 
 ## A new model for a car that exists: the transform, the wheels (by the names of their parts) and the materials are kept where they
@@ -858,11 +859,14 @@ func build_chassis_card() -> void:
 	var sfm := EditorStyle.button("Size from the model", "small ghost")
 	sfm.pressed.connect(func():
 		size_from_model()
+		if ed.model_root != null:
+			ed.tuning.share_with_setups(["dimensions"])
 		ed.changed())
 	flow.add_child(sfm)
 	var cfw := EditorStyle.button("Wheelbase, track and tyre from the wheels", "small ghost")
 	cfw.pressed.connect(func():
-		ed.with_model_wheels(chassis_from_wheels)
+		if ed.with_model_wheels(chassis_from_wheels):
+			ed.tuning.share_with_setups(["chassis.wheelbase", "chassis.front_track", "chassis.rear_track", "chassis.tire_diameter", "chassis.front_axle_offset", "chassis.rear_axle_offset"])
 		ed.update_helpers()
 		ed.changed())
 	flow.add_child(cfw)

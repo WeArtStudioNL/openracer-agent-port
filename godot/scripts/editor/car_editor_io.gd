@@ -524,6 +524,22 @@ func save() -> bool:
 	return true
 
 
+## Values written in car.json of the car as it is on disk (paths with their values), and in the car as made in the form. An error, or "".
+func patch_car(values: Dictionary) -> String:
+	var dir := ed.save_dir().path_join(ed.existing_id)
+	var file := dir.path_join("car.json")
+	for p: String in values:
+		Tuning.write(ed.existing, p, values[p])
+	if not FileAccess.file_exists(file):
+		return ""
+	var disk: Variant = JSON.parse_string(FileAccess.get_file_as_string(file))
+	if not disk is Dictionary:
+		return "Could not read " + file
+	for p: String in values:
+		Tuning.write(disk, p, values[p])
+	return _write(dir, {"config": disk, "uploads": []})
+
+
 ## The driver belongs to the car: when it was changed it goes in car.json of the car, also when a tune is chosen (only
 ## its "driver"; the rest of car.json stays as it is). An error, or "".
 func save_driver(c: Dictionary) -> String:
