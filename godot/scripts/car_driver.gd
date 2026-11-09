@@ -58,6 +58,8 @@ var cfg: Dictionary                  # the "driver" of car.json with the default
 var parent: Node3D                   # the frame of the body of the car: the places of cfg are in it
 var root: Node3D                     # the figure: placed, turned and scaled as cfg says
 var model: Node3D = null
+var body: DriverBody = null          # his body in the seat: the give in the g-forces and a hit (only in the game, set by attach)
+var _body_shift := Vector3.ZERO
 var skel: Skeleton3D = null
 var steering := {}                   # the wheel the hands hold: { axis, centre (the space of the body), degrees, angle }
 var bones := {}                      # armL, armR, legL, legR: [upper, lower, end] (-1: not found); hips, head: a bone; chest: [bones]
@@ -434,6 +436,8 @@ func _torso(to_skel: Basis) -> void:
 	for n in ["chest", "head"]:
 		var keyed: Variant = _torso_key_rot(n, turn)
 		torso_pose[n] = keyed if keyed is Vector3 else BoneIK.vec(cfg[n].get("rotation", [0, 0, 0]))
+		if body != null:
+			torso_pose[n] = (torso_pose[n] as Vector3) + (body.chest_degrees() if n == "chest" else body.head_degrees())
 	var share := 1.0 / (spine_mid.size() + 1)
 	var chest: Vector3 = torso_pose["chest"]
 	for b in spine_mid:
@@ -469,12 +473,24 @@ func update(dt: float, throttle_now: float, brake_now: float) -> void:
 	var turn_skel := to_skel.basis.orthonormalized()
 	_torso(turn_skel)
 	_read_grips()
+	var limp := 0.0
+	var arms_of := {}
 	if not steering.is_empty():
 		if keys_active():
 			_plan_for(turn)
 		else:
 			_hands_step(dt)
 	var wheel_ok := _wheel_frame()
+	if body != null:
+		# (the seat moves him a little, the rest is the back that bends; the hands and the feet stay where they are)
+		root.position -= _body_shift
+		_body_shift = body.trunk * 0.3
+		root.position += _body_shift
+		for e in [["armL", "left"], ["armR", "right"]]:
+			var c: Array = bones[e[0]]
+			arms_of[e[1]] = {"shoulder": _body_pos(c[0]), "grip": _grip_point(e[1]), "upper": _body_pos(c[0]).distance_to(_body_pos(c[1])), "lower": _body_pos(c[1]).distance_to(_body_pos(c[2]))}
+		body.step(dt, arms_of)
+		limp = body.knocked
 	# the bones on the left of the car (+x in the space of the body) take the left hand and the left foot, whatever the
 	# model calls them (a model that faces the other way has its L on the right)
 	var arm_left := "armL" if _body_pos(bones["armL"][0]).x >= _body_pos(bones["armR"][0]).x else "armR"
@@ -484,8 +500,11 @@ func update(dt: float, throttle_now: float, brake_now: float) -> void:
 		var chain: Array = bones[e[0]]
 		var target := _grip_point(e[1])
 		var pole := _pole(e[0], _body_pos(chain[0]) + Vector3(float(e[2]) * float(cfg["elbow_out"]), -0.5, -0.5))
+		if limp > 0.0:
+			target = target.lerp(body.hands[e[1]], limp)
+			pole = pole.lerp(body.elbows[e[1]], limp)
 		var hq: Variant = null
-		if not steering.is_empty() and wheel_ok:
+		if not steering.is_empty() and wheel_ok and limp < 0.5:
 			# the turn of the hand as the car editor set it, turned about the middle of the wheel as far as the hand went round
 			BoneIK.solve(skel, chain, to_skel * _rest_grip[e[1]], to_skel * pole, true)
 			hq = BoneIK.global(skel, chain[2]).basis.orthonormalized()
@@ -495,7 +514,7 @@ func update(dt: float, throttle_now: float, brake_now: float) -> void:
 				Basis(_axis, _hand[e[1]]["delta"]) * BoneIK.euler(BoneIK.vec(hands["rotation"][e[1]]))
 			BoneIK.set_global_basis(skel, chain[2], turn_skel * qw * turn_skel.inverse() * hq)
 		var g: float = hand_pose[e[1]]["grip"] if hand_pose[e[1]]["keyed"] else float(hands["grip"][e[1]])
-		_curl(e[0], clampf(g, 0.0, 1.0))
+		_curl(e[0], clampf(g, 0.0, 1.0) * (1.0 - limp))
 	var feet: Dictionary = cfg["feet"]
 	var travel := BoneIK.vec(feet["direction"]).normalized() * float(feet["travel"])
 	for e in [[leg_left, "left", 1.0, brake], ["legR" if leg_left == "legL" else "legL", "right", -1.0, throttle]]:
@@ -1005,6 +1024,7 @@ static func attach(car: Car, body: Node3D) -> void:
 	var d := CarDriver.new(frame, dcfg, steer)
 	if d.set_model(scene):
 		frame.driver = d
+		d.body = DriverBody.new(car)
 	else:
 		d.dispose()
 
@@ -1053,7 +1073,7 @@ class Frame:
 			var now := [snappedf(angle, 0.002), snappedf(car.throttle, 0.01), snappedf(car.brake, 0.01), driver.show_head]
 			_still = _still + dt if now == _last else 0.0
 			_last = now
-			if _still > 0.6:
+			if _still > 0.6 and (driver.body == null or not driver.body.moving) and car.linear_velocity.length() < 0.3:
 				return
 			if not driver.steering.is_empty():
 				driver.steering["angle"] = angle
