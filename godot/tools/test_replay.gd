@@ -311,6 +311,15 @@ func _cinema_and_marks() -> void:
 	_check(kept.size() == 2 and int(kept[0]["s"]) == 0 and bool(kept[0]["wheels"][0][0]) and not bool(kept[0]["wheels"][1][0]), "a wheel off before the fragment is off at its start")
 	_check(kept.size() == 2 and int(kept[1]["s"]) == 30 and bool(kept[1]["wheels"][1][0]), "a wheel that comes off in the fragment comes off there")
 	DirAccess.remove_absolute(p2)
+	# the video editor keeps the same: a film of moments takes the records at the samples they fall on
+	var baked_soft: Array = ReplaySoft.new([]).baked([]) if false else []
+	var was2: Array = r.soft.entries
+	r.soft.entries = [{"nodes": 1, "names": [], "records": [{"s": 0, "disp": PackedVector3Array(), "parts": [], "wheels": [on, on, on, on]},
+		{"s": 40, "disp": PackedVector3Array(), "parts": [], "wheels": [off, on, on, on]}]}]
+	baked_soft = r.soft.baked([10.0, 20.0, 30.0, 45.0, 50.0])
+	r.soft.entries = was2
+	var film: Array = baked_soft[0]["records"]
+	_check(film.size() == 2 and int(film[0]["s"]) == 0 and int(film[1]["s"]) == 3 and bool(film[1]["wheels"][0][0]), "a film made in the video editor has the wheel off where it comes off")
 	var times: Array = []
 	for k in 60:
 		times.append(f[0] + k * 0.5 / 30.0)

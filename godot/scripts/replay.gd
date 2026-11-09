@@ -903,6 +903,14 @@ func bake(times: Array, extra := {}) -> Dictionary:
 			data.append_array(sample_at(t, n))
 	out["samples"] = data
 	out["count"] = times.size()
+	# (all that the game showed goes with it: the dents, the parts and the wheels, and the effects at the times of the new film)
+	if soft != null and not times.is_empty():
+		var at: Array = []
+		for t in times:
+			at.append(float(t) * RATE - first_index)
+		out["soft"] = soft.baked(at)
+	if fx != null and times.size() > 1:
+		out["fx"] = fx.baked(times, RATE)
 	for k in extra:
 		out[k] = extra[k]
 	return out

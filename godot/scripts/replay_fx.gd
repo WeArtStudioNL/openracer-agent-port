@@ -269,6 +269,33 @@ func pack(a: float, b: float) -> Dictionary:
 	return out
 
 
+## The rows of a film made of moments of this recording (times: the time of every sample of the film, rate: its samples a second): a row goes to where its moment is in the film.
+func baked(times: Array, rate: float) -> Dictionary:
+	var lo := float(times.min())
+	var hi := float(times.max())
+	var whole := pack(lo, hi + 1.0 / rate)
+	var out := {}
+	for key: String in whole:
+		if key.ends_with(":data"):
+			out[key] = whole[key]
+			continue
+		var list: Array = whole[key]
+		var part: Array = []
+		for i in range(times.size() - 1):
+			var a := float(times[i]) - lo
+			var b := float(times[i + 1]) - lo
+			if b <= a:
+				continue
+			for r in list:
+				if float(r[0]) >= a and float(r[0]) < b:
+					var row := PackedFloat32Array(r)
+					row[0] = (i + (float(r[0]) - a) / (b - a)) / rate
+					part.append(row)
+		if not part.is_empty():
+			out[key] = part
+	return out
+
+
 ## The rows of a file (pack), at the times of its samples (the file starts at 0).
 func unpack(data: Variant) -> void:
 	if not (data is Dictionary):

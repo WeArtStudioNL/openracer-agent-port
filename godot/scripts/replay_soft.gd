@@ -276,6 +276,27 @@ func part(from: int, to: int) -> Array:
 	return out
 
 
+## The records for a film made of these moments (at: the sample, a fraction, of every sample of the film): a record when what is seen changes.
+func baked(at: Array) -> Array:
+	var out: Array = []
+	for e: Variant in entries:
+		if e == null:
+			out.append(null)
+			continue
+		var recs: Array = e["records"]
+		var kept: Array = []
+		var was := -2
+		for i in at.size():
+			var k := _find(recs, float(at[i]))
+			if k != was and k >= 0:
+				var copy: Dictionary = (recs[k] as Dictionary).duplicate()
+				copy["s"] = i
+				kept.append(copy)
+			was = k
+		out.append({"nodes": e["nodes"], "names": e["names"], "records": kept})
+	return out
+
+
 ## For the file of a replay: [{nodes, names, records}] (null for a car without a shell).
 func save_data() -> Array:
 	return entries
