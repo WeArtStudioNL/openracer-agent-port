@@ -62,6 +62,11 @@ var rider_err_cap := 90.0 * DEG
 var rider_gain_from := 10.0
 var rider_bars_g := 2.0
 var rider_ref_tau := 0.12
+var rider_roll_kp := 50.0
+var rider_roll_kd := 14.0
+var rider_roll_max := 1.2
+var rider_grip_share := 0.9
+var rider_ease_off := 45.0 * DEG
 var _lean_ref := 0.0              # the lean that he asks for, smoothed: the bike is taken into the bend, not pulled
 var balance_from := 6.0
 var balance_to := 14.0
@@ -402,7 +407,7 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	# (the circle of grip: what the tyres give along the bike they cannot give sideways)
 	var flat: Vector3 = st["flat"]
 	var a_long := maxf(0.0, -_accel.dot(flat))
-	var grip_max := (grip_g + (grip_fast * smooth(13.0, 18.0, au) if v2 else 0.0)) * G * (1.0 - drift)
+	var grip_max := minf(grip_g + (grip_fast * smooth(13.0, 18.0, au) if v2 else 0.0), rider_grip_share * _tyre_grip(car)) * G * (1.0 - drift)
 	speed_max = minf(speed_max, atan(sqrt(maxf(0.0, grip_max * grip_max - a_long * a_long)) / G) + over_lean + extra)
 	var phi_max := speed_max + eps_full
 	var want := -c * minf(phi_max, cap) * fast
@@ -417,6 +422,9 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	var bike_want := clampf(want - eps * minf(1.0, absf(want) / (6.0 * DEG)), -speed_max, speed_max)
 	var roll_step := (bike_want - target_lean) * minf(1.0, dt / lean_response)
 	var roll_max := max_roll_rate * (1.0 + 2.5 * (1.0 - smooth(4.0, 12.0, au))) * dt
+	# (letting go of a key in a bend is not asking to stand up at once: the lean comes off calmly, and a quick change to the other side stays quick)
+	if absf(bike_want) < absf(target_lean) and bike_want * target_lean >= 0.0:
+		roll_max = lerpf(roll_max, rider_ease_off * dt, smooth(8.0, 14.0, au))
 	target_lean += clampf(roll_step, -roll_max, roll_max)
 	# the angle that a bend of the lean the bike has needs (to the left: negative), and the countersteer
 	var lean_now := clampf(float(st["lean"]), -max_lean, max_lean)
@@ -485,6 +493,15 @@ func _steering_v2(car: Car, st: Dictionary, kinematic: float, u: float, dt: floa
 			steer_rate = 0.0
 	steer = kin * kinematic + (1.0 - kin) * steer_dof
 	return steer
+
+
+## What the tyres of the bike can carry now (the lesser of the two, of the road under them, their kind, their temperature and wear): the rider does not lean further than that, or the bike slides away from under him.
+func _tyre_grip(car: Car) -> float:
+	var out := INF
+	for w: Car.Wheel in [car.wheels[0], car.wheels[2]]:
+		var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
+		out = minf(out, (float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if surf.get("loose", false) else 1.0) + 0.24) * 1.05)      # (a light load grips more: CarWear.tyre_force)
+	return out
 
 
 ## The feet at a standstill: both go down below 4 km/h and stay down until 5 km/h; then back on the pegs, the left
@@ -690,6 +707,10 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 	var t_roll := alive * clampf(kp * (target_lean - lean) - kd * float(st["rate"]), -6.0 * gh * braced, 6.0 * gh * braced)
 	if v2:
 		t_roll *= 1.0 - smooth(balance_from, balance_to, absf(u))        # (from 7 m/s the rider keeps it up with the bars; this is for a walking pace)
+		# at speed: the bike is taken to the lean that he asks for quickly and damped, straight on its roll: the loop over the bars and the tyres is too slow to be strong without swinging
+		var rate_now := float(st["rate"])
+		var cap_roll := rider_roll_max * gh
+		t_roll += alive * smooth(balance_from, balance_to, absf(u)) * clampf(inertia * (rider_roll_kp * (_lean_ref - lean) - rider_roll_kd * rate_now), -cap_roll, cap_roll)
 	state.apply_torque(-a * t_roll)
 	var front_share := _front_load(car)
 	if v2 and body_assist > 0.0:
