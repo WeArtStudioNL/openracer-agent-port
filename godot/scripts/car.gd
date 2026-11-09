@@ -64,6 +64,7 @@ class Wheel:
 	var pressure_roll := 1.0
 	var pressure := 2.2             # bar, as set (the tuning)
 	var leak := 0.0                 # a puncture: bar a second (0: none)
+	var ball_load := 0.0            # N that the collision balls on its arms press the wheel up with (CarCollision)
 	var pressure_loss := 0.0        # bar lost so far
 	var stiffness_bias := 1.0       # the rear tyres are a bit stiffer against the slip angle
 	var tc := false                 # the traction control holds this wheel back

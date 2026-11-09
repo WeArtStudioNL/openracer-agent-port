@@ -414,10 +414,6 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 		comp[i] = car.susp_length - car.wheels[i].length
 	for i in 4:
 		var w := car.wheels[i]
-		if w.lost:                      # (no wheel: the arms stay where they are at rest, the car goes down on them)
-			w.length = car.susp_length - w.offset
-			sus_vel[i] = 0.0
-			continue
 		var fs := 0.0
 		if car.unsprung:
 			w.length = car.susp_length - w.offset
@@ -443,7 +439,7 @@ func _springs(h: float, basis: Basis, up: Vector3, com: Vector3, tyre_load: Arra
 			var used := maxf(0.0, car.susp_length + (car.ride_front if w.front else car.ride_rear) - w.length)
 			var progressive := car.spring_progression * w.spring * used * used / maxf(0.01, car.susp_travel) if car.spring_progression > 0.0 else 0.0
 			var fs0 := w.spring * (w.free_length - w.length - w.offset) + progressive + bump + droop + arb
-			var accel0 := (fs0 - float(tyre_load[i])) / unsprung_mass + g_down - _acc_down
+			var accel0 := (fs0 - float(tyre_load[i]) - w.ball_load) / unsprung_mass + g_down - _acc_down
 			sus_vel[i] = (float(sus_vel[i]) + accel0 * h) / (1.0 + c_tot * h / unsprung_mass)
 			fs = fs0 - c_tot * float(sus_vel[i])
 			w.length += float(sus_vel[i]) * h

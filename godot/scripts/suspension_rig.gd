@@ -32,6 +32,7 @@ var column: Dictionary = {}       # { centre, axis }: a steering column whose ar
 var column_angle := 0.0
 var column_error := 0.0
 var built: Dictionary = {}        # what PartsLibrary.assemble made (or {})
+var travel_shown := [0.0, 0.0, 0.0, 0.0]     # the travel of each wheel at the last update (CarCollision: physics runs between two frames)
 var _axle_turn := [0.0, 0.0]       # rad that the wheels of the front and of the rear axle have turned, not wrapped (Wheel.spin is)
 var _spin_was := [0.0, 0.0, 0.0, 0.0]
 var _rack_now := 0.0              # m that the rack is across the car from where the model has it
@@ -587,6 +588,8 @@ func _swing(travel: float, length: float) -> float:
 
 
 func update() -> void:
+	for i in 4:
+		travel_shown[i] = _travel(i)
 	for i in 4:
 		var w: Car.Wheel = car.wheels[i]
 		_axle_turn[0 if i < 2 else 1] += wrapf(w.spin - float(_spin_was[i]), -PI, PI) / 2.0
