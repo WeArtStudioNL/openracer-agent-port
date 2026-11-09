@@ -448,13 +448,18 @@ func render_groups() -> void:
 		if gname == "Paint":
 			_paint(fold)
 		var fine: VBoxContainer = null
-		for item in items:
-			var target := fold
-			if gname == "Tyres" and item[0] in Tuning.TYRE_FINE:
-				if fine == null:
-					fine = EditorStyle.fold(fold, "Fine-tune the tyre (on top of the kind)")
-				target = fine
-			_row(target, item)
+		for part: Array in Tuning.bundles(gname, items):
+			var bundle := fold
+			if part[0] != "":
+				bundle = EditorStyle.fold(fold, part[0], true)
+				_folds.append(bundle)
+			for item: Array in part[1]:
+				var target := bundle
+				if gname == "Tyres" and item[0] in Tuning.TYRE_FINE:
+					if fine == null:
+						fine = EditorStyle.fold(fold, "Fine-tune the tyre (on top of the kind)")
+					target = fine
+				_row(target, item)
 		if fine != null:
 			fold.move_child(fine.get_parent().get_parent(), fold.get_child_count() - 1)
 	_settings_first()
@@ -695,7 +700,8 @@ func refresh() -> void:
 		(f["inner"] as Control).visible = on
 		(f["wrap"] as Control).visible = Tuning.visible_feature(f["feature"], v)
 	_refreshing = false
-	for fold: VBoxContainer in _folds:
+	for i in range(_folds.size() - 1, -1, -1):          # (the bundles before the groups they are in)
+		var fold: VBoxContainer = _folds[i]
 		if not is_instance_valid(fold):
 			continue
 		var any := false

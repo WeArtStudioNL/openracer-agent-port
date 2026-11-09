@@ -240,6 +240,91 @@ const GROUPS := [
 
 ## The cards of the menu, in the order of the browser (CarTuning.CARDS); a group with the name of its card is
 ## "<name> settings". (Motorcycle: only for a motorcycle.)
+## How the rows of a group are bundled in the menus: [title, keys]; the rows of a group that are not named come first, without a title.
+const LAYOUT := {
+	"Tyres": [["Front", ["rim_front", "tyre_front", "tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_rim_offset_front", "tyre_width", "rubber_front", "tread_front", "pressure_front"]],
+		["Rear", ["rim_rear", "tyre_rear", "tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "tyre_rim_offset_rear", "tyre_width_rear", "rubber_rear", "tread_rear", "pressure_rear"]],
+		["Tyre model", ["tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass"]]],
+	"Springs and dampers": [["Front", ["spring_front", "damping_front", "roll_front"]], ["Rear", ["spring_rear", "damping_rear"]], ["Both axles", ["spring_progression", "damping_rebound"]]],
+	"Ride height and travel": [["Ride height", ["ride_front", "ride_rear"]], ["Travel", ["suspension_travel", "suspension_droop", "suspension_length"]]],
+	"Wheel alignment": [["Front", ["camber_front", "toe_front"]], ["Rear", ["camber_rear", "toe_rear"]], ["Both axles", ["roll_camber"]]],
+	"Suspension geometry": [["Front", ["roll_center_front", "anti_dive", "anti_lift_front"]], ["Rear", ["roll_center_rear", "anti_squat", "anti_lift_rear"]]],
+	"Chassis": [["Weight", ["mass", "front_weight", "cg_height"]], ["Size", ["length", "width", "height"]], ["Frame", ["frame_torsion", "inner_lift"]]],
+	"Paint": [["Body", ["body_color", "body_finish", "body_pattern", "body_flake", "body_uv"]], ["Rims", ["rim_color", "rim_finish", "rim_pattern", "rim_flake", "rim_uv"]]],
+	"Engine": [["Engine speeds", ["idle_rpm", "limiter_rpm", "limiter_hz", "engine_inertia", "engine_braking"]],
+		["Turbo", ["turbo_share", "turbo_spool", "turbo_threshold", "turbo_boost", "turbo_intercooler", "turbo_efficiency"]]],
+	"Transmission": [["Gearbox", ["gearbox", "shift_style", "shift_time", "cvt_rpm", "gears", "final_drive", "reverse_ratio"]],
+		["Clutch and converter", ["clutch", "clutch_start_rpm", "clutch_full_rpm", "tc_stall_rpm", "tc_ratio", "tc_lockup"]],
+		["Differentials", ["drive", "diff", "diff_preload", "diff_power", "diff_coast", "diff_lock", "center_diff", "center_split"]],
+		["Driveline", ["efficiency", "engine_place"]]],
+	"Cameras": [["Follow camera", ["cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_dolly"]],
+		["Follow camera: speed", ["cam_follow_fov_standing", "cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_distance_fast", "cam_follow_height_fast"]],
+		["Cockpit camera", ["cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov", "cam_cockpit_hide_driver"]],
+		["Hood camera", ["cam_bonnet_x", "cam_bonnet_y", "cam_bonnet_z", "cam_bonnet_fov"]]],
+	"Engine sound": [["Levels", ["es_volume", "es_convolution", "es_audio_volume", "es_hf_gain", "es_noise", "es_jitter"]], ["The engine", ["es_exhaust_length", "es_primary_length", "es_idle_pressure"]]],
+	"Motorcycle": [["Riding", ["bike_max_lean", "bike_fast_lean", "bike_rake", "bike_rider_mass", "bike_hang_off", "bike_max_lateral_g", "bike_balance", "bike_fork_dive", "bike_lean_speed"]],
+		["In the air", ["bike_air_pitch_rate", "bike_air_roll_rate"]],
+		["Flat-track style", ["bike_push", "bike_push_foot_kmh", "bike_push_upright", "bike_push_forward", "bike_push_chest_pitch", "bike_push_pelvis_tilt", "bike_push_pelvis_slide", "bike_push_foot_out", "bike_push_foot_forward"]],
+		["Road race style", ["bike_hang_chest_roll", "bike_hang_knee_out", "bike_hang_knee_down", "bike_hang_tuck_pitch", "bike_hang_sit_pitch", "bike_hang_shift"]]],
+	"Soft body": [["Anchors", ["sb_anchor_yield", "sb_anchor_break"]], ["Beams", ["sb_beam_yield", "sb_beam_break"]]],
+}
+
+## What a row is called under its bundle: what the bundle says already is not said again.
+const SHORT := {
+	"tyre_section_front": "Width", "tyre_section_rear": "Width", "tyre_aspect_front": "Sidewall, as a share of the width", "tyre_aspect_rear": "Sidewall, as a share of the width",
+	"tyre_rim_front": "Rim", "tyre_rim_rear": "Rim", "tyre_rim_offset_front": "Width of the rim (added on each side)", "tyre_rim_offset_rear": "Width of the rim (added on each side)",
+	"tyre_width": "Width of the shell (0: from the wheel)", "tyre_width_rear": "Width of the shell (0: as the front)",
+	"rim_front": "Rim (the wheel library)", "rim_rear": "Rim (the wheel library)", "tyre_front": "Tyre (of the wheel library)", "tyre_rear": "Tyre (of the wheel library)",
+	"rubber_front": "Rubber", "rubber_rear": "Rubber", "tread_front": "Tread (grip on grass, sand and mud)", "tread_rear": "Tread (grip on grass, sand and mud)",
+	"pressure_front": "Pressure", "pressure_rear": "Pressure",
+	"spring_front": "Springs (wheel rate)", "spring_rear": "Springs (wheel rate)", "damping_front": "Dampers", "damping_rear": "Dampers", "roll_front": "Roll stiffness",
+	"ride_front": "Front (from the car as made)", "ride_rear": "Rear", "camber_front": "Camber (negative: top in)", "camber_rear": "Camber (negative: top in)",
+	"toe_front": "Toe (positive: toe-in)", "toe_rear": "Toe (positive: toe-in)", "roll_center_front": "Roll centre", "roll_center_rear": "Roll centre",
+	"anti_dive": "Anti-dive (under the brakes)", "anti_lift_rear": "Anti-lift (under the brakes)", "anti_squat": "Anti-squat (under power)", "anti_lift_front": "Anti-lift (under power)",
+	"body_color": "Colour (the material carpaint)", "rim_color": "Colour (the material rimpaint)", "body_finish": "Finish", "rim_finish": "Finish", "body_pattern": "Flake pattern", "rim_pattern": "Flake pattern",
+	"body_flake": "Flake size (metal flake)", "rim_flake": "Flake size (metal flake)", "body_uv": "Flake map (the UV map)", "rim_uv": "Flake map (the UV map)",
+	"cam_follow_fov_standing": "Field of view standing", "cam_follow_fov_fast": "Field of view at full speed", "cam_follow_fov_full_speed": "Full speed from",
+	"cam_follow_distance_fast": "Distance at full speed (0: comes closer with the view)", "cam_follow_height_fast": "Height at full speed",
+}
+const PREFIXES := ["Tyre: ", "Follow camera: ", "Cockpit camera: ", "Hood camera: ", "Turbo: ", "Limited slip: ", "Torque converter: ", "Automatic clutch: ", "Flat-track style: ", "Flat-track: ", "Road race: ", "Anchors: ", "Beams: ", "In the air: "]
+
+
+## The rows of a group, bundled: [[title or "", rows]]; the rows that are in no bundle first. rows: the rows of the group that the menu shows.
+static func bundles(group: String, rows: Array) -> Array:
+	var by_key := {}
+	for r in rows:
+		by_key[r[0]] = r
+	var out := []
+	var named := {}
+	var parts: Array = LAYOUT.get(group, [])
+	for p in parts:
+		for k: String in p[1]:
+			named[k] = true
+	var loose := rows.filter(func(r: Array) -> bool: return not named.has(r[0]))
+	if not loose.is_empty():
+		out.append(["", loose])
+	for p in parts:
+		var these := []
+		for k: String in p[1]:
+			if by_key.has(k):
+				var r: Array = (by_key[k] as Array).duplicate()
+				r[1] = short_label(k, str(r[1]))
+				these.append(r)
+		if not these.is_empty():
+			out.append([p[0], these])
+	return out
+
+
+static func short_label(key: String, text: String) -> String:
+	if SHORT.has(key):
+		return SHORT[key]
+	for p: String in PREFIXES:
+		if text.begins_with(p):
+			var rest := text.substr(p.length())
+			return rest[0].to_upper() + rest.substr(1)
+	return text
+
+
 const CARDS := [
 	["Wheels", ["Tyres"]],
 	["Suspension", ["Springs and dampers", "Ride height and travel", "Wheel alignment", "Suspension geometry", "Suspension parts"]],

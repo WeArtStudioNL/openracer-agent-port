@@ -209,7 +209,7 @@ func _button(text: String, tip := "") -> Button:
 
 
 ## A part that folds away: a card (a frame, its name and a line on the right) or a group in it (a small title).
-func _section(parent: Control, title: String, id: String, card: bool) -> VBoxContainer:
+func _section(parent: Control, title: String, id: String, card: bool, open := false) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 2)
 	var wrap: Control = box
@@ -242,7 +242,7 @@ func _section(parent: Control, title: String, id: String, card: bool) -> VBoxCon
 		_card_meta[title] = meta
 	var content := VBoxContainer.new()
 	content.add_theme_constant_override("separation", 2)
-	content.visible = opened.get(id, false)
+	content.visible = opened.get(id, open)
 	box.add_child(content)
 	var shown := func():
 		b.text = ("▾  " if content.visible else "▸  ") + (title if card else title.to_upper())
@@ -283,14 +283,22 @@ func _group(parent: Control, group: Array, card_name: String) -> void:
 	var content := _section(parent, title, id, false)
 	_group_boxes.append(content)
 	var fine: VBoxContainer = null
-	for d in group[1]:
-		var target := content
-		if group[0] == "Tyres" and d[0] in Tuning.TYRE_FINE:
-			if fine == null:
-				fine = _section(content, "Fine-tune the tyre (on top of the kind)", id + "/fine", false)
-				fine.get_parent().get_child(0).tooltip_text = "The kind of tyre sets most of these: change them only to move away from it"
-			target = fine
-		_row(target, d)
+	for part: Array in Tuning.bundles(group[0], group[1]):
+		var bundle := content
+		if part[0] != "":
+			var indent := MarginContainer.new()
+			indent.add_theme_constant_override("margin_left", 12)
+			content.add_child(indent)
+			bundle = _section(indent, part[0], id + "/" + str(part[0]), false, true)
+			_group_boxes.append(bundle)
+		for d: Array in part[1]:
+			var target := bundle
+			if group[0] == "Tyres" and d[0] in Tuning.TYRE_FINE:
+				if fine == null:
+					fine = _section(content, "Fine-tune the tyre (on top of the kind)", id + "/fine", false)
+					fine.get_parent().get_child(0).tooltip_text = "The kind of tyre sets most of these: change them only to move away from it"
+				target = fine
+			_row(target, d)
 	# (the fine part goes at the end of its group, as in the browser)
 	if fine != null:
 		content.move_child(fine.get_parent(), content.get_child_count() - 1)
@@ -1087,13 +1095,17 @@ func _refresh() -> void:
 
 ## A group without a row that this car can use is not shown (a kart has no springs).
 func _hide_empty_groups() -> void:
-	for box in _group_boxes:
+	for i in range(_group_boxes.size() - 1, -1, -1):          # (the bundles before the groups they are in)
+		var box := _group_boxes[i]
 		if not is_instance_valid(box):
 			continue
 		var any := false
-		for i in range(1, box.get_child_count()):
-			any = any or (box.get_child(i) as Control).visible
-		(box.get_parent() as Control).visible = any
+		for c in box.get_children():
+			any = any or (c as Control).visible
+		var wrap := box.get_parent() as Control
+		wrap.visible = any
+		if wrap.get_parent() is MarginContainer:
+			(wrap.get_parent() as Control).visible = any
 
 
 func _update_info() -> void:
