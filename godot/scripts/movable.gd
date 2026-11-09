@@ -28,6 +28,15 @@ static func make(panel: Control, key: String, handle: Control = null, edges := f
 	mover.name = "Movable"
 	panel.set_meta("movable", mover)
 	panel.add_child(mover)
+	panel.gui_input.connect(_keep_the_wheel.bind(panel))
+
+
+## The wheel over a panel is for the panel: a list at its end lets it through, and then the camera behind it would zoom.
+static func _keep_the_wheel(event: InputEvent, panel: Control) -> void:
+	var mb := event as InputEventMouseButton
+	var wheel := mb != null and mb.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_WHEEL_LEFT, MOUSE_BUTTON_WHEEL_RIGHT]
+	if wheel or event is InputEventPanGesture:
+		panel.accept_event()
 
 
 ## A window (Movable.js frame): the head (the first child of content, the only child of the panel) stays at the top and
