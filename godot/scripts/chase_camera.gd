@@ -16,6 +16,11 @@ var right_taken := false          # (the debug view has a tool on the right mous
 var film_step := -1.0             # (a video is made, ReplayFilm: > 0 the step of this picture, 0 rests until the next picture; -1 not filming)
 var fov_standing := 50.0
 var fov_fast := 70.0
+var distance_fast := 0.0          # m behind the car at full speed (0: it comes closer as the view widens, dolly)
+var height_fast := 0.0            # m high at full speed
+var bonnet := Vector3.INF         # the bonnet camera in the frame of the body (INF: from the size of the car)
+var bonnet_fov := 72.0
+var _fast := 0.0                  # 0 at a standstill, 1 at full speed, smoothed
 var fov_full_speed := 70.0        # m/s: fov_fast from this speed (Car.js)
 var look_z := 0.0                 # m: the point it looks at is so far ahead of the middle of the car (negative: behind)
 var dolly := 1.0                  # 0..1: the camera comes closer as the field of view widens (1: the car keeps its size)
@@ -49,6 +54,13 @@ func read_config(c: Car) -> void:
 	fov_full_speed = maxf(1.0, float(f.get("fov_full_speed", fov_full_speed)))
 	look_z = float(f.get("look_z", look_z))
 	dolly = float(f.get("dolly", dolly))
+	distance_fast = float(f.get("distance_fast", distance_fast))
+	height_fast = float(f.get("height_fast", height_fast))
+	var bn: Dictionary = cams.get("bonnet", {})
+	if bn.has("position"):
+		var b: Array = bn["position"]
+		bonnet = Vector3(float(b[0]), float(b[1]), float(b[2]))
+	bonnet_fov = float(bn.get("fov", bonnet_fov))
 	var cp: Dictionary = cams.get("cockpit", {})
 	if cp.has("position"):
 		var p: Array = cp["position"]
@@ -166,7 +178,12 @@ func _process(delta: float) -> void:
 			var scale := 1.0 + dolly * (tan(deg_to_rad(fov_standing) / 2.0) / tan(deg_to_rad(_fov) / 2.0) - 1.0)
 			var dir := _look_dir.rotated(Vector3.UP, orbit)
 			var far := distance * scale * zoom
-			var target := xf.origin - dir * far + Vector3.UP * (look_height + (height - look_height) * scale + tan(elev) * far)
+			var up_by := look_height + (height - look_height) * scale
+			if distance_fast > 0.0:             # (the place at full speed is given: between the two with the speed)
+				_fast += (clampf(spd / fov_full_speed, 0.0, 1.0) - _fast) * (1.0 - exp(-4.0 * minf(delta, 0.1)))
+				far = lerpf(distance, distance_fast, _fast) * zoom
+				up_by = lerpf(height, height_fast, _fast)
+			var target := xf.origin - dir * far + Vector3.UP * (up_by + tan(elev) * far)
 			_pos = _pos.lerp(target, 1.0 - exp(-delta * smoothing * 2.5))
 			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(xf.origin + dir * look_z + Vector3.UP * look_height, Vector3.UP)
 			if car.bike != null:
@@ -177,6 +194,6 @@ func _process(delta: float) -> void:
 			fov = cockpit_fov
 		Mode.BONNET:
 			var dims: Dictionary = car.config.get("dimensions", {})
-			var p := Vector3(0.0, float(dims.get("height", 1.3)) * 0.62 + car.model_root.position.y, float(dims.get("length", 4.2)) * 0.12)
+			var p := bonnet if bonnet != Vector3.INF else Vector3(0.0, float(dims.get("height", 1.3)) * 0.62 + car.model_root.position.y, float(dims.get("length", 4.2)) * 0.12)
 			global_transform = xf * Transform3D(Basis(Vector3.UP, PI), p)
-			fov = 72.0
+			fov = bonnet_fov

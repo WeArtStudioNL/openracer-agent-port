@@ -12,7 +12,7 @@ const EDITOR_HAS := ["mass", "front_weight", "cg_height", "drag_coefficient", "m
 	"final_drive", "reverse_ratio", "brake_total", "brake_bias", "diff_preload", "diff_power", "diff_coast", "center_split", "suspension_travel",
 	"efficiency", "length", "width", "height", "steering_degrees", "steering_stop", "sb_max_nodes", "sb_wheel_strength", "unsprung",
 	"cam_follow_distance", "cam_follow_height", "cam_follow_look_height", "cam_follow_look_z", "cam_follow_smoothing", "cam_follow_fov_standing",
-	"cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly", "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov",
+	"cam_follow_fov_fast", "cam_follow_fov_full_speed", "cam_follow_dolly", "cam_follow_distance_fast", "cam_follow_height_fast", "cam_bonnet_x", "cam_bonnet_y", "cam_bonnet_z", "cam_bonnet_fov", "cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z", "cam_cockpit_fov",
 	"cam_cockpit_hide_driver", "drive", "diff", "center_diff", "gearbox", "gears", "cvt_rpm", "tc_stall_rpm", "tc_ratio", "tc_lockup",
 	"rim_front", "rim_rear", "tyre_front", "tyre_rear", "susp_front", "susp_rear", "engine_place", "es_convolution",
 	"body_color", "rim_color", "body_finish", "rim_finish", "body_pattern", "rim_pattern", "body_uv", "rim_uv", "body_flake", "rim_flake"]

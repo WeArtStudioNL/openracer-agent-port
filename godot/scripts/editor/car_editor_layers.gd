@@ -9,7 +9,7 @@ extends RefCounted
 ## are made here too.
 
 const LAYERS := [
-	["Cameras"], ["follow", "1 Follow camera", "#37d67a"], ["look", "1 Follow camera: looks at", "#9be8b8"], ["cockpit", "2 Cockpit camera", "#ff9f43"],
+	["Cameras"], ["follow", "1 Follow camera", "#37d67a"], ["followfast", "1 Follow camera: at full speed", "#2fb5a0"], ["look", "1 Follow camera: looks at", "#9be8b8"], ["cockpit", "2 Cockpit camera", "#ff9f43"], ["bonnet", "3 Hood camera", "#ff5fa2"],
 	["Car"], ["model", "Model (offset)", "#c6cfdb"], ["steering", "Steering wheel", "#e0b040"], ["rig", "Suspension rig", "#9b8cff"],
 	["Wheels"], ["wFR", "Front right", "#ff6b6b"], ["wFL", "Front left", "#5ec8ff"], ["wRR", "Rear right", "#ffd04d"], ["wRL", "Rear left", "#8ee26b"],
 ]
@@ -99,7 +99,7 @@ func build() -> Control:
 	_thumb_label = EditorStyle.hint("Select a camera to see what it sees.")
 	tb.add_child(_thumb_label)
 	tb.add_child(EditorStyle.hint("Drag the arrows in the view to move it"))
-	for id in ["follow", "look", "cockpit"]:
+	for id in ["follow", "followfast", "look", "cockpit", "bonnet"]:
 		var t := Node3D.new()
 		t.name = "target_" + id
 		ed.view.markers.add_child(t)
@@ -180,7 +180,7 @@ func select(id: String) -> void:
 			ed.suspension.attach_gizmo(selected)
 		elif targets.has(selected):
 			g.attach(targets[selected], "move")
-			g.show_axis = [selected != "follow" and selected != "look", true, true]
+			g.show_axis = [selected != "follow" and selected != "look" and selected != "followfast", true, true]
 	for e in exhaust:
 		(e["pipe"].material_override as StandardMaterial3D).albedo_color = Color("#ffd04d") if e["id"] == selected else Color("#ff7a3d")
 	_update_window()
@@ -234,6 +234,16 @@ func gizmo_moved() -> void:
 		targets["follow"].position = p
 		ed.cfg["cameras"]["follow"]["distance"] = snappedf(-p.z, 0.01)
 		ed.cfg["cameras"]["follow"]["height"] = snappedf(p.y + r, 0.01)
+	elif id == "followfast":
+		var p: Vector3 = targets["followfast"].position
+		p.x = 0.0
+		p.z = minf(p.z, -0.5)
+		targets["followfast"].position = p
+		ed.cfg["cameras"]["follow"]["distance_fast"] = snappedf(-p.z, 0.01)
+		ed.cfg["cameras"]["follow"]["height_fast"] = snappedf(p.y + r, 0.01)
+	elif id == "bonnet":
+		var p: Vector3 = targets["bonnet"].position
+		ed.cfg["cameras"]["bonnet"]["position"] = [snappedf(p.x, 0.01), snappedf(p.y, 0.01), snappedf(p.z, 0.01)]
 	elif id == "look":
 		var p: Vector3 = targets["look"].position
 		p.x = 0.0
@@ -280,16 +290,29 @@ func update_camera_markers() -> void:
 		var cam_p: Vector3 = dot.call(Color("#37d67a"), Vector3(0, float(f["height"]) - r, -float(f["distance"])), "follow")
 		var look_p: Vector3 = dot.call(Color("#9be8b8"), Vector3(0, float(f.get("look_height", 0)) - r, float(f.get("look_z", 0))), "look")
 		line.call(Color("#37d67a"), cam_p, look_p)
-		var k := 1.0 + float(f.get("dolly", 1)) * (tan(deg_to_rad(float(f.get("fov_standing", 45))) / 2.0) / tan(deg_to_rad(float(f.get("fov_fast", 75))) / 2.0) - 1.0)
-		if is_finite(k):
-			var lh := float(f.get("look_height", 0))
-			dot.call(Color("#9be8b8"), Vector3(0, lh + (float(f["height"]) - lh) * k - r, -float(f["distance"]) * k), "")
+		var fast_p: Vector3 = fast_place(f, r)
+		dot.call(Color("#2fb5a0"), fast_p, "followfast")
+		line.call(Color("#2fb5a0"), fast_p, look_p)
 	var cp: Variant = Tuning.read(cams, "cockpit.position")
 	if cp is Array and (cp as Array).size() == 3:
 		var p := Vector3(float(cp[0]), float(cp[1]), float(cp[2]))
 		dot.call(Color("#ff9f43"), p, "cockpit")
 		line.call(Color("#ff9f43"), p, p + Vector3(0, 0, 2))
+	var bp: Variant = Tuning.read(cams, "bonnet.position")
+	if bp is Array and (bp as Array).size() == 3:
+		var p := Vector3(float(bp[0]), float(bp[1]), float(bp[2]))
+		dot.call(Color("#ff5fa2"), p, "bonnet")
+		line.call(Color("#ff5fa2"), p, p + Vector3(0, 0, 2))
 	render_meta()
+
+
+## Where the follow camera is at full speed, in the frame of the view: as given, or where the dolly brings it.
+static func fast_place(f: Dictionary, r: float) -> Vector3:
+	if float(f.get("distance_fast", 0)) > 0.0:
+		return Vector3(0, float(f.get("height_fast", f.get("height", 2))) - r, -float(f["distance_fast"]))
+	var k := 1.0 + float(f.get("dolly", 1)) * (tan(deg_to_rad(float(f.get("fov_standing", 45))) / 2.0) / tan(deg_to_rad(float(f.get("fov_fast", 75))) / 2.0) - 1.0)
+	var lh := float(f.get("look_height", 0))
+	return Vector3(0, lh + (float(f.get("height", 2)) - lh) * k - r, -float(f.get("distance", 6)) * k)
 
 
 ## What can be clicked in the view: the dots of the cameras and the pipes of the exhaust points.
@@ -305,7 +328,7 @@ func pickables() -> Array:
 
 func frame() -> void:
 	var id := "follow" if selected == "look" else selected
-	var is_camera := id == "follow" or id == "cockpit"
+	var is_camera := id == "follow" or id == "cockpit" or id == "followfast" or id == "bonnet"
 	_thumb.visible = is_camera
 	if not is_camera:
 		_thumb_label.text = "Select a camera to see what it sees."
@@ -313,7 +336,7 @@ func frame() -> void:
 	var cams: Dictionary = ed.cfg.get("cameras", {})
 	var r := ed.num("chassis.tire_diameter", 0.65) / 2.0
 	# (the cockpit camera does not see the driver, as in the game, which hides the head and the body inside)
-	ed.view.thumb_camera.cull_mask = 1 | (CarEditorView.DRIVER_LAYER if id == "follow" else 0)
+	ed.view.thumb_camera.cull_mask = 1 | (CarEditorView.DRIVER_LAYER if id != "cockpit" else 0)
 	if id == "follow":
 		var f: Dictionary = cams.get("follow", {})
 		var pos := Vector3(0, float(f.get("height", 2)) - r, -float(f.get("distance", 6)))
@@ -321,6 +344,16 @@ func frame() -> void:
 		var xf := Transform3D(Basis.IDENTITY, pos).looking_at(look, Vector3.UP)
 		ed.view.render_thumb(xf, float(f.get("fov_standing", 45)))
 		_thumb_label.text = "1 Follow camera at a standstill, FOV %s° (%s° at full speed)" % [f.get("fov_standing", 45), f.get("fov_fast", 75)]
+	elif id == "followfast":
+		var f: Dictionary = cams.get("follow", {})
+		var look := Vector3(0, float(f.get("look_height", 0.6)) - r, float(f.get("look_z", 0)))
+		ed.view.render_thumb(Transform3D(Basis.IDENTITY, fast_place(f, r)).looking_at(look, Vector3.UP), float(f.get("fov_fast", 75)))
+		_thumb_label.text = "1 Follow camera at full speed, FOV %s°" % f.get("fov_fast", 75)
+	elif id == "bonnet":
+		var bp: Variant = Tuning.read(cams, "bonnet.position")
+		var p := Vector3(float(bp[0]), float(bp[1]), float(bp[2])) if bp is Array and (bp as Array).size() == 3 else Vector3.ZERO
+		ed.view.render_thumb(Transform3D(Basis(Vector3.UP, PI), p), float(Tuning.read(cams, "bonnet.fov") if Tuning.read(cams, "bonnet.fov") != null else 72.0))
+		_thumb_label.text = "3 Hood camera, FOV %s°" % Tuning.read(cams, "bonnet.fov")
 	else:
 		var cp: Variant = Tuning.read(cams, "cockpit.position")
 		var p := Vector3(float(cp[0]), float(cp[1]), float(cp[2])) if cp is Array and (cp as Array).size() == 3 else Vector3.ZERO
@@ -572,7 +605,7 @@ func _sync_exhaust_fields() -> void:
 func _row(text: String, colour: Color, meta: String, sel: bool, dim := false) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
-	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE         # (the panel round it takes the click, its buttons still get theirs)
 	var dot := ColorRect.new()
 	dot.color = colour
 	dot.custom_minimum_size = Vector2(9, 9)
@@ -631,8 +664,12 @@ func render() -> void:
 		var dim := false
 		if id == "follow":
 			meta = "%s m, %s°" % [Tuning.read(ed.cfg, "cameras.follow.distance"), Tuning.read(ed.cfg, "cameras.follow.fov_standing")]
+		elif id == "followfast":
+			meta = "%s°" % Tuning.read(ed.cfg, "cameras.follow.fov_fast")
 		elif id == "cockpit":
 			meta = "%s°" % Tuning.read(ed.cfg, "cameras.cockpit.fov")
+		elif id == "bonnet":
+			meta = "%s°" % Tuning.read(ed.cfg, "cameras.bonnet.fov")
 		elif id == "model":
 			dim = ed.model_root == null
 			meta = "none" if dim else ""

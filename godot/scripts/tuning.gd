@@ -159,6 +159,12 @@ const GROUPS := [
 		["cam_follow_fov_fast", "Follow camera: field of view at speed", "°", 20, 140, 1],
 		["cam_follow_fov_full_speed", "Follow camera: that field of view from", "km/h", 10, 400, 5],
 		["cam_follow_dolly", "Follow camera: dolly with the speed", "", 0, 3, 0.05],
+		["cam_follow_distance_fast", "Follow camera: distance at full speed (0: comes closer with the view)", "m", 0, 20, 0.1],
+		["cam_follow_height_fast", "Follow camera: height at full speed", "m", 0, 10, 0.05],
+		["cam_bonnet_x", "Hood camera: to the left", "m", -1.5, 1.5, 0.01],
+		["cam_bonnet_y", "Hood camera: height", "m", -1, 3, 0.01],
+		["cam_bonnet_z", "Hood camera: forward", "m", -4, 4, 0.01],
+		["cam_bonnet_fov", "Hood camera: field of view", "°", 20, 130, 1],
 		["cam_cockpit_x", "Cockpit camera: to the left", "m", -1.5, 1.5, 0.01],
 		["cam_cockpit_y", "Cockpit camera: height", "m", -1, 3, 0.01],
 		["cam_cockpit_z", "Cockpit camera: forward", "m", -3, 3, 0.01],
@@ -380,7 +386,8 @@ const MAP := {
 	"cam_follow_look_height": ["cameras.follow.look_height", 1.0, null], "cam_follow_look_z": ["cameras.follow.look_z", 1.0, 0.0],
 	"cam_follow_smoothing": ["cameras.follow.smoothing", 1.0, null], "cam_follow_fov_standing": ["cameras.follow.fov_standing", 1.0, null],
 	"cam_follow_fov_fast": ["cameras.follow.fov_fast", 1.0, null], "cam_follow_fov_full_speed": ["cameras.follow.fov_full_speed", 1.0, 70.0],
-	"cam_follow_dolly": ["cameras.follow.dolly", 1.0, 1.0], "cam_cockpit_fov": ["cameras.cockpit.fov", 1.0, null],
+	"cam_follow_dolly": ["cameras.follow.dolly", 1.0, 1.0], "cam_follow_distance_fast": ["cameras.follow.distance_fast", 1.0, 0.0], "cam_follow_height_fast": ["cameras.follow.height_fast", 1.0, 0.0],
+	"cam_bonnet_fov": ["cameras.bonnet.fov", 1.0, 72.0], "cam_cockpit_fov": ["cameras.cockpit.fov", 1.0, null],
 	"cam_cockpit_hide_driver": ["cameras.cockpit.hide_driver", 0, false],
 	"sb_max_nodes": ["softbody.max_nodes", 1.0, 90.0], "sb_anchor_yield": ["softbody.anchor.yield_force", 1000.0, 80000.0],
 	"sb_anchor_break": ["softbody.anchor.break_force", 1000.0, 250000.0], "sb_beam_yield": ["softbody.beam.yield_force", 1000.0, 40000.0],
@@ -543,6 +550,14 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 	v["cam_cockpit_x"] = snappedf(cp.x, 0.001)
 	v["cam_cockpit_y"] = snappedf(cp.y, 0.001)
 	v["cam_cockpit_z"] = snappedf(cp.z, 0.001)
+	var bon: Variant = read(cfg, "cameras.bonnet.position")
+	var dm: Dictionary = cfg.get("dimensions", {})
+	var offs: Variant = read(cfg, "model.offset")
+	var bo := Vector3(float(bon[0]), float(bon[1]), float(bon[2])) if bon is Array and (bon as Array).size() >= 3 else \
+		Vector3(0.0, float(dm.get("height", 1.3)) * 0.62 + (float(offs[1]) if offs is Array and (offs as Array).size() == 3 else 0.0), float(dm.get("length", 4.2)) * 0.12)
+	v["cam_bonnet_x"] = snappedf(bo.x, 0.001)
+	v["cam_bonnet_y"] = snappedf(bo.y, 0.001)
+	v["cam_bonnet_z"] = snappedf(bo.z, 0.001)
 	# the sound of the engine
 	var sound := EngineSimParams.params(cfg)
 	for k in SOUND_KEYS:
@@ -585,6 +600,8 @@ static func set_value(cfg: Dictionary, key: String, value: Variant, cam := {}) -
 			erase(cfg, "chassis.downforce")
 		"cam_cockpit_x", "cam_cockpit_y", "cam_cockpit_z":
 			write(cfg, "cameras.cockpit.position", [float(v["cam_cockpit_x"]), float(v["cam_cockpit_y"]), float(v["cam_cockpit_z"])])
+		"cam_bonnet_x", "cam_bonnet_y", "cam_bonnet_z":
+			write(cfg, "cameras.bonnet.position", [float(v["cam_bonnet_x"]), float(v["cam_bonnet_y"]), float(v["cam_bonnet_z"])])
 		"tyre_height_front", "tyre_height_rear":
 			var axle := key.substr(12)
 			var dia := float(v["tyre_diameter_" + axle])

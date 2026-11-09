@@ -157,13 +157,19 @@ static func camera_settings(c: Dictionary) -> Dictionary:
 	var follow := {"distance": snappedf(length * 1.55, 0.1), "height": snappedf(height * 1.6, 0.01), "look_height": snappedf(height * 0.6, 0.01), "look_z": 0,
 		"smoothing": 3.5, "fov_standing": 45, "fov_fast": 75, "fov_full_speed": 70, "dolly": 1}
 	var cockpit := {"position": [snappedf(width * 0.2, 0.01), snappedf(height * 0.8 - r, 0.01), snappedf(length * 0.05, 0.01)], "fov": 75, "hide_driver": false}
+	var offset: Variant = Tuning.read(c, "model.offset")
+	var bonnet := {"position": [0.0, snappedf(height * 0.62 + (float(offset[1]) if offset is Array and (offset as Array).size() == 3 else 0.0), 0.01), snappedf(length * 0.12, 0.01)], "fov": 72}
+	follow["distance_fast"] = 0
+	follow["height_fast"] = 0
+	if given.get("bonnet") is Dictionary:
+		bonnet.merge(given["bonnet"], true)
 	if given.get("follow") is Dictionary:
 		follow.merge(given["follow"], true)
 	if given.get("cockpit") is Dictionary:
 		cockpit.merge(given["cockpit"], true)
 		if not cockpit.get("position") is Array:
 			cockpit["position"] = [snappedf(width * 0.2, 0.01), snappedf(height * 0.8 - r, 0.01), snappedf(length * 0.05, 0.01)]
-	return {"follow": follow, "cockpit": cockpit}
+	return {"follow": follow, "cockpit": cockpit, "bonnet": bonnet}
 
 
 # ---- the wheel library (WheelLibrary.js, CarTuning.libraryOf)
