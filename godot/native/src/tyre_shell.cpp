@@ -325,64 +325,107 @@ bool TyreShell::contact_at(double x, double y, double z, const Vector3 &hub, Tyr
 	cTri = -1;
 	// (the deepest a node of a tyre can be: deeper, and it is not on that face. A node that went past the back wall of a ramp is not 1.3 m under its deck)
 	double deep = 0.75 * radius;
-	bool inside = false;  // (a node really behind a face leaves by the nearest one: not through the wall of a ramp when it is just under the deck)
+	// the tread is a ball of rubber: the road is asked from its centre, a little inside the tyre, so that the centre stays in the air while the rubber is
+	// pressed and the force turns smoothly around the edge of a ramp. On a face the depth is that of the point itself, as if there were no ball
+	double ball = std::max(tol, std::min(0.03, 0.08 * radius)), inset = ball - tol;
+	double rx = x - hub.x, ry = y - hub.y, rz = z - hub.z, along = rx * axisLx + ry * axisLy + rz * axisLz;
+	rx -= axisLx * along;
+	ry -= axisLy * along;
+	rz -= axisLz * along;
+	double rl = std::sqrt(rx * rx + ry * ry + rz * rz);
+	if (rl > 1e-9) {
+		rx /= rl;
+		ry /= rl;
+		rz /= rl;
+	}
+	double bx = x - rx * inset, by = y - ry * inset, bz = z - rz * inset;
+	bool inside = false;  // (a ball really behind a face leaves by the nearest one: not through the wall of a ramp when it is just under the deck)
+	double next = 1e9, nextX = 0, nextY = 0, nextZ = 0;  // (the face behind the nearest: near the corner the way out lies between the two)
 	for (int t : list) {
 		ground->tests++;
-		if (!ground->box_near(t, x, y, z, tol + 0.06 + deep)) {
+		if (!ground->box_near(t, bx, by, bz, tol + 0.06 + deep)) {
 			continue;
 		}
 		double nrx, nry, nrz;
 		int region;
-		double d2 = ground->closest(t, x, y, z, nrx, nry, nrz, region), dist = std::sqrt(d2), mx, my, mz, dd;
-		double tnx, tny, tnz, front;
-		if (region == 0) {
-			ground->normal_of(t, tnx, tny, tnz);
-			double sideHub = (hub.x - nrx) * tnx + (hub.y - nry) * tny + (hub.z - nrz) * tnz, s;
-			if (std::abs(tny) >= 0.5) {
-				// a road or a ramp: its top is up in the world, whatever the car does (the triangles of a model can face either way). Its other
-				// side only for a wheel that hangs under it upside down (a loop, a ceiling). The side of the hub says nothing here: a wheel beside a
-				// ramp has its hub below the deck and a ring of the tyre on it
-				s = tny >= 0 ? 1 : -1;
-				if ((upX * tnx + upY * tny + upZ * tnz) * s < -0.3 && sideHub * s < 0) {
-					s = -s;
-				}
-			} else {
-				// a wall: the side where the wheel is. (The lean of the car said which side it was: a car leaning against the slope was pulled through it.)
-				s = sideHub >= 0 ? 1 : -1;
+		double d2 = ground->closest(t, bx, by, bz, nrx, nry, nrz, region), dist = std::sqrt(d2), mx, my, mz, front, tnx, tny, tnz;
+		ground->normal_of(t, tnx, tny, tnz);
+		double sideHub = (hub.x - nrx) * tnx + (hub.y - nry) * tny + (hub.z - nrz) * tnz, s;
+		if (std::abs(tny) >= 0.5) {
+			// a road or a ramp: its top is up in the world, whatever the car does (the triangles of a model can face either way). Its other
+			// side only for a wheel that hangs under it upside down (a loop, a ceiling). The side of the hub says nothing here: a wheel beside a
+			// ramp has its hub below the deck and a ring of the tyre on it
+			s = tny >= 0 ? 1 : -1;
+			if ((upX * tnx + upY * tny + upZ * tnz) * s < -0.3 && sideHub * s < 0) {
+				s = -s;
 			}
+		} else {
+			// a wall: the side where the wheel is. (The lean of the car said which side it was: a car leaning against the slope was pulled through it.)
+			s = sideHub >= 0 ? 1 : -1;
+		}
+		if (region == 0) {
 			mx = tnx * s;
 			my = tny * s;
 			mz = tnz * s;
-			front = (x - nrx) * mx + (y - nry) * my + (z - nrz) * mz;
+			front = (bx - nrx) * mx + (by - nry) * my + (bz - nrz) * mz;
 			if (front < -deep) {
 				continue;
 			}
-			dd = tol - front;
 		} else {
-			if (dist > tol || dist < 1e-6) {
+			// an edge or a corner of the triangle: away from it, not on the back of the face
+			if (dist > ball || dist < 1e-6) {
 				continue;
 			}
-			mx = (x - nrx) / dist;
-			my = (y - nry) / dist;
-			mz = (z - nrz) / dist;
-			ground->normal_of(t, tnx, tny, tnz);
-			if (std::abs(mx * tnx + my * tny + mz * tnz) < 0.85) {
+			mx = (bx - nrx) / dist;
+			my = (by - nry) / dist;
+			mz = (bz - nrz) / dist;
+			if ((mx * tnx + my * tny + mz * tnz) * s < -0.3) {
 				continue;
 			}
-			dd = tol - dist;
 			front = dist;
 		}
+		double facing = -(rx * mx + ry * my + rz * mz), dd = tol - front + inset * std::max(0.0, facing);
 		if (dd <= 0) {
 			continue;
 		}
 		bool behind = front < 0;
-		if (behind ? (!inside || dd < cDepth) : (!inside && dd > cDepth)) {
-			inside = behind;
+		if (behind) {
+			if (!inside || dd < cDepth) {
+				if (inside && cNx * mx + cNy * my + cNz * mz < 0.9) {
+					next = cDepth;
+					nextX = cNx;
+					nextY = cNy;
+					nextZ = cNz;
+				}
+				inside = true;
+				cDepth = dd;
+				cTri = t;
+				cNx = mx;
+				cNy = my;
+				cNz = mz;
+			} else if (dd < next && cNx * mx + cNy * my + cNz * mz < 0.9) {
+				next = dd;
+				nextX = mx;
+				nextY = my;
+				nextZ = mz;
+			}
+		} else if (!inside && dd > cDepth) {
 			cDepth = dd;
 			cTri = t;
 			cNx = mx;
 			cNy = my;
 			cNz = mz;
+		}
+	}
+	if (inside && next < 1e8) {
+		double share = 1 - (next - cDepth) / ball;
+		if (share > 0) {
+			double ax = cNx + nextX * share, ay = cNy + nextY * share, az = cNz + nextZ * share, al = std::sqrt(ax * ax + ay * ay + az * az);
+			if (al > 1e-9) {
+				cNx = ax / al;
+				cNy = ay / al;
+				cNz = az / al;
+			}
 		}
 	}
 	return cTri >= 0;
@@ -713,7 +756,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 			}
 			double qvx = Vx[na] + (Vx[nb] - Vx[na]) * tt, qvy = Vy[na] + (Vy[nb] - Vy[na]) * tt, qvz = Vz[na] + (Vz[nb] - Vz[na]) * tt;
 			double qvn = qvx * cNx + qvy * cNy + qvz * cNz;
-			double qd = -roadDamping * 2 * std::sqrt(kgS * mS) * qvn, qcap = roadStop * mS * std::abs(qvn) / h;
+			double qd = -roadDamping * 2 * std::sqrt(kgS * mS) * qvn * std::min(1.0, cDepth / tol), qcap = roadStop * mS * std::abs(qvn) / h;
 			if (qd > qcap) {
 				qd = qcap;
 			} else if (qd < -qcap) {
@@ -801,7 +844,7 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 				nyg = ownNy[ig];
 				nzg = ownNz[ig];
 				double vn = Vx[ig] * nxg + Vy[ig] * nyg + Vz[ig] * nzg;
-				double dampF = -roadDamping * 2 * std::sqrt(kgS * mS) * vn, dampCap = roadStop * mS * std::abs(vn) / h;
+				double dampF = -roadDamping * 2 * std::sqrt(kgS * mS) * vn * std::min(1.0, depth / tol), dampCap = roadStop * mS * std::abs(vn) / h;
 				if (dampF > dampCap) {
 					dampF = dampCap;
 				} else if (dampF < -dampCap) {
