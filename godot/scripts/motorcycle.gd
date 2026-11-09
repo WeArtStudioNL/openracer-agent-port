@@ -67,6 +67,7 @@ var rider_roll_kd := 14.0
 var rider_roll_max := 1.2
 var rider_grip_share := 0.9
 var rider_ease_off := 45.0 * DEG
+var rider_yaw_hold := 1.0
 var _lean_ref := 0.0              # the lean that he asks for, smoothed: the bike is taken into the bend, not pulled
 var balance_from := 6.0
 var balance_to := 14.0
@@ -766,7 +767,9 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 		# (model v2: only on the brake and for a short while after a landing; otherwise the yaw is the tyres')
 		var yaw_on := 1.0
 		if v2:
-			yaw_on = yaw_brake * smooth(0.05, 0.3, brake)
+			# (at speed the tyres alone let the bike turn more than its way goes round: that is held, but not while it changes its lean, when the bike has to turn)
+			var over_turn := r * r_lean > 0.0 and absf(r) > absf(r_lean) * 1.25
+			yaw_on = maxf(yaw_brake * smooth(0.05, 0.3, brake), (rider_yaw_hold * smooth(10.0, 20.0, absf(u)) * (1.0 - smooth(0.4, 1.2, absf(float(st["rate"]))))) if over_turn else 0.0)
 			if brace > 0.0:
 				yaw_on = maxf(yaw_on, minf(1.0, brace / 0.3))
 		state.apply_torque(Vector3.UP * damp * yaw_on)
