@@ -42,6 +42,7 @@ const GROUPS := [
 		["tyre_rings", "Tyre: rings of nodes across the tread", "", 1, 5, 1],
 		["tyre_segments", "Tyre: nodes round the wheel (4 is a square, 6 a hexagon; fewer is cheaper)", "", 4, 72, 1],
 		["tyre_inner_ratio", "Tyre: radius of the inner shell (the rim), as a share of the tyre", "%", 30, 90, 1],
+		["tyre_inner_ratio_rear", "Tyre at the rear: radius of the inner shell (0: as the front)", "%", 0, 90, 1],
 		["tyre_carcass", "Tyre: softness of the carcass (0: from the tyre rate of the car; a few mm is a very stiff tyre)", "mm", 0, 80, 0.5],
 		["tyre_stiff_x", "Tyre: stiffness of the tread along the tyre (x load)", "", 4, 60, 0.5],
 		["tyre_stiff_y", "Tyre: stiffness of the tread across the tyre (x load)", "", 4, 60, 0.5],
@@ -253,7 +254,7 @@ const GROUPS := [
 const LAYOUT := {
 	"Tyres": [["Front", ["rim_model_front", "rim_front", "tyre_front", "tyre_dia_front", "tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_rim_offset_front", "tyre_width", "rubber_front", "tread_front", "pressure_front"]],
 		["Rear", ["rim_model_rear", "rim_rear", "tyre_rear", "tyre_dia_rear", "tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "tyre_rim_offset_rear", "tyre_width_rear", "rubber_rear", "tread_rear", "pressure_rear"]],
-		["Tyre model", ["tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_carcass"]]],
+		["Tyre model", ["tyre_rings", "tyre_segments", "tyre_inner_ratio", "tyre_inner_ratio_rear", "tyre_carcass"]]],
 	"Springs and dampers": [["Front", ["spring_front", "damping_front", "roll_front"]], ["Rear", ["spring_rear", "damping_rear"]], ["Both axles", ["spring_progression", "damping_rebound"]]],
 	"Ride height and travel": [["Ride height", ["ride_front", "ride_rear"]], ["Travel", ["suspension_travel", "suspension_droop", "suspension_length"]]],
 	"Wheel alignment": [["Front", ["camber_front", "toe_front"]], ["Rear", ["camber_rear", "toe_rear"]], ["Both axles", ["roll_camber"]]],
@@ -474,7 +475,7 @@ const MAP := {
 	"tyre_rim_offset_front": ["wheels.library.front.custom.rim_offset", 1.0, 0.0], "tyre_rim_offset_rear": ["wheels.library.rear.custom.rim_offset", 1.0, 0.0],
 	"tread_front": ["wheels.library.front.custom.tread", 1.0, null], "tread_rear": ["wheels.library.rear.custom.tread", 1.0, null],
 	"tyre_width": ["tyres.shell.width", 0.01, 0.0], "tyre_width_rear": ["tyres.shell.width_rear", 0.01, 0.0], "tyre_rings": ["tyres.shell.rings", 1.0, 3.0],
-	"tyre_segments": ["tyres.shell.segments", 1.0, 36.0], "tyre_inner_ratio": ["tyres.shell.inner_ratio", 0.01, 0.62],
+	"tyre_segments": ["tyres.shell.segments", 1.0, 36.0], "tyre_inner_ratio": ["tyres.shell.inner_ratio", 0.01, 0.62], "tyre_inner_ratio_rear": ["tyres.shell.inner_ratio_rear", 0.01, 0.0],
 	"tyre_carcass": ["tyres.shell.carcass", 1.0, 0.0], "tyre_stiff_x": ["tyres.stiff_x", 1.0, 20.0], "tyre_stiff_y": ["tyres.stiff_y", 1.0, 18.0],
 	"grip": ["tyres.grip", 0.01, 1.0], "grip_balance": ["tyres.grip_balance", 0.01, 1.0], "cornering": ["tyres.cornering", 0.01, 1.0],
 	"pressure_front": ["tyres.pressure_front", 1.0, 2.2], "pressure_rear": ["tyres.pressure_rear", 1.0, 2.2],
@@ -841,6 +842,8 @@ static func use_transmission(cfg: Dictionary, p: Dictionary) -> void:
 static func rear_of(key: String) -> String:
 	if key == "tyre_width":
 		return "tyre_width_rear"
+	if key == "tyre_inner_ratio":
+		return "tyre_inner_ratio_rear"
 	if not key.ends_with("_front"):
 		return ""
 	var rear := key.trim_suffix("_front") + "_rear"
@@ -914,7 +917,7 @@ static func visible(key: String, v: Dictionary) -> bool:
 			return turbo and not built
 		"turbo_intercooler", "turbo_efficiency":
 			return float(v.get("turbo_boost", 0.0)) > 0.0
-		"tyre_inner_ratio":
+		"tyre_inner_ratio", "tyre_inner_ratio_rear":
 			return not (own_front and own_rear)
 		"tyre_width":
 			return not own_front

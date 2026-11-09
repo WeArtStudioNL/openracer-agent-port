@@ -157,6 +157,8 @@ func shell_of(w: Car.Wheel) -> Dictionary:
 		"inner_ratio": float(s.get("inner_ratio", 0.62)), "carcass": float(s.get("carcass", 0.0)), "sized": false}
 	if not w.front and float(s.get("width_rear", 0.0)) > 0.0:
 		out["width"] = float(s["width_rear"])
+	if not w.front and float(s.get("inner_ratio_rear", 0.0)) > 0.0:
+		out["inner_ratio"] = float(s["inner_ratio_rear"])
 	var spec := _spec_of(w)
 	if spec.is_empty():
 		return out
