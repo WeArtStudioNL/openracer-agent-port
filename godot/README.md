@@ -1078,7 +1078,7 @@ game (November 2026). What the Godot version still lacks or does otherwise, and 
 **Race and modes** (main.js)
 - The Godot AI keeps its own grip guess and braking share (0.75 of the lateral grip, Opponent.js 0.95) and no downforce
   in its speeds; with a grip from the skidpad it takes that g as the lateral grip.
-- The finished AI cars drive on at their race pace (the browser: 0.6 of it).
+- The finished AI cars drive on at 0.6 of the speed they crossed the line with (the browser: 0.6 of their pace).
 - The shortened racing line keeps 3.5 m from the edge of the road, the browser 1.5 m (see Racing against the AI).
 
 **Settings and keys**: a motorcycle steers with the keys by Godot's own lean command (key_steer_speed), not the

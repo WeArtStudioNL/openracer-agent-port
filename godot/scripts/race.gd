@@ -299,6 +299,8 @@ func _physics_process(dt: float) -> void:
 		var pit := e.driver.pit
 		pit.laps_left = laps - maxi(0, e.laps - 1)
 		pit.finished = e.finish_time >= 0.0
+		if pit.finished and is_inf(e.driver.speed_cap):
+			e.driver.speed_cap = maxf(8.0, 0.6 * absf(e.car.speed))        # (the race is done: it drives on at a calmer pace, main.js paceFactor)
 		e.driver.drive(dt)
 		# put back on the line (AIDriver: on its side, lost, no headway, blocked for long; Opponent.js crashedAt); in
 		# the pits only when it gets nowhere away from its stop for a while (not while it waits in its box)
