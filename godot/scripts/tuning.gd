@@ -892,6 +892,20 @@ static func save_tune(car_id: String, tune_name: String, cfg: Dictionary) -> Str
 	return path
 
 
+## Values written in the file of a tune as it is (paths with their values): its name and its place stay.
+static func patch_tune_file(path: String, values: Dictionary) -> bool:
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null
+	if not data is Dictionary or not data.get("config") is Dictionary:
+		return false
+	for p: String in values:
+		write(data["config"], p, values[p])
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	if f == null:
+		return false
+	f.store_string(JSON.stringify(data, "  "))
+	return true
+
+
 ## Deletes a tune of the player (never one that comes with a car).
 static func delete_tune(path: String) -> bool:
 	if not path.begins_with(tunes_root):

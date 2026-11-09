@@ -117,20 +117,27 @@ func share_with_setups(paths: Array) -> void:
 	var values := {}
 	for p: String in paths:
 		values[p] = Tuning.read(ed.cfg, p)
-	var names: Array = _paths.keys()
-	for n: String in names:
-		var t := Tuning.load_tune(str(_paths[n]))
-		if t.is_empty():
-			continue
-		for p: String in values:
-			Tuning.write(t, p, values[p])
-		Tuning.save_tune(ed.existing_id, n, t)
+	var detail := Tuning.list_detail(ed.existing_id, ed.existing)
+	var car_dir := ed.save_dir().path_join(ed.existing_id)
+	for n: String in detail:
+		var d: Dictionary = detail[n]
+		if d["own"] != "":
+			Tuning.patch_tune_file(d["own"], values)
+		if d["car"] != "":                     # (the tune that comes with the car: its file next to car.json, like the car as made)
+			var shipped := car_dir.path_join(str(d["car"]).get_file())
+			if FileAccess.file_exists(shipped):
+				Tuning.patch_tune_file(shipped, values)
+			elif d["own"] == "":
+				var t := Tuning.load_tune(str(d["car"]))
+				for p: String in values:
+					Tuning.write(t, p, values[p])
+				Tuning.save_tune(ed.existing_id, n, t)
 	var e: String = ed.io.patch_car(values)
 	if e != "":
 		ed.status(e, "error")
 		return
 	render_setups()
-	ed.status("Saved on all setups: Default and %d tunes." % names.size(), "ok")
+	ed.status("Saved on all setups: Default and %d tunes." % detail.size(), "ok")
 
 
 func update_tune_buttons() -> void:
