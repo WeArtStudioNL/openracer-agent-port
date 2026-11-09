@@ -26,6 +26,8 @@ var grid: MeshInstance3D
 var gizmo: EditorGizmo
 var chrome: Array[Node3D] = []       # the axes, the forward arrow and the grid (hidden while a crash test runs: hide_chrome)
 var target := Vector3(0, 0.4, 0)     # the point the camera orbits
+var _orbit_at: Variant = null        # the point that the wheel last zoomed to: a drag orbits round it
+var _orbit_for := Vector3.ZERO       # (the target it was for: anything else that moves the view makes it old)
 var ortho := false
 var thumb_viewport: SubViewport
 var thumb_camera: Camera3D
@@ -331,16 +333,24 @@ func standard_view(dx: float, dy: float, dz: float) -> void:
 
 func _orbit(rel: Vector2) -> void:
 	var h := maxf(1.0, size.y)
-	var offset := camera.position - target
+	# (round the point that the wheel zoomed to, as long as nothing else moved the view: the point the camera looks at goes round with it)
+	var at: Vector3 = _orbit_at if _orbit_at != null and target.is_equal_approx(_orbit_for) else target
+	var offset := camera.position - at
+	var aim := target - at
 	var yaw := -TAU * rel.x / h
 	var pitch := -TAU * rel.y / h
 	offset = offset.rotated(Vector3.UP, yaw)
-	var right := offset.cross(Vector3.UP).normalized()
+	aim = aim.rotated(Vector3.UP, yaw)
+	var view := offset - aim
+	var right := view.cross(Vector3.UP).normalized()
 	if right.length() > 0.5:
-		var turned := offset.rotated(right, -pitch)
+		var turned := view.rotated(right, -pitch)
 		if absf(turned.normalized().dot(Vector3.UP)) < 0.995:
-			offset = turned
-	camera.position = target + offset
+			offset = offset.rotated(right, -pitch)
+			aim = aim.rotated(right, -pitch)
+	camera.position = at + offset
+	target = at + aim
+	_orbit_for = target
 	_look()
 
 
@@ -350,6 +360,9 @@ func _pan(rel: Vector2) -> void:
 	var move := (-camera.global_basis.x * rel.x + camera.global_basis.y * rel.y) * world_per_px
 	camera.position += move
 	target += move
+	if _orbit_at != null:
+		_orbit_at = (_orbit_at as Vector3) + move
+		_orbit_for = target
 
 
 ## The wheel zooms towards the point under the mouse: the model, else the floor, else the orbit centre.
@@ -365,18 +378,22 @@ func _zoom(mouse: Vector2, steps: float) -> void:
 			point = floor_hit
 		else:
 			point = camera.project_position(mouse, _distance())
+	_orbit_at = point
 	if ortho:
 		var before := camera.project_ray_origin(mouse)
 		camera.size = clampf(camera.size * f, 0.05, 500.0)
 		var after := camera.project_ray_origin(mouse)
 		camera.position += before - after
 		target += before - after
+		_orbit_for = target
 		return
 	var new_pos := point + (camera.position - point) * f
 	if new_pos.distance_to(point) < 0.05 and steps > 0.0:
+		_orbit_for = target
 		return
 	camera.position = new_pos
 	target = point + (target - point) * f
+	_orbit_for = target
 	_look()
 
 
