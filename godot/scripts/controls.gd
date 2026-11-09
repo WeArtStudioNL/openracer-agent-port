@@ -166,6 +166,7 @@ func _ready() -> void:
 					kept.append(b)
 			_bindings[a[0]] = kept
 	_drop_wasd()
+	_backspace_repairs()
 	Input.joy_connection_changed.connect(func(_d: int, _c: bool): rebind())
 	# the menus with a gamepad (PadNav.js): A chooses, B goes back, in every menu from the start
 	SettingsMenu.pad_ui()
@@ -185,6 +186,26 @@ func _drop_wasd() -> void:
 	if saved is Dictionary and not saved.is_empty():
 		Settings.set_value("controls", saved)
 	Settings.set_value("wasd_dropped", true)
+
+
+## Once: Backspace repairs the car where it is. Controls saved when it still went back to the start keep Home for that.
+func _backspace_repairs() -> void:
+	if Settings.get_value("backspace_repairs"):
+		return
+	var is_backspace := func(b: Dictionary) -> bool: return b.get("type") == "key" and int(b.get("code", 0)) == KEY_BACKSPACE
+	var restart: Array = _bindings["restart"]
+	if restart.any(is_backspace):
+		_bindings["restart"] = restart.filter(func(b: Dictionary) -> bool: return not is_backspace.call(b))
+		if not (_bindings["restart"] as Array).any(func(b: Dictionary) -> bool: return b.get("type") == "key"):
+			(_bindings["restart"] as Array).push_front({"type": "key", "code": KEY_HOME})
+		if not (_bindings["repair"] as Array).any(is_backspace):
+			(_bindings["repair"] as Array).push_front({"type": "key", "code": KEY_BACKSPACE})
+		var saved: Variant = Settings.get_value("controls")
+		if saved is Dictionary and not saved.is_empty():
+			saved["restart"] = _bindings["restart"]
+			saved["repair"] = _bindings["repair"]
+			Settings.set_value("controls", saved)
+	Settings.set_value("backspace_repairs", true)
 
 
 ## The bindings as the game comes.

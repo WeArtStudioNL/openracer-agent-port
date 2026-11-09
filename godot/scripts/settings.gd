@@ -42,6 +42,7 @@ const DEFAULTS := {
 	"pad_assist": true,
 	"touch_steer": 1.0,           # the finger travel for the full lock (TouchControls)
 	"touch": "auto",              # the touch controls: auto (a touch screen), on, off
+	"backspace_repairs": false,   # (Backspace went from back to the start to repair, in the controls that a player had saved: once)
 	"wasd_dropped": false,        # (W A S D were taken from the controls that a player had saved: once)
 	"camera": 0,                  # the camera at the start: 0 behind, 1 cockpit, 2 bonnet
 	# a motorcycle (Settings.js)
