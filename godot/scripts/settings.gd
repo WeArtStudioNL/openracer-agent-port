@@ -48,7 +48,6 @@ const DEFAULTS := {
 	# a motorcycle (Settings.js)
 	"bike_steering": "lean",      # lean: the lean only; counter: countersteering and the lean
 	"bike_camera": "lean",        # lean: the picture rolls with the bike; classic: as a car
-	"wheelie_control": true,
 	"bike_shell_tyres": false,
 	"bike_push": false,           # flat-track style
 	"wheel_range": 1.0,           # the part of the turn of the wheel that is used for the lock (1: all)

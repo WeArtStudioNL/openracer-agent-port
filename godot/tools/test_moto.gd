@@ -17,6 +17,7 @@ var _time := 0.0
 var _since := 0.0
 var _shot := ""
 var _shift_max := 0.0
+var _fork_peak := 0.0
 var _gears := 0
 var _brake_seen := {}
 var _throttle_seen := false
@@ -145,6 +146,7 @@ func _physics_process(dt: float) -> void:
 			car.throttle_input = 0.0
 			car.brake_input = 1.0
 			car.steer_input = straight
+			_fork_peak = maxf(_fork_peak, car.wheels[0].fe_load)         # (the most of it: the load goes up and down with the ABS)
 			if _since > 0.35 and _brake_seen.is_empty():
 				var front := car.wheels[0]
 				var lever: Node3D = rider.levers["brake"]["node"]
@@ -153,7 +155,7 @@ func _physics_process(dt: float) -> void:
 					"speed": car.speed * 3.6}
 				print("on the brake at %.0f km/h: fork load %.0f N, the rider %.1f cm forward, the lever %.1f deg" % [_brake_seen["speed"],
 					_brake_seen["fe"], rider.g_off.z * 100.0, _brake_seen["lever"]])
-				check(front.fe_load > 100.0, "the fork takes a load along its travel on the brake (it dives)")
+				check(_fork_peak > 100.0, "the fork takes a load along its travel on the brake (it dives)")
 				check(rider.g_off.z > 0.02, "the rider is pushed forward by the brake")
 				check(float(_brake_seen["lever"]) > 8.0, "the front brake lever is pulled")
 				_save("brake.png", "side")

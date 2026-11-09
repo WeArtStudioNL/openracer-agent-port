@@ -56,9 +56,13 @@ var v2 := true
 var steer_inertia := 0.35
 var trail := 0.015
 var steer_damp := 60.0
-var rider_ka := 1.0
-var rider_kad := 0.2
+var rider_ka := 0.5
+var rider_kad := 0.4
 var rider_err_cap := 90.0 * DEG
+var rider_gain_from := 10.0
+var rider_bars_g := 2.0
+var rider_ref_tau := 0.12
+var _lean_ref := 0.0              # the lean that he asks for, smoothed: the bike is taken into the bend, not pulled
 var balance_from := 6.0
 var balance_to := 14.0
 var push_lock_share := 0.75
@@ -201,8 +205,11 @@ func retune(settings: Dictionary) -> void:
 	steer_inertia = _num("steer_inertia", 0.35)
 	trail = _num("trail", 0.015)
 	steer_damp = _num("steer_damp", 60.0)
-	rider_ka = _num("rider_ka", 1.0)
-	rider_kad = _num("rider_kad", 0.2)
+	rider_ka = _num("rider_ka", 0.5)
+	rider_gain_from = _num("rider_gain_from", 10.0)
+	rider_bars_g = _num("rider_bars_g", 2.0)
+	rider_ref_tau = _num("rider_ref_tau", 0.12)
+	rider_kad = _num("rider_kad", 0.4)
 	rider_err_cap = _num("rider_err_cap_deg", 90.0) * DEG
 	balance_from = _num("balance_from", 6.0)
 	balance_to = _num("balance_to", 14.0)
@@ -449,13 +456,17 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 func _steering_v2(car: Car, st: Dictionary, kinematic: float, u: float, dt: float) -> float:
 	var au := absf(u)
 	var uu := maxf(au, 5.0)
-	var e := target_lean - float(st["lean"])
-	var want_lean := clampf(target_lean, -1.05, 1.05)
+	_lean_ref += (target_lean - _lean_ref) * minf(1.0, dt / rider_ref_tau)
+	var e := _lean_ref - float(st["lean"])
+	var want_lean := clampf(_lean_ref, -1.05, 1.05)
 	var steady_want := -signf(want_lean) * atan(car.wheelbase * G * tan(absf(want_lean)) / maxf(u * u, 1.0)) * smooth(1.5, 4.5, au)
 	var e_cap := clampf(e, -rider_err_cap, rider_err_cap)
 	var fast_down := smooth(gain_down_from, gain_down_to, au) * (1.0 - smooth(2.0 * DEG, 8.0 * DEG, absf(target_lean)))
-	var react := (10.0 / uu) * (rider_ka * (1.0 - (1.0 - rider_fast_ka) * fast_down) * e_cap - rider_kad * (1.0 - (1.0 - rider_fast_kad) * fast_down) * float(st["rate"]))
-	var ask := steady_want + clampf(react, -rider_bars_cap, rider_bars_cap)
+	# (a degree of the bars does the square of the speed to the lean: from rider_gain_from on he asks for less, or the correction grows with the speed and swings the bike to and fro)
+	var react := (10.0 / uu) * minf(1.0, rider_gain_from / uu) * (rider_ka * (1.0 - (1.0 - rider_fast_ka) * fast_down) * e_cap - rider_kad * (1.0 - (1.0 - rider_fast_kad) * fast_down) * float(st["rate"]))
+	# (and no more of the bars than a few g of side force at this speed)
+	var bars_cap := minf(rider_bars_cap, atan(car.wheelbase * rider_bars_g * G / maxf(u * u, 1.0)))
+	var ask := steady_want + clampf(react, -bars_cap, bars_cap)
 	var lock := car.max_steer
 	var kin := 1.0 - smooth(kin_from, kin_to, au)
 	ask = clampf(ask, -lock, lock)
@@ -504,7 +515,7 @@ func before_tyres(car: Car, dt: float) -> void:
 		throttle_scale = 0.0
 	else:
 		var airborne := not (car.wheels[0].contact or car.wheels[2].contact)
-		var on := bool(Settings.get_value("wheelie_control"))
+		var on: bool = car.config.get("extras", {}).get("wheelie_control_on", true) != false
 		var want := clampf((_front_load(car) - 0.08) / 0.3, 0.15, 1.0) if on and not airborne and absf(u) > 0.5 and burnout < 0.5 else 1.0
 		wheelie_scale += (want - wheelie_scale) * minf(1.0, dt / (0.03 if want < wheelie_scale else 0.25))
 		# (at a walking pace with the bars far round: a third of the throttle)

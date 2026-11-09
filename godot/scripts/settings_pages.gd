@@ -50,7 +50,6 @@ func car_page(page: VBoxContainer) -> void:
 			world.audio.set_inside(int(v) != 0))
 	if car != null and car.bike != null:
 		R.pick_key(page, "Motorcycle steering", "bike_steering", [["counter", "Countersteer + lean"], ["lean", "Lean only"]])
-		R.check(page, "Wheelie control (the rider rolls the gas off as the front wheel lifts)", "wheelie_control")
 		R.check(page, "Shell tyres on motorcycles (experimental: the round tyre carries the bike, the grip stays the slip curve)", "bike_shell_tyres")
 		R.check(page, "Flat-track style (stay upright and push the bike under you: the inside foot out, a tighter bend at a low "
 			+ "speed; off: hang off to the inside, as in road racing)", "bike_push")

@@ -360,6 +360,7 @@ const TYRE_FINE := ["tyre_stiff_x", "tyre_stiff_y", "grip", "grip_balance", "cor
 const FEATURES := [
 	["tc", "Traction control", [["tc_allowance", "Wheel spin allowed", "%", 5, 800, 5]]],
 	["abs", "ABS", []],
+	["wheelie_control", "Wheelie control (the rider rolls the gas off as the front wheel lifts)", []],
 	["esc", "Stability control (ESC)", [["esc_gain", "How hard it steps in", "%", 10, 400, 5]]],
 	["launch_control", "Launch control", [["launch_rpm", "Engine speed", "rpm", 1000, 20000, 100]]],
 	["two_step", "Two-step (the key, or the clutch pedal at a standstill)", [["two_step_rpm", "Engine speed", "rpm", 1000, 20000, 100]]],
@@ -383,7 +384,7 @@ const FEATURES := [
 		["boost_scale", "The gauge goes up to", "bar", 0.5, 10, 0.5]]],
 ]
 const FEATURE_DEFAULTS := {
-	"tc_on": true, "abs_on": true, "esc_on": true, "launch_control_on": true, "two_step_on": true, "governor_on": false, "governor_rpm": 0,
+	"tc_on": true, "abs_on": true, "wheelie_control_on": true, "esc_on": true, "launch_control_on": true, "two_step_on": true, "governor_on": false, "governor_rpm": 0,
 	"pops_on": false, "pops_amount": 60, "pops_overrun": 2, "pops_rpm": 3000, "pops_loud": 100, "pops_flames": 100,
 	"antilag_on": false, "antilag_mode": "lift", "antilag_boost": 60, "antilag_rpm": 3000, "antilag_time": 5, "antilag_bangs": 100, "antilag_fuel": 60,
 	"boost_gauge_on": false, "boost_full": 1, "boost_scale": 2,
@@ -972,6 +973,8 @@ static func visible(key: String, v: Dictionary) -> bool:
 
 ## A system or an extra is offered (CarTuning.visibleFeature): the anti-lag and the boost gauge only with a turbo.
 static func visible_feature(key: String, v: Dictionary) -> bool:
+	if key == "wheelie_control":
+		return v.get("vehicle_type") == "motorcycle"
 	if key == "antilag" or key == "boost_gauge":
 		return float(v.get("turbo_share", 0.0)) > 0.0 or float(v.get("turbo_boost", 0.0)) > 0.0
 	return true
