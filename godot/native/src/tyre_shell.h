@@ -126,7 +126,8 @@ private:
 	std::vector<double> Px, Py, Pz, Vx, Vy, Vz, Fx, Fy, Fz, Ix, Iy, Iz, IVx, IVy, IVz, Ox, Oy, Oz, OVx, OVy, OVz, Tx, Ty, Tz, Nx, Ny, Nz;
 	std::vector<std::vector<int>> blockList, nodeList;
 	std::vector<uint8_t> nearNode, holdA, inContact, sliding;
-	std::vector<double> Bx, By, Bz, Kxx, Kxy, Kxz, Kyy, Kyz, Kzz, t1xA, t1yA, t1zA, t2xA, t2yA, t2zA, eFn, eNx, eNy, eNz;
+	std::vector<double> Bx, By, Bz, Kxx, Kxy, Kxz, Kyy, Kyz, Kzz, t1xA, t1yA, t1zA, t2xA, t2yA, t2zA, eFn, eNx, eNy, eNz, ownDepth, ownNx, ownNy, ownNz;
+	std::vector<int> ownTri;
 	std::vector<double> fnNode, cnx, cny, cnz, ux, uy;
 	std::vector<int> ctri;
 	std::vector<int> bA, bB;
