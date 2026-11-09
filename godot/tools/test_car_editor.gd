@@ -182,6 +182,19 @@ func _run() -> void:
 	crash._damage_back()
 	check(Settings.get_value("damage") == false, "back to the setting after the bench")
 	Settings.set_value("damage", true)
+	# Copy to rear in the rows of the editor
+	var front_row: Dictionary = {}
+	for r in ed.tuning._rows:
+		if r["key"] == "spring_front" and r.has("copy"):
+			front_row = r
+	check(not front_row.is_empty(), "the front springs have Copy to rear in the editor")
+	if not front_row.is_empty():
+		var rear_was: Variant = Tuning.read(ed.cfg, "chassis.spring_rear")
+		ed.tuning._change("spring_front", float(Tuning.values_of(ed.cfg).get("spring_rear")) + 5.0)
+		(front_row["copy"] as Button).pressed.emit()
+		var vals := Tuning.values_of(ed.cfg)
+		check(is_equal_approx(float(vals["spring_rear"]), float(vals["spring_front"])), "and the rear gets it")
+		Tuning.write(ed.cfg, "chassis.spring_rear", rear_was)
 	# the warnings about the numbers, over the cards: the button of one cures it, in the form too
 	var travel_was: Variant = Tuning.read(ed.cfg, "chassis.suspension_travel")
 	var length_was: Variant = Tuning.read(ed.cfg, "chassis.suspension_length")

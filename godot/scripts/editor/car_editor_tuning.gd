@@ -565,6 +565,16 @@ func _row(parent: Control, d: Array) -> void:
 			if not _refreshing and not is_nan(x):
 				_change(key, clampf(x, lo * 2.0 if lo < 0.0 else lo / 2.0, hi * 2.0)))
 		entry.merge({"kind": "slider", "slider": slider, "num": num, "reset": reset})
+	var to_rear := Tuning.rear_of(key)
+	if to_rear != "" and not to_rear in EDITOR_HAS and entry["kind"] in ["slider", "select"]:
+		var copy := EditorStyle.button("Copy to rear", "small ghost", "The rear gets the value of the front")
+		copy.pressed.connect(func():
+			var now := Tuning.values_of(ed.cfg, _cam())
+			if now.has(key):
+				_change(to_rear, now[key]))
+		line.add_child(copy)
+		entry["copy"] = copy
+		entry["rear"] = to_rear
 	_rows.append(entry)
 
 
@@ -706,6 +716,9 @@ func refresh() -> void:
 		var key: String = r["key"]
 		var value: Variant = v.get(key)
 		(r["item"] as Control).visible = Tuning.visible(key, v)
+		if r.has("copy"):
+			var other: Variant = v.get(r["rear"])
+			(r["copy"] as Button).disabled = (value == other) or ((value is float or value is int) and (other is float or other is int) and absf(float(value) - float(other)) < 1e-6)
 		match r["kind"]:
 			"slider":
 				var x := float(value) if (value is float or value is int) else float((r["slider"] as HSlider).min_value)

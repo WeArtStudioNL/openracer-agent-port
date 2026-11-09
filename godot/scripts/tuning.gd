@@ -825,6 +825,20 @@ static func use_transmission(cfg: Dictionary, p: Dictionary) -> void:
 		erase(cfg, "drivetrain.shift_style")
 
 
+## The row of the rear axle for a row of the front ("Copy to rear"), or "" when it has none.
+static func rear_of(key: String) -> String:
+	if key == "tyre_width":
+		return "tyre_width_rear"
+	if not key.ends_with("_front"):
+		return ""
+	var rear := key.trim_suffix("_front") + "_rear"
+	for group in GROUPS:
+		for d in group[1]:
+			if d[0] == rear:
+				return rear
+	return ""
+
+
 ## A tyre of the axle is a custom one (made from the numbers), or one of the wheel library (CarTuning.js).
 static func custom_tyre(v: Dictionary, axle: String) -> bool:
 	var t := str(v.get("tyre_" + axle, ""))

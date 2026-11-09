@@ -423,7 +423,18 @@ func _slider_row(parent: Control, d: Array) -> void:
 		if not _refreshing:
 			_change(key, x))
 	reset.pressed.connect(func(): _change(key, _reference.get(key, values.get(key))))
-	_controls.append({"key": key, "kind": "slider", "item": parts[0], "label": label, "slider": slider, "num": num, "def": d})
+	_controls.append({"key": key, "kind": "slider", "item": parts[0], "label": label, "slider": slider, "num": num, "def": d, "copy": _copy_button(line, key)})
+
+
+## The button of a row of the front axle: the rear takes this value. null when it has no rear.
+func _copy_button(line: HBoxContainer, key: String) -> Variant:
+	var rear := Tuning.rear_of(key)
+	if rear == "":
+		return null
+	var b := _button("Copy to rear", "The rear gets the value of the front")
+	b.pressed.connect(func(): _change(rear, values.get(key)))
+	line.add_child(b)
+	return b
 
 
 func _select_row(parent: Control, key: String, text: String) -> void:
@@ -442,7 +453,7 @@ func _select_row(parent: Control, key: String, text: String) -> void:
 		if not _refreshing:
 			_change(key, pick.get_item_metadata(i)))
 	line.add_child(pick)
-	_controls.append({"key": key, "kind": "select", "item": parts[0], "label": label, "pick": pick})
+	_controls.append({"key": key, "kind": "select", "item": parts[0], "label": label, "pick": pick, "copy": _copy_button(line, key)})
 
 
 func _bool_row(parent: Control, d: Array) -> void:
@@ -1068,6 +1079,8 @@ func _refresh() -> void:
 			item.visible = false
 		var v: Variant = values.get(key)
 		var changed := not _same(v, _reference.get(key))
+		if c.get("copy") != null:
+			(c["copy"] as Button).disabled = _same(v, values.get(Tuning.rear_of(key)))
 		match c["kind"]:
 			"slider":
 				TuningChecks.note(item, str(check_notes.get(key, "")), EditorStyle.WARN)

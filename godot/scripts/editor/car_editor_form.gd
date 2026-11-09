@@ -312,7 +312,7 @@ func build_wheels_card() -> void:
 			b.add_child(_use_model)
 			_use_model_hint = EditorStyle.hint("Needs objects called rim and tyre in the model: they are the wheel of every corner, fitted to the tyre settings.")
 			b.add_child(_use_model_hint)
-			_lib_same = EditorStyle.button("Rear = front", "small ghost", "Give the rear axle the rim and the tyre of the front axle")
+			_lib_same = EditorStyle.button("Copy to rear", "small ghost", "Give the rear axle the rim and the tyre of the front axle")
 			_lib_same.pressed.connect(_rear_as_front)
 			b.add_child(_lib_same)
 		var r := _row(b)

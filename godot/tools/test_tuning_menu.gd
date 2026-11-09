@@ -73,6 +73,23 @@ func _run() -> void:
 	menu._change("suspension_travel", was_travel)
 	menu._change("suspension_length", was_length)
 	await get_tree().process_frame
+	# ---- Copy to rear: the row of the front gives its value to the rear
+	var was_rear := float(menu.values.get("spring_rear"))
+	menu._change("spring_front", was_rear + 7.0)
+	var copied := false
+	for c in menu._controls:
+		if c["key"] == "spring_front" and c.get("copy") != null:
+			(c["copy"] as Button).pressed.emit()
+			copied = true
+	_check(copied and is_equal_approx(float(menu.values.get("spring_rear")), was_rear + 7.0), "Copy to rear: the rear springs get the value of the front")
+	var offs := true
+	for c in menu._controls:
+		if c["key"] == "spring_front":
+			offs = (c["copy"] as Button).disabled
+	_check(offs, "and the button is off while they are the same")
+	menu._revert_b.pressed.emit()
+	await _wait(0.2)
+	menu = world.tuning_layer.get_child(0)
 	# ---- the search field: only the rows with the word, and their cards are open
 	menu._search.text_changed.emit("rebound")
 	var found := 0
