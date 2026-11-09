@@ -702,6 +702,7 @@ func _build_visual() -> void:
 	if body != null:
 		pivot.add_child(body)
 		CollisionProxy.hide_objects(body)
+		CarModel.unmirror(body)
 	else:
 		var box := MeshInstance3D.new()
 		var bm := BoxMesh.new()

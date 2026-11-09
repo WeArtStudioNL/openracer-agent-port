@@ -651,6 +651,7 @@ func load_model_files(paths: PackedStringArray) -> void:
 func set_model(root: Node3D, is_new: bool, replace: bool) -> void:
 	_set_root(root)
 	CollisionProxy.hide_objects(root)
+	CarModel.unmirror(root)
 	mats.collect(root)
 	var glass := RegEx.create_from_string(GLASS_NAME)
 	if replace:

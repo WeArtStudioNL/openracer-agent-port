@@ -43,6 +43,69 @@ static func bounds(node: Node3D, relative_to: Node3D) -> AABB:
 	return box
 
 
+## Objects that are mirrored in the model (Blender: a linked duplicate with a negative scale) are made real objects with a positive scale,
+## the same in place and shape. Godot flips the normals of a double-sided material (the default of Blender) on a mirrored object, so that it is
+## lit from the wrong side. Copies of the same mesh share the one mirrored mesh.
+static func unmirror(root: Node3D) -> void:
+	var flipped := {}
+	var r := Basis.from_scale(Vector3(-1.0, -1.0, -1.0))
+	var nodes: Array[Node] = root.find_children("*", "Node3D", true, false)
+	nodes.push_front(root)
+	for n in nodes:                         # (parents first: what a parent gives up, its children take over)
+		var node := n as Node3D
+		if node.transform.basis.determinant() >= 0.0:
+			continue
+		var mi := node as MeshInstance3D
+		if mi != null and mi.mesh != null:
+			if not flipped.has(mi.mesh):
+				flipped[mi.mesh] = _flipped_mesh(mi.mesh)
+			if flipped[mi.mesh] == null:
+				continue
+			mi.mesh = flipped[mi.mesh]
+		node.transform.basis = node.transform.basis * r
+		for c in node.get_children():
+			if c is Node3D:
+				(c as Node3D).transform = Transform3D(r, Vector3.ZERO) * (c as Node3D).transform
+
+
+## A mesh turned through its middle (every point to the other side): null when it cannot be (a skinned mesh).
+static func _flipped_mesh(mesh: Mesh) -> Variant:
+	if not mesh is ArrayMesh:
+		return null
+	var out := ArrayMesh.new()
+	out.resource_name = mesh.resource_name
+	for s in mesh.get_surface_count():
+		var a: Array = mesh.surface_get_arrays(s)
+		if a[Mesh.ARRAY_BONES] != null:
+			return null
+		var vs: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		for i in vs.size():
+			vs[i] = -vs[i]
+		a[Mesh.ARRAY_VERTEX] = vs
+		if a[Mesh.ARRAY_NORMAL] != null:
+			var ns: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+			for i in ns.size():
+				ns[i] = -ns[i]
+			a[Mesh.ARRAY_NORMAL] = ns
+		if a[Mesh.ARRAY_TANGENT] != null:
+			var ts: PackedFloat32Array = a[Mesh.ARRAY_TANGENT]
+			for i in ts.size():
+				ts[i] = -ts[i]             # (the direction and its sign: the normal has turned as well)
+			a[Mesh.ARRAY_TANGENT] = ts
+		var prim: Mesh.PrimitiveType = (mesh as ArrayMesh).surface_get_primitive_type(s)
+		if prim == Mesh.PRIMITIVE_TRIANGLES:
+			var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(vs.size()))
+			for i in range(0, idx.size() - 2, 3):
+				var t := idx[i + 1]
+				idx[i + 1] = idx[i + 2]
+				idx[i + 2] = t
+			a[Mesh.ARRAY_INDEX] = idx
+		out.add_surface_from_arrays(prim, a)
+		out.surface_set_material(s, mesh.surface_get_material(s))
+		out.surface_set_name(s, (mesh as ArrayMesh).surface_get_name(s))
+	return out
+
+
 ## A tyre: a tube with its tread and two side walls, around the x axis (the axle), the middle at the origin.
 static func tyre_mesh(outer_r: float, inner_r: float, width: float, segments := 40) -> ArrayMesh:
 	var st := SurfaceTool.new()
