@@ -11,6 +11,7 @@ extends RefCounted
 const V100 := (100.0 / 3.6) * (100.0 / 3.6)       # (m/s)^2 at 100 km/h: the downforce of the menu is at that speed
 const NOT_YET := "Not in the Godot version yet: the value is kept in the tune (the browser game uses it), the Godot physics do not use it."
 
+const SHELL_OF_CUSTOM := {"tyre_rings": "rings", "tyre_segments": "segments", "tyre_carcass": "carcass"}     # rows of the tyre model -> the numbers of a custom tyre
 const GROUPS := [
 	["Tyres", [
 		["wheels_mode", "Wheels", "", 0, 0, 0],
@@ -640,6 +641,11 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 	var parts: Variant = read(cfg, "wheels.nodes")
 	v["wheel_parts"] = "all" if parts is Dictionary and ["FL", "FR", "RL", "RR"].all(func(s: String) -> bool: return (parts as Dictionary).get(s) is Array and not (parts[s] as Array).is_empty()) else "some"
 	v["model_tyres"] = "on" if lib.get("front", {}).get("model", false) or lib.get("rear", {}).get("model", false) else "off"
+	# (a custom tyre has its own rings, nodes and carcass: the shell of the tyre takes them from it, ShellTyres.shell_of)
+	for k: String in SHELL_OF_CUSTOM:
+		var own: Variant = read(cfg, "wheels.library.front.custom." + str(SHELL_OF_CUSTOM[k]))
+		if str(read(cfg, "wheels.library.front.tyre")) == "custom" and (own is float or own is int):
+			v[k] = float(own)
 	var compound := str(v.get("compound", "road"))
 	for axle in ["front", "rear"]:
 		var dia: float = v.get("tyre_diameter_" + axle, _round_to(_num(cfg, "chassis.tire_diameter", 0.65) * 1000.0, 5.0))
@@ -777,6 +783,10 @@ static func set_value(cfg: Dictionary, key: String, value: Variant, cam := {}) -
 					write(cfg, "wheels.library.%s.custom.tread" % ax, float(value) if key.begins_with("tread_") else float(v["tread_" + ax]))
 					if str(read(cfg, "wheels.library.%s.tyre" % ax)) in ["", "<null>"]:
 						write(cfg, "wheels.library.%s.tyre" % ax, "custom")
+	if key in SHELL_OF_CUSTOM:
+		for ax in ["front", "rear"]:
+			if str(read(cfg, "wheels.library.%s.tyre" % ax)) == "custom":
+				write(cfg, "wheels.library.%s.custom.%s" % [ax, SHELL_OF_CUSTOM[key]], float(value))
 	# (no turbo: the share and the boost pressure both 0; the clutch grips fully above where it starts to grip)
 	if key.begins_with("turbo_") and _num(cfg, "engine.turbo.share", 0.0) <= 0.0 and _num(cfg, "engine.turbo.boost_bar", 0.0) <= 0.0:
 		erase(cfg, "engine.turbo")
@@ -885,7 +895,7 @@ static func visible(key: String, v: Dictionary) -> bool:
 		"tyre_width_rear":
 			return not own_rear
 		"tyre_rings", "tyre_segments", "tyre_carcass":
-			return not (own_front and own_rear)
+			return not (library_tyre(v, "front") and library_tyre(v, "rear"))         # (a custom tyre has them too: they go to its own numbers, Tuning.set_value)
 		"rim_front", "rim_rear":
 			return v.get("model_tyres") != "on" and v.get("model_wheels") != "on"
 		"tyre_front", "tyre_rear":

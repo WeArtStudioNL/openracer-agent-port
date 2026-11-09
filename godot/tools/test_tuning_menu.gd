@@ -73,6 +73,21 @@ func _run() -> void:
 	menu._change("suspension_travel", was_travel)
 	menu._change("suspension_length", was_length)
 	await get_tree().process_frame
+	# ---- the rings and the nodes of a custom tyre (the hatchback has one of one ring)
+	_check(Tuning.visible("tyre_rings", menu.values) and Tuning.visible("tyre_segments", menu.values), "a custom tyre shows its rings and nodes")
+	var rings_was: Variant = menu.values.get("tyre_rings")
+	menu._change("tyre_rings", 3.0)
+	_check(float(Tuning.read(car.config, "wheels.library.front.custom.rings")) == 3.0 and float(Tuning.read(car.config, "wheels.library.rear.custom.rings")) == 3.0,
+		"the rings go to the tyre on both axles")
+	_check(float(menu.values.get("tyre_rings")) == 3.0, "the row shows the rings of the tyre")
+	await _wait(0.8)
+	car = world.car
+	menu = world.tuning_layer.get_child(0)
+	_check(int(car.shell_tyres.shell_of(car.wheels[0])["rings"]) == 3, "the shell has them")
+	menu._change("tyre_rings", rings_was)
+	await _wait(0.8)
+	car = world.car
+	menu = world.tuning_layer.get_child(0)
 	# ---- the wheels: from the model or dynamic, in the menu, and the tyres can be changed with both
 	var mode_was := str(menu.values.get("wheels_mode", "default"))
 	var nodes_was: Variant = Tuning.read(car.config, "wheels.nodes")
