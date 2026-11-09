@@ -129,7 +129,13 @@ func clear() -> void:
 
 
 func _process(delta: float) -> void:
-	if car == null or not is_instance_valid(car) or ReplayFx.active:
+	if car == null or not is_instance_valid(car):
+		return
+	if ReplayFx.active:                     # (a replay does not know when the engine began to smoke: what the car has now is not shown in it)
+		_set_rate(_steam, 0.0)
+		_set_rate(_smoke, 0.0)
+		for e in _pipe_smoke:
+			_set_rate(e, 0.0)
 		return
 	delta = minf(delta, 0.1)
 	_clock += delta

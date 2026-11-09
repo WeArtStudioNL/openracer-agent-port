@@ -363,6 +363,8 @@ func _limit_on_its_side(res: Dictionary, up: Vector3, w: Car.Wheel) -> void:
 	if fric.length() > MAX_RUB * pressed:
 		res["friction"] = fric.normalized() * MAX_RUB * pressed
 	var size := n.length()
+	if size > 1.0:                          # (a tyre on its side wall hardly grips: the car slides, it is not flung round on it)
+		res["friction"] = (res["friction"] as Vector3) * smoothstep(0.45, 0.9, absf(n.dot(up)) / size)
 	var most := car.mass * Car.G * (MAX_ACROSS if absf(n.dot(up)) < 0.7 * size else MAX_LOAD)
 	if size <= most or absf(n.y) <= 0.7 * size:
 		return
