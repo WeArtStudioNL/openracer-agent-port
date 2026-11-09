@@ -155,9 +155,10 @@ static func _wheelie(cfg: Dictionary, out: Array) -> void:
 		return
 	var limit := _n(cfg, "chassis.wheelbase", 2.5) * _n(cfg, "chassis.weight_distribution", 0.5) / cg
 	var thrust := torque * float(dt.get("efficiency", 0.9)) * float(gears[0]) * float(dt.get("final_drive", 1.0)) / (diameter / 2.0) / (mass * Car.G)
-	if thrust > limit and limit < 1.4:
-		out.append({"id": "wheelie", "keys": [],
-			"text": "On full throttle in first gear the thrust is %.2f g and the front comes up at %.2f g: the car stands on its rear wheels." % [thrust, limit],
+	# (the weight moves back on the springs and the wheels pull on the frame as well: a car goes up a good way before the sum says so; the kart of 100 kg at 1.56 of 2.11 g did)
+	if thrust > 0.7 * limit:
+		out.append({"id": "wheelie", "keys": ["mass"],
+			"text": "On full throttle in first gear the thrust is %.2f g and the front comes up from about %.2f g: the car can stand on its rear wheels." % [thrust, 0.7 * limit],
 			"short": "", "fix": {}, "fix_text": ""})
 
 

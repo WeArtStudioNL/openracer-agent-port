@@ -113,10 +113,8 @@ func _process(dt: float) -> void:
 		100:
 			if _time > 1.3:
 				world.set_free_camera(false)
-				_check(world.camera.current and world.camera.mode == ChaseCamera.Mode.FOLLOW, "C after the free camera: the follow camera again")
-				var ev := InputEventKey.new()
-				ev.physical_keycode = KEY_W
-				_check(InputMap.action_has_event("throttle", ev), "W drives again after the free camera")
+				_check(world.camera.current and world.camera.mode == ChaseCamera.Mode.BONNET, "off again: the camera it had, the bonnet")
+				_check(not InputMap.action_get_events("throttle").is_empty(), "the throttle keys are back after the free camera")
 				_step = 2
 				_time = 0.0
 		2:
@@ -219,8 +217,8 @@ func _free_game_camera() -> void:
 	for k in 2:
 		world._unhandled_input(_action("camera"))
 	_check(world.camera.mode == ChaseCamera.Mode.BONNET, "C twice from the follow camera: the bonnet camera")
-	world._unhandled_input(_action("camera"))
-	_check(world.free_cam != null and world.free_cam.active and world.free_cam.current, "C again: the free camera of the game")
+	world._unhandled_input(_action("free_cam"))
+	_check(world.free_cam != null and world.free_cam.active and world.free_cam.current, "the key of the free camera: the free camera of the game")
 	_left_at = world.free_cam.global_position
 	_key(KEY_W, true)
 

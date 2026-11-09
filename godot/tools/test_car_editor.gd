@@ -167,6 +167,24 @@ func _run() -> void:
 	check(RegEx.create_from_string(CarEditor.ID_PATTERN).search(ed.car_id) == null, "an id with capitals and ! is refused by the id pattern")
 	ed.car_id = "zz-editor-test"
 	print("3. save it into the test folder")
+	# the warnings about the numbers, over the cards: the button of one cures it, in the form too
+	var travel_was: Variant = Tuning.read(ed.cfg, "chassis.suspension_travel")
+	var length_was: Variant = Tuning.read(ed.cfg, "chassis.suspension_length")
+	Tuning.write(ed.cfg, "chassis.suspension_travel", 0.6)
+	Tuning.write(ed.cfg, "chassis.suspension_length", 0.3)
+	ed.update_summary()
+	var warned: Button = null
+	for line in ed.checks_box.get_children():
+		if (line.get_child(0) as Label).text.contains("travel"):
+			warned = line.get_child(1) as Button
+	check(warned != null, "too much travel for the room of the spring: a warning with a button")
+	if warned != null:
+		warned.pressed.emit()
+		check(is_equal_approx(float(Tuning.read(ed.cfg, "chassis.suspension_length")), 0.65), "the button gives the spring the room")
+	Tuning.write(ed.cfg, "chassis.suspension_travel", travel_was)
+	Tuning.write(ed.cfg, "chassis.suspension_length", length_was)
+	ed.update_summary()
+	await get_tree().process_frame
 	var saved: bool = await ed.save()
 	check(saved, "saved")
 	var dir := out.path_join("cars/zz-editor-test")
