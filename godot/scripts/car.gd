@@ -239,6 +239,7 @@ var esc_brake := [0.0, 0.0, 0.0, 0.0]   # the brake torque of the stability cont
 var esc_cut := 0.0              # the power that it takes off
 var _box: CollisionShape3D
 var _hulls: Array[CollisionShape3D] = []     # the convex shapes of the body that the model brings (objects collision..., CarCollision)
+var tyres_of_model: Variant = null   # the tyres of the model for the tread and the size that are chosen (CarTyres), or null
 var collision: Variant = null    # the balls on the suspension (CarCollision), or null
 var _box_full := Vector3.ZERO   # the size of the box of the body (x, z) and its place along the car, without a shell
 var _box_shell := Vector3.ZERO  # and inside what the nodes can be crushed to
@@ -431,6 +432,8 @@ func apply_config(cfg: Dictionary) -> void:
 	var rpm_omega := engine.omega
 	_read_config()
 	engine.omega = rpm_omega
+	if tyres_of_model != null:
+		tyres_of_model.apply(cfg)
 	if cfg.get("softbody", {}) != shell_before:
 		# (new strengths of the shell: a new shell, whole, and the parts back; the model keeps its weights when the nodes
 		# are the same, else it is made again for the new nodes)
@@ -685,6 +688,7 @@ func _diameters(cfg: Dictionary) -> Array[float]:
 
 
 func _build_visual() -> void:
+	tyres_of_model = null
 	var m: Dictionary = config.get("model", {})
 	var wcfg: Dictionary = config.get("wheels", {})
 	var nodes: Dictionary = wcfg.get("nodes", {})
@@ -757,6 +761,11 @@ func _build_visual() -> void:
 				part.owner = null
 				w.spin_node.add_child(part)
 				part.transform = Transform3D(Basis.IDENTITY, -w.hub_node.position) * t
+			if bike == null and body != null and not is_ghost:
+				if tyres_of_model == null:
+					tyres_of_model = load("res://scripts/car_tyres.gd").new()
+					tyres_of_model.collect(body)
+				tyres_of_model.add_wheel(w.slot, parts, w.spin_node)
 			if add_tyre:
 				var tyre := MeshInstance3D.new()
 				var made: Dictionary = lib.get("front" if w.front else "rear", {}).get("custom", {})
@@ -767,6 +776,8 @@ func _build_visual() -> void:
 			part.get_parent().remove_child(part)
 			part.queue_free()
 		_library_wheel(w, lib.get("front" if w.front else "rear", {}))
+	if tyres_of_model != null:
+		tyres_of_model.apply(config)
 	if bike != null:
 		bike_model = MotorcycleModel.new(self, body)
 	else:

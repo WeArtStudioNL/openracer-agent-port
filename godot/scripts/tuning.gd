@@ -60,12 +60,14 @@ const GROUPS := [
 		["tyre_front", "Tyre at the front (a tyre of the wheel library: only for the cars that have one)", "", 0, 0, 0],
 		["rim_rear", "Rim at the rear", "", 0, 0, 0],
 		["tyre_rear", "Tyre at the rear", "", 0, 0, 0],
-		["tyre_diameter_front", "Tyre at the front: diameter", "mm", 300, 1100, 5],
-		["tyre_height_front", "Tyre at the front: height of the sidewall (the rim takes what is left)", "mm", 20, 300, 5],
+		["tyre_section_front", "Tyre at the front: width", "mm", 95, 500, 5],
+		["tyre_aspect_front", "Tyre at the front: sidewall, as a share of the width", "%", 15, 100, 5],
+		["tyre_rim_front", "Tyre at the front: rim", "inch", 10, 27, 1],
 		["rubber_front", "Tyre at the front: rubber", "", 0, 100, 1],
 		["tread_front", "Tyre at the front: tread (grip on grass, sand and mud)", "", 0, 100, 1],
-		["tyre_diameter_rear", "Tyre at the rear: diameter", "mm", 300, 1100, 5],
-		["tyre_height_rear", "Tyre at the rear: height of the sidewall", "mm", 20, 300, 5],
+		["tyre_section_rear", "Tyre at the rear: width", "mm", 95, 500, 5],
+		["tyre_aspect_rear", "Tyre at the rear: sidewall, as a share of the width", "%", 15, 100, 5],
+		["tyre_rim_rear", "Tyre at the rear: rim", "inch", 10, 27, 1],
 		["rubber_rear", "Tyre at the rear: rubber", "", 0, 100, 1],
 		["tread_rear", "Tyre at the rear: tread", "", 0, 100, 1],
 		["tyre_width", "Tyre: width of the tread, front (0: from the wheel)", "cm", 0, 60, 1],
@@ -523,6 +525,7 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 		v["gear%d" % i] = float(gears[i])
 	# the tyres of the wheel library and a custom tyre
 	var lib: Dictionary = read(cfg, "wheels.library") if read(cfg, "wheels.library") is Dictionary else {}
+	v["model_wheels"] = "on" if str(read(cfg, "wheels.mode")) == "model" else "off"
 	v["model_tyres"] = "on" if lib.get("front", {}).get("model", false) or lib.get("rear", {}).get("model", false) else "off"
 	var compound := str(v.get("compound", "road"))
 	for axle in ["front", "rear"]:
@@ -530,6 +533,13 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 		v["tyre_diameter_" + axle] = dia
 		var ratio := _num(cfg, "wheels.library.%s.custom.inner_ratio" % axle, _num(cfg, "tyres.shell.inner_ratio", 0.62))
 		v["tyre_height_" + axle] = clampf(_round_to(dia / 2.0 * (1.0 - ratio), 5.0), 20.0, 300.0)
+		var section := _num(cfg, "wheels.library.%s.custom.width" % axle, 0.0) * 1000.0
+		if section <= 0.0:
+			section = _num(cfg, "tyres.shell.width_rear" if axle == "rear" else "tyres.shell.width", 0.0) * 1000.0
+		section = _round_to(section if section > 0.0 else 245.0, 5.0)
+		v["tyre_section_" + axle] = section
+		v["tyre_aspect_" + axle] = clampf(_round_to(dia / 2.0 * (1.0 - ratio) / section * 100.0, 5.0), 15.0, 100.0)
+		v["tyre_rim_" + axle] = clampf(roundf(dia * ratio / 25.4), 10.0, 27.0)
 		if not v.has("rubber_" + axle):
 			v["rubber_" + axle] = 22.0
 			for s in TyreCompounds.RUBBER_STOPS:
@@ -574,6 +584,19 @@ static func values_of(cfg: Dictionary, cam := {}) -> Dictionary:
 	return v
 
 
+## What a slider stands for, in words, or "".
+static func row_note(key: String, v: Dictionary) -> String:
+	if key.begins_with("tread_"):
+		return CarEditorTuning.tread_label(float(v.get(key, 0.0)), float(v.get("rubber_" + key.substr(6), 50.0)))
+	if key.begins_with("rubber_"):
+		return CarEditorTuning._rubber_label(float(v.get(key, 50.0)))
+	if key.begins_with("tyre_rim_"):
+		var axle := key.substr(9)
+		var dia := float(v["tyre_rim_" + axle]) * 25.4 + 2.0 * float(v["tyre_section_" + axle]) * float(v["tyre_aspect_" + axle]) / 100.0
+		return "%d/%d R%d · %.0f cm" % [v["tyre_section_" + axle], v["tyre_aspect_" + axle], v["tyre_rim_" + axle], dia / 10.0]
+	return ""
+
+
 ## Sets one value of the menu in a car configuration (toConfig of CarTuning.js, for that value).
 static func set_value(cfg: Dictionary, key: String, value: Variant, cam := {}) -> void:
 	var v := values_of(cfg, cam)
@@ -602,6 +625,17 @@ static func set_value(cfg: Dictionary, key: String, value: Variant, cam := {}) -
 			write(cfg, "cameras.cockpit.position", [float(v["cam_cockpit_x"]), float(v["cam_cockpit_y"]), float(v["cam_cockpit_z"])])
 		"cam_bonnet_x", "cam_bonnet_y", "cam_bonnet_z":
 			write(cfg, "cameras.bonnet.position", [float(v["cam_bonnet_x"]), float(v["cam_bonnet_y"]), float(v["cam_bonnet_z"])])
+		"tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear":
+			var axle := "front" if key.ends_with("front") else "rear"
+			var section := float(value) if key.begins_with("tyre_section") else float(v["tyre_section_" + axle])
+			var aspect := float(value) if key.begins_with("tyre_aspect") else float(v["tyre_aspect_" + axle])
+			var rim := float(value) if key.begins_with("tyre_rim") else float(v["tyre_rim_" + axle])
+			var dia := rim * 25.4 + 2.0 * section * aspect / 100.0
+			write(cfg, "wheels.library.%s.custom.diameter" % axle, dia / 1000.0)
+			write(cfg, "wheels.library.%s.custom.inner_ratio" % axle, rim * 25.4 / dia)
+			write(cfg, "wheels.library.%s.custom.width" % axle, section / 1000.0)
+			if str(read(cfg, "wheels.library.%s.tyre" % axle)) in ["", "<null>"]:
+				write(cfg, "wheels.library.%s.tyre" % axle, "custom")
 		"tyre_height_front", "tyre_height_rear":
 			var axle := key.substr(12)
 			var dia := float(v["tyre_diameter_" + axle])
@@ -623,6 +657,13 @@ static func set_value(cfg: Dictionary, key: String, value: Variant, cam := {}) -
 				var m: Array = MAP[key]
 				var factor := float(m[1])
 				write(cfg, m[0], float(value) * factor if factor != 0.0 and (value is float or value is int) else value)
+				if (key.begins_with("tread_") or key.begins_with("rubber_")) and v.get("model_wheels") == "on":
+					# (a tyre of the model that gets a rubber or a tread: the grip follows them, as a custom tyre)
+					var ax := key.substr(key.find("_") + 1)
+					write(cfg, "wheels.library.%s.custom.rubber" % ax, float(value) if key.begins_with("rubber_") else float(v["rubber_" + ax]))
+					write(cfg, "wheels.library.%s.custom.tread" % ax, float(value) if key.begins_with("tread_") else float(v["tread_" + ax]))
+					if str(read(cfg, "wheels.library.%s.tyre" % ax)) in ["", "<null>"]:
+						write(cfg, "wheels.library.%s.tyre" % ax, "custom")
 	# (no turbo: the share and the boost pressure both 0; the clutch grips fully above where it starts to grip)
 	if key.begins_with("turbo_") and _num(cfg, "engine.turbo.share", 0.0) <= 0.0 and _num(cfg, "engine.turbo.boost_bar", 0.0) <= 0.0:
 		erase(cfg, "engine.turbo")
@@ -665,7 +706,7 @@ static func use_transmission(cfg: Dictionary, p: Dictionary) -> void:
 static func custom_tyre(v: Dictionary, axle: String) -> bool:
 	var t := str(v.get("tyre_" + axle, ""))
 	var bike: bool = v.get("vehicle_type") == "motorcycle"
-	return t == "custom" or (t == "" and not bike and (str(v.get("rim_" + axle, "")) != "" or v.get("model_tyres") == "on")) \
+	return t == "custom" or (t == "" and not bike and (str(v.get("rim_" + axle, "")) != "" or v.get("model_tyres") == "on" or v.get("model_wheels") == "on")) \
 		or (t == "" and bike and v.get("model_tyres") == "on")
 
 
@@ -717,14 +758,14 @@ static func visible(key: String, v: Dictionary) -> bool:
 		"tyre_rings", "tyre_segments", "tyre_carcass":
 			return not (library_tyre(v, "front") and library_tyre(v, "rear"))
 		"rim_front", "rim_rear":
-			return v.get("model_tyres") != "on"
+			return v.get("model_tyres") != "on" and v.get("model_wheels") != "on"
 		"tyre_front", "tyre_rear":
 			var axle := key.substr(5)
 			var t := str(v.get(key, ""))
-			return (str(v.get("rim_" + axle, "")) != "" and v.get("model_tyres") != "on") if bike else (t != "" and t != "custom")
-		"tyre_diameter_front", "tyre_height_front", "rubber_front", "tread_front":
+			return (str(v.get("rim_" + axle, "")) != "" and v.get("model_tyres") != "on") if bike else (t != "" and t != "custom" and v.get("model_wheels") != "on")
+		"tyre_section_front", "tyre_aspect_front", "tyre_rim_front", "rubber_front", "tread_front":
 			return custom_tyre(v, "front")
-		"tyre_diameter_rear", "tyre_height_rear", "rubber_rear", "tread_rear":
+		"tyre_section_rear", "tyre_aspect_rear", "tyre_rim_rear", "rubber_rear", "tread_rear":
 			return custom_tyre(v, "rear")
 		"shift_style":
 			return g in ["torque-converter", "dct", "amt"]

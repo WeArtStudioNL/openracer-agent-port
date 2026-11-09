@@ -150,6 +150,8 @@ static func _hidden_name(raw: String) -> bool:
 	for ch in nm:
 		if ch >= "a" and ch <= "z":
 			letters += ch
+	if RegEx.create_from_string("^tyre(road|slick|allterrain|knobbly)(fl|fr|rl|rr|front|rear)?$").search(letters) != null:
+		return true                    # (the tyres of the tread of a model, shown in the place of a tyre: CarTyres)
 	return letters.begins_with("collision") or letters in ["beams", "beam", "softbodybeams", "shellbeams", "softbodybeam", "shellbeam"]
 
 

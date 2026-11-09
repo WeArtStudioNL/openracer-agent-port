@@ -20,7 +20,7 @@ const EDITOR_HAS := ["mass", "front_weight", "cg_height", "drag_coefficient", "m
 const HOMES := {"Chassis": "Chassis", "Brakes": "Chassis", "Aerodynamics and steering": "Chassis", "Size and steering wheel": "Chassis", "Tyres": "Wheels",
 	"Fuel": "Engine", "Engine": "Engine", "Transmission": "Drivetrain", "Suspension and driveline": "Suspension and driveline", "Engine sound": "Engine sound"}
 const PAINT := ["body", "rim"]
-const TYRE_KEYS := ["tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
+const TYRE_KEYS := ["tyre_section_front", "tyre_section_rear", "tyre_aspect_front", "tyre_aspect_rear", "tyre_rim_front", "tyre_rim_rear", "tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "rubber_front", "rubber_rear", "tread_front", "tread_rear",
 	"tyre_width", "tyre_width_rear", "tyre_inner_ratio", "tyre_rings", "tyre_segments", "tyre_carcass"]
 
 var ed: CarEditor
@@ -35,6 +35,8 @@ var _tune_menu: MenuButton
 var _ship: Button
 var _paths := {}                     # tune name -> its file
 var _refreshing := false
+var _tyres_root: Node3D = null
+var _tyres: Variant = null
 var _shown_for := ""                 # the car that the list of tunes was made for
 var _before := ""                    # the tune that is chosen, for Stay when a switch is called off
 
@@ -659,11 +661,9 @@ func refresh() -> void:
 				var changed: bool = base.has(key) and (base[key] is float or base[key] is int) and absf(float(base[key]) - x) > 1e-9
 				(r["label"] as Label).add_theme_color_override("font_color", EditorStyle.ACCENT2 if changed else EditorStyle.MUTED)
 				(r["reset"] as Button).modulate.a = 1.0 if changed else 0.0
-				if key.begins_with("rubber_"):
-					(r["label"] as Label).text = str(r["text"]) + " · " + _rubber_label(x)
-				elif key.begins_with("tread_"):
-					var rubber: Variant = v.get("rubber_" + key.substr(6))
-					(r["label"] as Label).text = str(r["text"]) + " · " + tread_label(x, float(rubber) if rubber is float or rubber is int else 50.0)
+				var note := Tuning.row_note(key, v)
+				if note != "":
+					(r["label"] as Label).text = str(r["text"]) + " · " + note
 			"select":
 				EditorStyle.select_value(r["pick"], value if value != null else "")
 			"tick":
@@ -676,6 +676,20 @@ func refresh() -> void:
 		(f["inner"] as Control).visible = on
 		(f["wrap"] as Control).visible = Tuning.visible_feature(f["feature"], v)
 	_refreshing = false
+	_preview_tyres()
+
+
+## The tyres of the model in the view, as in the game (CarTyres).
+func _preview_tyres() -> void:
+	if ed.model_root == null or ed.wheel_mode() != "model":
+		return
+	if _tyres_root != ed.model_root:
+		_tyres_root = ed.model_root
+		_tyres = load("res://scripts/car_tyres.gd").new()
+		_tyres.collect(ed.model_root)
+		for slot: String in CarEditor.SLOTS:
+			_tyres.add_wheel(slot, ed.wheel_part_nodes(slot), ed.model_root)
+	_tyres.apply(ed.cfg)
 
 
 ## What kind of tyre a rubber is (rubberLabel of Wheel.js): the nearest of the kinds.

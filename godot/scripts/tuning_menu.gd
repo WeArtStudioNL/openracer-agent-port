@@ -1038,6 +1038,9 @@ func _refresh() -> void:
 				var num: SpinBox = c["num"]
 				if not num.get_line_edit().has_focus():
 					num.set_value_no_signal(x)
+				var note := Tuning.row_note(key, values)
+				if note != "":
+					(c["label"] as Label).text = str(d[1]) + " · " + note
 			"select":
 				var pick: OptionButton = c["pick"]
 				var at := -1
