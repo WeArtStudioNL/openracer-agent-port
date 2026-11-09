@@ -690,6 +690,9 @@ func chassis_from_wheels() -> bool:
 	ch["front_track"] = snappedf(maxf(low, absf(c["FL"]["c"].x - c["FR"]["c"].x)), 0.001)
 	ch["rear_track"] = snappedf(maxf(low, absf(c["RL"]["c"].x - c["RR"]["c"].x)), 0.001)
 	ch["tire_diameter"] = snappedf(ed.mean_tyre(c), 0.001)
+	if ed.is_bike():                     # (a motorcycle often has another tyre at the front than at the rear)
+		ch["tire_diameter_front"] = snappedf(float(c["FL"]["size"].y), 0.001)
+		ch["tire_diameter_rear"] = snappedf(float(c["RL"]["size"].y), 0.001)
 	ch["front_axle_offset"] = snappedf((fz + rz) / 2.0, 0.001)
 	ch["rear_axle_offset"] = ch["front_axle_offset"]
 	ed.refresh_fields()

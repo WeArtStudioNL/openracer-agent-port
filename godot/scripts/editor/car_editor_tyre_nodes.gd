@@ -8,7 +8,7 @@ extends RefCounted
 ## the focus. Without a test running the tyres of the wheel library are drawn from their settings (the bench is not
 ## started for that, so that changing a setting does not drop the car); a car without them starts the bench.
 
-const KEYS := ["tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "tyre_width", "tyre_width_rear", "tyre_rings",
+const KEYS := ["tyre_dia_front", "tyre_dia_rear", "tyre_diameter_front", "tyre_diameter_rear", "tyre_height_front", "tyre_height_rear", "tyre_width", "tyre_width_rear", "tyre_rings",
 	"tyre_segments", "tyre_inner_ratio", "tyre_carcass", "tyre_stiff_x", "tyre_stiff_y", "pressure_front", "pressure_rear"]
 const TEAL := Color(0.3, 0.8, 0.8)
 const DIM := Color(0.35, 0.4, 0.45)
@@ -86,7 +86,7 @@ func frame() -> void:
 					ShellTyres.shell_lines(car.shell_tyres.tyres[i].call("shells"), pts, cols)
 		_draw(pts, cols, ed.view.viewport)
 		return
-	var key := str(Tuning.read(ed.cfg, "wheels.library")) + str(Tuning.read(ed.cfg, "chassis.tire_diameter"))
+	var key := str(Tuning.read(ed.cfg, "wheels.library")) + str(Tuning.read(ed.cfg, "chassis.tire_diameter")) + str(Tuning.read(ed.cfg, "chassis.tire_diameter_front")) + str(Tuning.read(ed.cfg, "chassis.tire_diameter_rear"))
 	if key == _static_for:
 		return
 	_static_for = key
@@ -105,13 +105,14 @@ func frame() -> void:
 			if bx == null:
 				continue
 			centre = (bx as AABB).get_center()
-		_static_wheel(custom, centre, pts, cols)
+		_static_wheel(custom, centre, pts, cols, s[0] == "F")
 	_draw(pts, cols, ed.view.lib_preview.get_parent(), ed.view.lib_preview.transform)
 
 
 ## The nodes of a tyre from its settings (refreshStaticTyres of car-editor.js).
-func _static_wheel(c: Dictionary, centre: Vector3, pts: Array, cols: Array) -> void:
-	var r := float(c.get("diameter", ed.num("chassis.tire_diameter", 0.65))) / 2.0
+func _static_wheel(c: Dictionary, centre: Vector3, pts: Array, cols: Array, front: bool) -> void:
+	var own := ed.num("chassis.tire_diameter_front" if front else "chassis.tire_diameter_rear", 0.0)
+	var r := float(c.get("diameter", own if own > 0.0 else ed.num("chassis.tire_diameter", 0.65))) / 2.0
 	var ri := r * float(c.get("inner_ratio", 0.7))
 	var rings := maxi(1, int(c.get("rings", 3)))
 	var segs := maxi(4, int(c.get("segments", 36)))

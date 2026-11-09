@@ -647,7 +647,7 @@ func _read_config() -> void:
 		w.left = i % 2 == 0
 		var track := front_track if w.front else rear_track
 		var z := wheelbase / 2.0 + float(ch.get("front_axle_offset", 0)) if w.front else -wheelbase / 2.0 + float(ch.get("rear_axle_offset", 0))
-		w.hub = Vector3(track / 2.0 * (1.0 if w.left else -1.0), 0.0, z)
+		w.hub = Vector3(0.0 if bike != null else track / 2.0 * (1.0 if w.left else -1.0), 0.0, z)       # (a motorcycle: the one wheel of an end is in the middle)
 		w.radius = diameters[0 if w.front else 1] / 2.0
 		# (Vehicle.js: 1.6 kg m2, a light vehicle less by its mass and the square of its tyre)
 		var tyre_d := float(ch.get("tire_diameter", 0.65))
@@ -750,6 +750,11 @@ func set_pressure(w: Wheel, p: float) -> void:
 func _diameters(cfg: Dictionary) -> Array[float]:
 	var d := float(cfg.get("chassis", {}).get("tire_diameter", 0.65))
 	var out: Array[float] = [d, d]
+	var ch: Dictionary = cfg.get("chassis", {})
+	for i in 2:
+		var own := float(ch.get("tire_diameter_front" if i == 0 else "tire_diameter_rear", 0.0))
+		if own > 0.0:
+			out[i] = own
 	var lib: Dictionary = cfg.get("wheels", {}).get("library", {})
 	for i in 2:
 		var axle: Dictionary = lib.get("front" if i == 0 else "rear", {})
