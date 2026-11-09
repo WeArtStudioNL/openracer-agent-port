@@ -1187,6 +1187,16 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 	} else {
 		rRimStrike = 0;
 	}
+	// a wheel that lies on its side: the sidewall folds and keeps most of what it is given, it does not throw the car back up (the shell of nodes is a stiff, nearly
+	// lossless spring that way round)
+	double flank = along_axle <= 0.5 ? 0.0 : std::min(1.0, (along_axle - 0.5) / 0.3);
+	if (flank > 0) {
+		double vnFlank = vel.x * sn.x + vel.y * sn.y + vel.z * sn.z, cFlank = 2 * 0.8 * std::sqrt(verticalStiffness * std::max(500.0, staticLoad) / 9.81);
+		double fFlank = -cFlank * flank * vnFlank;
+		hubFx += fFlank * sn.x;
+		hubFy += fFlank * sn.y;
+		hubFz += fFlank * sn.z;
+	}
 	double vnHub = vel.x * sn.x + vel.y * sn.y + vel.z * sn.z, cHub = verticalDamping * std::min(1.0, loadPrev / std::max(1.0, 0.3 * staticLoad));
 	hubFx -= cHub * vnHub * sn.x;
 	hubFy -= cHub * vnHub * sn.y;
