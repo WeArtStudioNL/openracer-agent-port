@@ -10,8 +10,8 @@ extends RefCounted
 ## names and can be set by hand. Everything goes in car.json as "driver"; a model picked here is saved with the car as
 ## driver.glb (CarEditorIO._finish). The editor loads this file (CarEditor.CARD_HOOKS) and calls setup, fill, read,
 ## frame, on_model, click, key and saved.
-## Not here: the rider of a motorcycle (the hands on the grips and the feet on the pegs are posed by MotorcycleRider in
-## the game; on a motorcycle the card places the figure and its bones only).
+## A motorcycle: the figure sits with his hands on the grips and his feet on the pegs, as in the game in his neutral posture (_pose_on_bike); the card places it and its
+## bones, the chest and the head. How he rides is MotorcycleRider in the game.
 
 const ROLES := [["armL", "Left arm", ["upper arm", "forearm", "hand"]], ["armR", "Right arm", ["upper arm", "forearm", "hand"]],
 	["legL", "Left leg", ["thigh", "shin", "foot"]], ["legR", "Right leg", ["thigh", "shin", "foot"]]]
@@ -30,6 +30,7 @@ var ed: CarEditor
 var body: Node3D                     # the space of the body of the car in the view (where the model's pivot hangs)
 var marks: Node3D                    # the nodes of the hands, the feet, the chest, the head, the poles and the ring
 var driver: CarDriver = null
+var _bike_parts := {}                # a motorcycle: grip_left, grip_right, peg_left, peg_right (nodes of the model)
 var enabled := false
 var touched := false                 # the driver was changed since it was saved (it goes in car.json, whatever tune is chosen)
 var editing := false
@@ -971,9 +972,60 @@ func frame(dt: float) -> void:
 		# (the steering wheel of the model turns with the slider, about the ring)
 		wheel.to_body = CarModel.relative(wheel.node.get_parent(), body) if wheel.node.get_parent() is Node3D else Transform3D.IDENTITY
 		wheel.turn(-steer * CarDriver.DEG, ring.position, _ring_axis())
-	if not ed.is_bike():
+	if ed.is_bike():
+		_pose_on_bike()
+	else:
 		driver.update(dt, throttle, brake)
 	_frame_markers(g)
+
+
+## A motorcycle: the hands on the grips and the feet on the pegs of the model, as the game has him in his neutral posture (MotorcycleRider.update); the chest and the head as they
+## are set. Without the grips and the pegs in the model only the chest and the head.
+func _pose_on_bike() -> void:
+	if not driver.complete():
+		return
+	var skel := driver.skel
+	skel.reset_bone_poses()
+	var to_body := driver._to_body()
+	var to_skel := to_body.affine_inverse()
+	driver._torso(to_skel.basis)
+	if not _find_bike_parts():
+		return
+	var cfg := driver.cfg
+	var left_arm := "armL" if driver._body_pos(driver.bones["armL"][0]).x >= driver._body_pos(driver.bones["armR"][0]).x else "armR"
+	var left_leg := "legL" if driver._body_pos(driver.bones["legL"][0]).x >= driver._body_pos(driver.bones["legR"][0]).x else "legR"
+	var hands: Dictionary = cfg.get("hands", {}) if cfg.get("hands") is Dictionary else {}
+	var hand_off: Dictionary = hands.get("offset", {}) if hands.get("offset") is Dictionary else {}
+	var hand_turn: Dictionary = hands.get("rotation", {}) if hands.get("rotation") is Dictionary else {}
+	var rot := to_skel.basis.orthonormalized()
+	for e in [[left_arm, "left", 1.0], ["armR" if left_arm == "armL" else "armL", "right", -1.0]]:
+		var chain: Array = driver.bones[e[0]]
+		var target: Vector3 = CarModel.relative(_bike_parts["grip_" + e[1]], body) * BoneIK.vec(hand_off.get(e[1], [0, 0, 0]))
+		BoneIK.solve(skel, chain, to_skel * target, to_skel * (driver._body_pos(chain[0]) + Vector3(float(e[2]) * 0.45, -0.25, -0.35)))
+		var hand := to_body.basis.orthonormalized() * BoneIK.global(skel, chain[2]).basis.orthonormalized()
+		BoneIK.set_global_basis(skel, chain[2], rot * (BoneIK.euler(BoneIK.vec(hand_turn.get(e[1], [0, 0, 0]))) * hand))
+	var feet: Dictionary = cfg.get("feet", {}) if cfg.get("feet") is Dictionary else {}
+	var foot_off: Dictionary = feet.get("offset", {}) if feet.get("offset") is Dictionary else {}
+	for e in [[left_leg, "left", 1.0], ["legR" if left_leg == "legL" else "legL", "right", -1.0]]:
+		var chain: Array = driver.bones[e[0]]
+		var target: Vector3 = CarModel.relative(_bike_parts["peg_" + e[1]], body) * BoneIK.vec(foot_off.get(e[1], [0, 0, 0]))
+		BoneIK.solve(skel, chain, to_skel * target, to_skel * (driver._body_pos(chain[0]) + Vector3(float(e[2]) * 0.3, 0.1, 0.8)))
+
+
+## The grips and the pegs of the model (grip_L/R, footpeg_L/R), looked for once per model; false when one is missing.
+func _find_bike_parts() -> bool:
+	var valid := _bike_parts.size() == 4 and _bike_parts.values().all(func(n: Variant) -> bool: return is_instance_valid(n))
+	if valid:
+		return true
+	_bike_parts.clear()
+	var wanted := {"gripl": "grip_left", "gripr": "grip_right", "footpegl": "peg_left", "footpegr": "peg_right"}
+	if ed.model_root == null:
+		return false
+	for n in ed.model_root.find_children("*", "Node3D", true, false):
+		var k := BoneIK.key(str(n.name))
+		if wanted.has(k):
+			_bike_parts[wanted[k]] = n
+	return _bike_parts.size() == 4
 
 
 func _frame_markers(g: EditorGizmo) -> void:
