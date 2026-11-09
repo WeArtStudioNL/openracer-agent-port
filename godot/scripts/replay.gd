@@ -25,6 +25,9 @@ const MAX_SECONDS := 1800.0
 const CAR_FIELDS := 16              # position 3, rotation 4, velocity 3, steering, engine omega, throttle, brake, gear, present
 const WHEEL_FIELDS := 3             # spring length, steering, turn
 const STRIDE := CAR_FIELDS + 4 * WHEEL_FIELDS
+## What a motorcycle was asked and why, a row per sample of the first motorcycle (radians, N, m/s2): to find out afterwards what the rider did in a bend. Not played back.
+const RIDER := ["steer_key", "throttle_key", "brake_key", "command", "want", "target", "smooth_target", "lean", "roll_rate", "bars", "limit", "grip", "a_long", "servo", "front_share",
+	"load_f", "load_r", "s_f", "s_r", "contact_f", "contact_r", "drift"]
 const SPEEDS := [0.1, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0]
 const JUMP := 15.0                  # m between two samples: the car was put back (no sliding in between)
 const P_VEL := 7
@@ -39,6 +42,7 @@ const _LATE := preload("res://scripts/replay_late.gd")
 var world: Node
 var cars: Array[Car] = []
 var samples := PackedFloat32Array()
+var rider_rows := PackedFloat32Array()      # (RIDER, a row per sample)
 var count := 0                      # samples kept
 var first_index := 0                # the number of the first sample kept (what went at the start is gone)
 var playing := false                # the replay is on the screen
@@ -151,6 +155,7 @@ func _physics_process(dt: float) -> void:
 			_write(row, n * STRIDE, cars[n])
 	samples.append_array(row)
 	soft.record(cars, count)
+	_record_rider()
 	if extras == null:
 		extras = ReplayExtras.new(self)
 	extras.record()
@@ -160,10 +165,29 @@ func _physics_process(dt: float) -> void:
 		# (the oldest minute goes at once: not a copy every sample)
 		var drop := count - most
 		samples = samples.slice(drop * cars.size() * STRIDE)
+		rider_rows = rider_rows.slice(drop * RIDER.size())
 		count -= drop
 		soft.trim(drop)
 		first_index += drop
 		fx.trim(start_time())
+
+
+## A row of RIDER for the first motorcycle in the race (zeros when there is none, so that the rows stay with the samples).
+func _record_rider() -> void:
+	var row := PackedFloat32Array()
+	row.resize(RIDER.size())
+	for c in cars:
+		if is_instance_valid(c) and c.bike != null:
+			var b: Motorcycle = c.bike
+			var d: Dictionary = b.dbg_rider
+			var f: Car.Wheel = c.wheels[0]
+			var r: Car.Wheel = c.wheels[2]
+			var vals := [c.steer_input, c.throttle_input, c.brake_input, float(d.get("command", 0.0)), float(d.get("want", 0.0)), b.target_lean, b.lean_ref(), b.lean, c.angular_velocity.dot(c.global_transform.basis.z),
+				b.steer, float(d.get("limit", 0.0)), float(d.get("grip", 0.0)), float(d.get("a_long", 0.0)), b.dbg_servo, b.front_load_share(c), f.load, r.load, f.s, r.s, 1.0 if f.contact else 0.0, 1.0 if r.contact else 0.0, b.drift]
+			for i in vals.size():
+				row[i] = vals[i]
+			break
+	rider_rows.append_array(row)
 
 
 static func _write(row: PackedFloat32Array, o: int, c: Car) -> void:
@@ -816,7 +840,8 @@ func pack(a := -1, b := -1) -> Dictionary:
 	return {"version": ReplayFiles.VERSION, "track": track_id, "track_name": track_name, "cars": ids, "names": names, "rate": RATE,
 		"count": to - from, "stride": STRIDE, "samples": part, "created": Time.get_datetime_string_from_system(),
 		"soft": (soft.save_data() if a < 0 and b < 0 else soft.part(from - first_index, to - first_index)) if soft != null and to > from else [],
-		"fx": fx.pack(from / RATE, to / RATE) if fx != null and to > from else {}}
+		"fx": fx.pack(from / RATE, to / RATE) if fx != null and to > from else {},
+		"rider": {"names": RIDER, "rows": rider_rows.slice((from - first_index) * RIDER.size(), (to - first_index) * RIDER.size())}}
 
 
 ## Saves the whole recording (Save replay); the path, or "" when it failed. A second save of the same is not made.
@@ -881,6 +906,8 @@ func open_file(path: String, w: Node, first: Car, watch_edit := true) -> bool:
 		if r is Array and r.size() >= 2 and str(r[1]) in ["follow", "cockpit", "cinematic", "track"]:
 			_cam_runs.append(r)
 	_zoom_rows = data.get("zoom", []) if data.get("zoom") is Array else []
+	var kept: Variant = data.get("rider", {}).get("rows") if data.get("rider") is Dictionary else null
+	rider_rows = kept if kept is PackedFloat32Array else PackedFloat32Array()
 	soft = ReplaySoft.new(cars)
 	soft.load_data(data.get("soft"), cars)
 	fx = ReplayFx.new(self)

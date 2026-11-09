@@ -144,6 +144,8 @@ var since_brake := 99.0
 var complied := 0.0
 var slide_time := 0.0
 var dbg_force := 0.0               # N: the most push of the road and the things on the body in the last tenth of a second (the panel)
+var dbg_rider := {}                # what the rider asks for and what limits it (a replay keeps it: Replay.RIDER)
+var dbg_servo := 0.0               # N m: the torque of his lean on the bike
 var dbg_values := {}               # what the crash rules measure now (the panel)
 var last_crash := {}               # the rule of the last crash and what the bike measured then (the panel; a reset keeps it)
 var dbg_accel := 0.0               # m/s2: the acceleration of the bike (the panel)
@@ -323,6 +325,15 @@ func _pushed() -> bool:
 	return push or bool(Settings.get_value("bike_push"))
 
 
+## For the replay: the lean that the rider really steers to, and how much of its weight the front wheel carries.
+func lean_ref() -> float:
+	return _lean_ref
+
+
+func front_load_share(car: Car) -> float:
+	return _front_load(car)
+
+
 func _front_load(car: Car) -> float:
 	return (car.wheels[0].load + car.wheels[1].load) / maxf(1.0, car.weight_front * car.mass * G)
 
@@ -420,6 +431,7 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	want = clampf(want, -phi_max, phi_max)
 	want *= 1.0 - stand_up * clampf(car.throttle, 0.0, 1.0) * minf(1.0, absf(want) / (15.0 * DEG))
 	var bike_want := clampf(want - eps * minf(1.0, absf(want) / (6.0 * DEG)), -speed_max, speed_max)
+	dbg_rider = {"want": bike_want, "limit": speed_max, "grip": grip_max / G, "a_long": a_long, "command": c}
 	var roll_step := (bike_want - target_lean) * minf(1.0, dt / lean_response)
 	var roll_max := max_roll_rate * (1.0 + 2.5 * (1.0 - smooth(4.0, 12.0, au))) * dt
 	# (letting go of a key in a bend is not asking to stand up at once: the lean comes off calmly, and a quick change to the other side stays quick)
@@ -710,6 +722,7 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 		# at speed: the bike is taken to the lean that he asks for quickly and damped, straight on its roll: the loop over the bars and the tyres is too slow to be strong without swinging
 		var rate_now := float(st["rate"])
 		var cap_roll := rider_roll_max * gh
+		dbg_servo = alive * smooth(balance_from, balance_to, absf(u)) * clampf(inertia * (rider_roll_kp * (_lean_ref - lean) - rider_roll_kd * rate_now), -cap_roll, cap_roll)
 		t_roll += alive * smooth(balance_from, balance_to, absf(u)) * clampf(inertia * (rider_roll_kp * (_lean_ref - lean) - rider_roll_kd * rate_now), -cap_roll, cap_roll)
 	state.apply_torque(-a * t_roll)
 	var front_share := _front_load(car)
