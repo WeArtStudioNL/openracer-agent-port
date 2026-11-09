@@ -398,8 +398,8 @@ the model called steeringwheel turns with the steering (`scripts/steering_wheel.
 its flattest axis, steering_wheel.degrees at full lock; the shell that dents leaves it alone). A driver more than 80 m from
 the camera is not moved. The places of "driver" and the cockpit camera are in the space of the body of the car, as in the
 browser (the cockpit camera no longer adds model.offset). Test: `Godot --headless --path godot res://tools/test_driver.tscn`
-(add `--cars=hatchback --shot=/tmp/folder` with a window for pictures). Not ported: the ragdoll of a crash and the give in
-the g-forces (motorcycle only in the browser).
+(add `--cars=hatchback --shot=/tmp/folder` with a window for pictures). In the game the driver also gives with the g-forces and a hit, and a hit over 9 g knocks him out
+for a moment: the hands leave the wheel and the arms hang as limbs (`scripts/driver_body.gd`, Godot only).
 
 ## Motorcycles
 
@@ -450,7 +450,8 @@ and chain (`scripts/motorcycle_model.gd`) and the rider on it (`scripts/motorcyc
   lever, the fork, the give and the brake lever on the brake, the limp rider, a crash into a wall, the ragdoll on the
   floor; with a window `--shot=/folder` saves throttle, brake, levers, limp_ride, limp and crash pictures, and the
   limp rider and the crash at a few moments: limp_0.25 to limp_1.50, crash_0.15 to crash_1.80).
-- **Not ported**: model v2 (`"motorcycle": {"model": "v2"}`; no bike of the game uses it), the head that stays upright to the road and looks along the racing line, the ORG bones
+- **Model v2 is the default in Godot** (`"motorcycle": {"model": "v1"}` gives the old controller): the bars are a degree of freedom, the tyre gives the camber.
+- **Not ported**: the head that stays upright to the road and looks along the racing line, the ORG bones
   of a Rigify rig that follow the DEF ones, the ragdoll in the replay, walking the bike back with the feet.
 
 ## Garage
@@ -1102,7 +1103,7 @@ model, not of the collision spheres of the shell.
 
 **Debug view**: the motorcycle crash rules are shown for a motorcycle only (the browser shows them for every car).
 
-**Other**: the motorcycle model v2 is another part of the port; in the track editor the touch layout and the loupe.
+**Other**: the touch layout and the loupe of the track editor are not needed in Godot.
 
 **Browser-only, no port needed**: TextureBudget.js, PhysicsWorker.js and PhysicsLink.js (`?worker=`), the storage notes
 and "Ask the browser to keep my data", the permission of a linked folder, Zip.js, bootstrap.js, Scene.js's picture probe
