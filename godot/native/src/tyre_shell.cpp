@@ -756,13 +756,20 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 			}
 		}
 		// one point of the tread on the road, between the nodes na and nb (tt: how far to nb)
-		auto tread_sample = [&](double qx, double qy, double qz, int na, int nb, double tt, const std::vector<int> &near) {
+		auto tread_at = [&](double qx, double qy, double qz, const int (&at)[4], const double (&share)[4], const std::vector<int> &near, double area) {
 			if (!contact_at(qx, qy, qz, hub, ground, near, tol)) {
 				return;
 			}
-			double qvx = Vx[na] + (Vx[nb] - Vx[na]) * tt, qvy = Vy[na] + (Vy[nb] - Vy[na]) * tt, qvz = Vz[na] + (Vz[nb] - Vz[na]) * tt;
+			double qvx = 0, qvy = 0, qvz = 0;
+			for (int c = 0; c < 4; c++) {
+				if (at[c] >= 0) {
+					qvx += Vx[at[c]] * share[c];
+					qvy += Vy[at[c]] * share[c];
+					qvz += Vz[at[c]] * share[c];
+				}
+			}
 			double qvn = qvx * cNx + qvy * cNy + qvz * cNz;
-			double qk = kgS * cWet, qd = -roadDamping * 2 * std::sqrt(qk * mS) * qvn * std::min(1.0, cDepth / tol), qcap = roadStop * mS * std::abs(qvn) / h;
+			double qk = kgS * cWet * area, qd = -roadDamping * 2 * std::sqrt(qk * mS) * qvn * std::min(1.0, cDepth / tol), qcap = roadStop * mS * std::abs(qvn) / h;
 			if (qd > qcap) {
 				qd = qcap;
 			} else if (qd < -qcap) {
@@ -772,32 +779,38 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 			if (qf <= 0) {
 				return;
 			}
-			double wa = 1 - tt;
-			if (qf < pointMax) {
-				add_k(na, qk * wa * wa, cNx, cNy, cNz);
-				add_k(nb, qk * tt * tt, cNx, cNy, cNz);
-			} else {
-				qf = pointMax;
+			bool capped = qf >= pointMax * area;
+			if (capped) {
+				qf = pointMax * area;
 			}
 			double fqx = qf * cNx, fqy = qf * cNy, fqz = qf * cNz;
-			Fx[na] += fqx * wa;
-			Fy[na] += fqy * wa;
-			Fz[na] += fqz * wa;
-			Fx[nb] += fqx * tt;
-			Fy[nb] += fqy * tt;
-			Fz[nb] += fqz * tt;
-			eFn[na] += qf * wa;
-			eFn[nb] += qf * tt;
-			eNx[na] += fqx * wa;
-			eNy[na] += fqy * wa;
-			eNz[na] += fqz * wa;
-			eNx[nb] += fqx * tt;
-			eNy[nb] += fqy * tt;
-			eNz[nb] += fqz * tt;
+			for (int c = 0; c < 4; c++) {
+				if (at[c] < 0) {
+					continue;
+				}
+				int i = at[c];
+				double u = share[c];
+				if (!capped) {
+					add_k(i, qk * u * u, cNx, cNy, cNz);
+				}
+				Fx[i] += fqx * u;
+				Fy[i] += fqy * u;
+				Fz[i] += fqz * u;
+				eFn[i] += qf * u;
+				eNx[i] += fqx * u;
+				eNy[i] += fqy * u;
+				eNz[i] += fqz * u;
+			}
 			if (qf > bestFn) {
 				bestFn = qf;
 				bestTri = cTri;
 			}
+		};
+		// (a point between two nodes of a ring)
+		auto tread_sample = [&](double qx, double qy, double qz, int na, int nb, double tt, const std::vector<int> &near) {
+			const int at[4] = { na, nb, -1, -1 };
+			const double share[4] = { 1 - tt, tt, 0, 0 };
+			tread_at(qx, qy, qz, at, share, near, 1.0);
 		};
 		for (int jr = 0; jr < rings; jr++) {
 			for (int kq = 0; kq < segs; kq++) {
@@ -821,23 +834,56 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 				}
 			}
 		}
-		// across the tyre, between two rings: only where they are not on one plane (one on the road and one past its edge, or on two faces). A ring
-		// that went over the edge of a ramp left the tyre without support until the next ring was there, and that ring came on at once
+		// the piece of tread between two rings and two nodes, where its corners are not on one plane (a ring on the road and one past its edge, or two faces):
+		// a raster of points, each giving its force to the four corners by how near it is. On a flat road no piece has one, and nothing changes there
 		for (int jr = 0; jr + 1 < rings; jr++) {
 			double gap = nodeLat[jr + 1] - nodeLat[jr], along = 2 * M_PI * R / (segs * S);
 			int spans = std::max(2, std::min(8, (int)std::ceil(gap / along)));
+			double area = std::min(1.0, gap / (width / rings) / spans);       // (a point of the raster stands for its small piece of the tread)
 			for (int kq = 0; kq < segs; kq++) {
-				int na = jr * segs + kq, nb2 = na + segs;
-				if (!nearNode[na] && !nearNode[nb2]) {
+				int kn = (kq + 1) % segs;
+				int a0 = jr * segs + kq, a1 = jr * segs + kn, b0 = a0 + segs, b1 = a1 + segs;
+				if (!nearNode[a0] && !nearNode[a1] && !nearNode[b0] && !nearNode[b1]) {
 					continue;
 				}
-				if (ownTri[na] >= 0 && ownTri[nb2] >= 0 && ownNx[na] * ownNx[nb2] + ownNy[na] * ownNy[nb2] + ownNz[na] * ownNz[nb2] > 0.995) {
+				bool hit = ownTri[a0] >= 0 && ownTri[a1] >= 0 && ownTri[b0] >= 0 && ownTri[b1] >= 0;
+				if (hit) {
+					double f = ownNx[a0] * ownNx[a1] + ownNy[a0] * ownNy[a1] + ownNz[a0] * ownNz[a1];
+					f = std::min(f, ownNx[a0] * ownNx[b0] + ownNy[a0] * ownNy[b0] + ownNz[a0] * ownNz[b0]);
+					f = std::min(f, ownNx[a0] * ownNx[b1] + ownNy[a0] * ownNy[b1] + ownNz[a0] * ownNz[b1]);
+					hit = f > 0.995;
+				}
+				if (hit) {
 					continue;
 				}
+				const std::vector<int> &near = nearNode[a0] ? nodeList[a0] : (nearNode[b0] ? nodeList[b0] : (nearNode[a1] ? nodeList[a1] : nodeList[b1]));
 				for (int m = 1; m < spans; m++) {
-					double tt = (double)m / spans;
-					tread_sample(Px[na] + (Px[nb2] - Px[na]) * tt, Py[na] + (Py[nb2] - Py[na]) * tt, Pz[na] + (Pz[nb2] - Pz[na]) * tt, na, nb2, tt,
-							nearNode[na] ? nodeList[na] : nodeList[nb2]);
+					double v = (double)m / spans;
+					for (int k2 = 0; k2 < S; k2++) {
+						double u = (double)k2 / S;
+						const int at[4] = { a0, a1, b0, b1 };
+						const double share[4] = { (1 - v) * (1 - u), (1 - v) * u, v * (1 - u), v * u };
+						double qx = 0, qy = 0, qz = 0, lx = 0, ly = 0, lz = 0, ringR = 0;
+						for (int c = 0; c < 4; c++) {
+							int i = at[c];
+							qx += Px[i] * share[c];
+							qy += Py[i] * share[c];
+							qz += Pz[i] * share[c];
+							double ox = Ox[i] - hcx, oy = Oy[i] - hcy, oz = Oz[i] - hcz;
+							lx += ox * share[c];
+							ly += oy * share[c];
+							lz += oz * share[c];
+							ringR += std::sqrt(ox * ox + oy * oy + oz * oz) * share[c];
+						}
+						double ll = std::sqrt(lx * lx + ly * ly + lz * lz);
+						if (ll > 0) {
+							double bul = ringR / ll - 1;
+							qx += lx * bul;
+							qy += ly * bul;
+							qz += lz * bul;
+						}
+						tread_at(qx, qy, qz, at, share, near, area);
+					}
 				}
 			}
 		}
@@ -1132,7 +1178,8 @@ bool TyreShell::step(double dt, const Vector3 &hub, const Vector3 &vel, const Ve
 	}
 	if (under) {
 		double vnRim = vel.x * sn.x + vel.y * sn.y + vel.z * sn.z;
-		double fRim = rimStiffness * (rimR - hubH) - (vnRim < 0 ? rimDamping * vnRim : 0);
+		// (the rim comes on gradually: the tyre folds under it over the first 2 cm, then it is the stop)
+		double rimIn = rimR - hubH, rimSoft = 0.02, fRim = rimStiffness * (rimIn < rimSoft ? rimIn * rimIn / (2 * rimSoft) : rimIn - rimSoft / 2) - (vnRim < 0 ? rimDamping * vnRim * std::min(1.0, rimIn / rimSoft) : 0);
 		hubFx += fRim * sn.x;
 		hubFy += fRim * sn.y;
 		hubFz += fRim * sn.z;
