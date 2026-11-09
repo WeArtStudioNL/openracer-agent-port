@@ -239,6 +239,7 @@ var esc_brake := [0.0, 0.0, 0.0, 0.0]   # the brake torque of the stability cont
 var esc_cut := 0.0              # the power that it takes off
 var _box: CollisionShape3D
 var _hulls: Array[CollisionShape3D] = []     # the convex shapes of the body that the model brings (objects collision..., CarCollision)
+var _omega_was := [0.0, 0.0, 0.0, 0.0]
 var speedometer: Node = null     # the digital speedometer on an object of the model (car_speedometer.gd)
 var in_cockpit := false          # the camera is the one in the cockpit (ChaseCamera)
 var tyres_of_model: Variant = null   # the tyres of the model for the tread and the size that are chosen (CarTyres), or null
@@ -277,6 +278,20 @@ func setup(id: String, cfg: Dictionary) -> void:
 	_make_shell()
 	if Settings.get_value("damage") and not config.get("parts", []).is_empty():
 		parts = CarParts.new(self)
+
+
+## A wheel in the air that goes faster or slower turns the car the other way round (its angular momentum is kept): the throttle lifts the nose, the
+## brake puts it down. On the ground the tyre takes this up. Not a motorcycle (Motorcycle has its own control in the air).
+func _wheels_turn_the_body(state: PhysicsDirectBodyState3D, dt: float) -> void:
+	var torque := 0.0
+	for i in 4:
+		var w := wheels[i]
+		var change := w.omega - float(_omega_was[i])
+		_omega_was[i] = w.omega
+		if not w.contact and not w.lost and bike == null and absf(change) < 40.0 and dt > 0.0:      # (40 rad/s in a step: the wheel was put right, a reset)
+			torque -= w.inertia * change / dt
+	if torque != 0.0:
+		state.apply_torque(state.transform.basis.x * torque)
 
 
 ## The speedometer that a model has in its dashboard: an object speedometer.
@@ -1015,6 +1030,7 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 		shell_tyres.physics(state, dt, angles)
 	else:
 		_ray_tyres(state, dt, angles)
+	_wheels_turn_the_body(state, dt)
 	for w in wheels:
 		CarWear.tyre_effects(w, dt)
 		CarWear.wear_step(w, dt, tyre_factors.x, tyre_factors.y)
