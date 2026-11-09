@@ -76,7 +76,7 @@ func read_config(c: Car) -> void:
 
 func snap() -> void:
 	var xf := car.get_global_transform_interpolated()
-	_turn = Quaternion(xf.basis.orthonormalized())
+	_turn = Quaternion(Basis.looking_at(-_flat_forward(xf), Vector3.UP)) if car.bike != null else Quaternion(xf.basis.orthonormalized())
 	_anchor = xf.origin
 	_room = 1.0
 	_pos = xf.origin + xf.basis.orthonormalized() * Vector3(0.0, height, -distance)
@@ -109,13 +109,20 @@ func _crash_view(delta: float) -> bool:
 	return true
 
 
-## How the car stands, smoothed, whole: the camera goes along with its pitch and its roll, all the way round in a somersault. The further behind it is, the faster it
+## How the car stands, smoothed, whole (a motorcycle: only its heading): the camera goes along with its pitch and its roll, all the way round in a somersault. The further behind it is, the faster it
 ## catches up, or a fast turn gets more than half a turn ahead and the camera goes the wrong way round. On its wheels the camera turns after the direction the car
 ## moves, so a slide is seen from behind the car.
 func _turn_after(xf: Transform3D, delta: float) -> void:
 	var b := xf.basis.orthonormalized()
 	var vel := car.linear_velocity
 	vel.y = 0.0
+	if car.bike != null:
+		# (a motorcycle: only its heading, with the sky up, however it flies; the lean comes in as a roll of the camera)
+		var heading := _flat_forward(xf)
+		if vel.length() > 3.0 and car.gear >= 0:
+			heading = heading.lerp(vel.normalized(), 0.35).normalized()
+		_turn = _turn.slerp(Quaternion(Basis.looking_at(-heading, Vector3.UP)), 1.0 - exp(-delta * smoothing)).normalized()
+		return
 	if vel.length() > 3.0 and car.gear >= 0 and b.y.y > 0.6 and car._any_contact():
 		var ahead := _flat_forward(xf)
 		b = b.rotated(Vector3.UP, ahead.signed_angle_to(ahead.lerp(vel.normalized(), 0.35).normalized(), Vector3.UP))
@@ -223,6 +230,8 @@ func _process(delta: float) -> void:
 			_pos = _keep_clear(focus, _anchor + round_car * Vector3(0.0, up_by + tan(elev) * far, -far), delta)
 			var look := xf.origin + round_car * Vector3(0.0, look_height, look_z)
 			global_transform = Transform3D(Basis.IDENTITY, _pos).looking_at(look, frame.y)
+			if car.bike != null:
+				rotate_object_local(Vector3.BACK, car.bike.camera_roll(delta))      # (a motorcycle: the camera rolls with the lean)
 			fov = _fov
 		Mode.COCKPIT:
 			global_transform = xf * Transform3D(Basis(Vector3.UP, PI), cockpit)
