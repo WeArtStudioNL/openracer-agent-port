@@ -180,6 +180,7 @@ func _slider_row(parent: Control, text: String, lo: float, hi: float) -> Array:
 	l.custom_minimum_size.x = 70
 	row.add_child(l)
 	var s := HSlider.new()
+	s.scrollable = false              # (the wheel scrolls the page)
 	s.min_value = lo
 	s.max_value = hi
 	s.step = 5

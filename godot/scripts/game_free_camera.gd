@@ -438,6 +438,7 @@ func _slider(v: Control, label: String, kind: String, lo: float, hi: float, gett
 	top.add_child(val)
 	v.add_child(top)
 	var s := HSlider.new()
+	s.scrollable = false              # (the wheel scrolls the page)
 	s.max_value = 1000
 	s.step = 1
 	s.focus_mode = Control.FOCUS_NONE

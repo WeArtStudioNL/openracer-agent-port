@@ -480,6 +480,7 @@ func _slider(box: Control, text: String, lo: float, hi: float, step: float, valu
 	row.add_child(v)
 	box.add_child(row)
 	var sl := HSlider.new()
+	sl.scrollable = false              # (the wheel scrolls the page)
 	sl.min_value = lo
 	sl.max_value = hi
 	sl.step = step

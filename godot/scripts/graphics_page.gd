@@ -172,6 +172,7 @@ func _pick(text: String, current: Variant, items: Array, apply: Callable) -> voi
 func _slider(text: String, key: String, lo: float, hi: float, step: float, fmt: String) -> void:
 	var row := _row(text)
 	var slider := HSlider.new()
+	slider.scrollable = false              # (the wheel scrolls the page)
 	slider.min_value = lo
 	slider.max_value = hi
 	slider.step = step

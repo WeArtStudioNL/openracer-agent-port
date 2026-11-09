@@ -265,6 +265,7 @@ func _ask_save(r: Replay, seconds: float, default_name: String, a0: int, b0: int
 		l.text = side[0]
 		l.custom_minimum_size.x = 120
 		var s := HSlider.new()
+		s.scrollable = false              # (the wheel scrolls the page)
 		s.max_value = limit
 		s.step = 0.1
 		s.size_flags_horizontal = Control.SIZE_EXPAND_FILL

@@ -224,6 +224,7 @@ func _button(parent: Control, text: String, tip: String, action: Callable) -> Bu
 
 func _slider_of(parent: Control, lo: float, hi: float, step: float, value: float, changed: Callable) -> HSlider:
 	var s := HSlider.new()
+	s.scrollable = false              # (the wheel scrolls the page)
 	s.min_value = lo
 	s.max_value = hi
 	s.step = step

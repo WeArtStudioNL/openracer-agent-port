@@ -106,6 +106,7 @@ static func slider(page: Control, text: String, key: String, lo: float, hi: floa
 		after := Callable()) -> HBoxContainer:
 	var r := row(page, text)
 	var s := HSlider.new()
+	s.scrollable = false              # (the wheel scrolls the page)
 	s.min_value = lo
 	s.max_value = hi
 	s.step = step
