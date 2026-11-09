@@ -20,6 +20,8 @@ var walls: WallGrid = null
 var floor_y := -0.2                 # the underside of the car in its frame
 var bound := 1.0                    # m from the origin of the frame to the farthest edge of a node
 var hit := 0.0                      # the biggest force on a node in the last step (N)
+var hit_speed := 0.0                # m/s: the fastest that a node went into something in the last step
+var push := 0.0                     # N: what the contacts of the last step really passed on to the body (the force on one stiff node is far more)
 var car_contacts := 0
 var steps := 0                      # the steps of the shell that were worked out (not quiet)
 var step_usec := 0                  # the time of the last of them
@@ -95,6 +97,8 @@ func step(state: PhysicsDirectBodyState3D) -> void:
 	ang_v = state.angular_velocity
 	com_w = xf.origin + state.center_of_mass
 	hit = 0.0
+	hit_speed = 0.0
+	push = 0.0
 	car_contacts = 0
 	if walls == null:
 		var track := car.get_tree().get_first_node_in_group("track") if car.is_inside_tree() else null
@@ -120,6 +124,8 @@ func step(state: PhysicsDirectBodyState3D) -> void:
 		RunLog.event("dent %s: bend %.1f cm, %.1f kJ taken up, %d anchors and %d beams torn" % [car.name, st["max_bend"] * 100.0,
 			st["absorbed"] / 1000.0, st["torn_anchors"], st["torn_beams"]])
 	var f := xf.basis * sb.reaction_force
+	if hit > 0.0:
+		push = f.length()
 	var t := xf.basis * (sb.reaction_torque - car.center_of_mass.cross(sb.reaction_force))
 	state.apply_central_force(f)
 	state.apply_torque(t)
@@ -270,6 +276,8 @@ func _spring(n: Vector3, depth: float, vel: Vector3, kc: float, m: float, h: flo
 	var fn := maxf(0.0, kc * depth - cc * vn)
 	if fn > hit:
 		hit = fn
+	if fn > 0.0:
+		hit_speed = maxf(hit_speed, -vn)
 	var tv := vel - n * vn
 	var tl := tv.length()
 	var out := n * fn

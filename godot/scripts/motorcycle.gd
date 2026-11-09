@@ -802,7 +802,7 @@ func _push_now(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> float:
 	for i in state.get_contact_count():
 		f += state.get_contact_impulse(i).length() / maxf(dt, 1e-4)
 	if car.shell != null:
-		f += car.shell.hit
+		f += car.shell.push
 	return f
 
 
@@ -851,9 +851,9 @@ func _crash_rules(car: Car, st: Dictionary, v: Vector3, pos: Vector3, u: float, 
 	var speed_old := Vector2(vo.x, vo.z).length()
 	var speed_now := Vector2(v.x, v.z).length()
 	var lost3 := vo.length() - v.length()
-	# (a bike with a soft body meets a wall with the nodes of that body, not with its box: then the hit is the speed it lost to it)
-	if car.shell != null and car.shell.hit > 2000.0:
-		impact = maxf(impact, (vo - v).length())
+	# (a bike with a soft body meets a wall with the nodes of that body, not with its box: then the hit is how fast they went into it)
+	if car.shell != null:
+		impact = maxf(impact, car.shell.hit_speed)
 	var wall: bool = r["wall"]["on"] and hard and impact > float(r["wall"]["kmh"]) / 3.6
 	var loss := float(r["hit"]["loss"])
 	var hit: bool = r["hit"]["on"] and hard and speed_old - speed_now > loss and lost3 > loss and speed_old > 5.5

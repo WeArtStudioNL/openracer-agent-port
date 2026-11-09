@@ -166,7 +166,7 @@ func _process(delta: float) -> void:
 	for p in _peaks:
 		for i in most.size():
 			most[i] = maxf(most[i], p[i])
-	_meter.text = "push %.1f kN  ·  %.1f g  ·  lean %.0f°  ·  slide %.0f°\nspin %.1f rad/s  ·  lost %.1f m/s in 0.1 s  ·  body hit %.0f km/h\n(the most of 1 s)" % most
+	_meter.text = "push %.1f kN  ·  %.1f g  ·  lean %.0f°  ·  slide %.0f°\nspin %.1f rad/s  ·  lost %.1f m/s in 0.1 s  ·  body hit %.0f km/h\n(the most of 1 s)" % ([most[0] / 1000.0] + most.slice(1))
 	_last.text = _last_text(bike.last_crash)
 
 
