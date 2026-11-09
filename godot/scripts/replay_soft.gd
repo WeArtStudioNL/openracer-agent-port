@@ -253,6 +253,29 @@ func end(cars: Array) -> void:
 	_shown.clear()
 
 
+## The records of the samples from to to (not in it), for a fragment: numbered from its first sample, and the last one before it as the state at its start
+## (a wheel that came off earlier is still off).
+func part(from: int, to: int) -> Array:
+	var out: Array = []
+	for e: Variant in entries:
+		if e == null:
+			out.append(null)
+			continue
+		var recs: Array = e["records"]
+		var kept: Array = []
+		var i := _find(recs, float(from))
+		for k in range(maxi(0, i), recs.size()):
+			var r: Dictionary = recs[k]
+			if int(r["s"]) >= to:
+				break
+			if int(r["s"]) >= from or k == i:
+				var copy := r.duplicate()
+				copy["s"] = maxi(0, int(r["s"]) - from)
+				kept.append(copy)
+		out.append({"nodes": e["nodes"], "names": e["names"], "records": kept})
+	return out
+
+
 ## For the file of a replay: [{nodes, names, records}] (null for a car without a shell).
 func save_data() -> Array:
 	return entries

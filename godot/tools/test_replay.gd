@@ -295,6 +295,22 @@ func _cinema_and_marks() -> void:
 	var i0 := roundi(f[0] * Replay.RATE) - r.first_index
 	var per := r.cars.size() * Replay.STRIDE
 	_check(not back.is_empty() and back["samples"][0] == r.samples[i0 * per], "the fragment starts at Mark in")
+	# a wheel that came off before the fragment and one that comes off in it: the records of the soft body go with the fragment
+	var a0 := roundi(f[0] * Replay.RATE)
+	var off := [true, 0.0, 0.0, Vector3.ZERO, Transform3D.IDENTITY]
+	var on := [false, 0.0, 0.0, Vector3.ZERO, Transform3D.IDENTITY]
+	var was_entries: Array = r.soft.entries
+	r.soft.entries = [{"nodes": 1, "names": [], "records": [
+		{"s": a0 - r.first_index - 20, "disp": PackedVector3Array(), "parts": [], "wheels": [off, on, on, on]},
+		{"s": a0 - r.first_index + 30, "disp": PackedVector3Array(), "parts": [], "wheels": [off, off, on, on]},
+		{"s": a0 - r.first_index + 9000, "disp": PackedVector3Array(), "parts": [], "wheels": [off, off, off, on]}]}]
+	var p2 := ReplayFiles.write(r.pack(a0, roundi(f[1] * Replay.RATE) + 1), "fragment-soft")
+	r.soft.entries = was_entries
+	var back2 := ReplayFiles.read(p2)
+	var kept: Array = back2.get("soft")[0]["records"] if back2.get("soft") is Array and not (back2["soft"] as Array).is_empty() else []
+	_check(kept.size() == 2 and int(kept[0]["s"]) == 0 and bool(kept[0]["wheels"][0][0]) and not bool(kept[0]["wheels"][1][0]), "a wheel off before the fragment is off at its start")
+	_check(kept.size() == 2 and int(kept[1]["s"]) == 30 and bool(kept[1]["wheels"][1][0]), "a wheel that comes off in the fragment comes off there")
+	DirAccess.remove_absolute(p2)
 	var times: Array = []
 	for k in 60:
 		times.append(f[0] + k * 0.5 / 30.0)

@@ -815,7 +815,7 @@ func pack(a := -1, b := -1) -> Dictionary:
 	var track_name := str(cars[0].get_meta("track_name", track_id)) if not cars.is_empty() else ""
 	return {"version": ReplayFiles.VERSION, "track": track_id, "track_name": track_name, "cars": ids, "names": names, "rate": RATE,
 		"count": to - from, "stride": STRIDE, "samples": part, "created": Time.get_datetime_string_from_system(),
-		"soft": soft.save_data() if a < 0 and b < 0 and soft != null else [],
+		"soft": (soft.save_data() if a < 0 and b < 0 else soft.part(from - first_index, to - first_index)) if soft != null and to > from else [],
 		"fx": fx.pack(from / RATE, to / RATE) if fx != null and to > from else {}}
 
 
