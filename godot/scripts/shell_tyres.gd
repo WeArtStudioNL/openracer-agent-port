@@ -15,6 +15,8 @@ extends RefCounted
 
 const SHELL_TEAL := Color(0.3, 0.8, 0.8)
 const SHELL_DIM := Color(0.35, 0.4, 0.45)
+const MAX_ACROSS := 3.0          # the most that the road pushes a wheel across its suspension, in the weight of the car
+const MAX_LOAD := 6.0            # and along it: a tyre that is rammed flat (the wheel at the end of its travel) gives no more
 const STEPS := 3                 # steps of the car in a step of Godot (1/360 s; Vehicle.js steps at 1/300 s or less)
 
 static var _ground: Object = null           # TyreGround: the triangles of the ground of the scene
@@ -291,6 +293,7 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 			var hub := top - up_s * w.length
 			touched[i] = bool(tb.call("step", h, hub, vm - up_s * float(sus_vel[i]), l_axis, dir, u_axis, w.omega, gnd, fr.x, fr.y, w.lat_grip))
 			var res: Dictionary = tb.call("result")
+			_limit_on_its_side(res, up_s)
 			results[i] = res
 			tyre_load[i] = 0.0
 			tyre_torque[i] = 0.0
@@ -333,6 +336,19 @@ func physics(state: PhysicsDirectBodyState3D, dt: float, angles: Array) -> void:
 			w.slip_tan *= 0.98
 	car._axle_fy = [float(_axle_fy[0]) / STEPS, float(_axle_fy[1]) / STEPS]
 	car._pitch_links = _pitch / STEPS
+
+
+## A car that lands on its side has its tyre crushed against the road across the wheel, where nothing gives way: what the nodes then
+## give is limited, or it would throw the car away. So is a tyre rammed flat under a wheel at the end of its travel. A wall is not limited.
+func _limit_on_its_side(res: Dictionary, up: Vector3) -> void:
+	var n: Vector3 = res.get("normal", Vector3.ZERO)
+	var size := n.length()
+	var most := car.mass * Car.G * (MAX_ACROSS if absf(n.dot(up)) < 0.7 * size else MAX_LOAD)
+	if size <= most or absf(n.y) <= 0.7 * size:
+		return
+	var k := most / size
+	res["normal"] = n * k
+	res["friction"] = (res["friction"] as Vector3) * k
 
 
 ## The force of the tread on the car (Vehicle.js, wheel.cylActive): the friction of the nodes along the wheel and across
