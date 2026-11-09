@@ -926,7 +926,7 @@ func build_bike_card() -> void:
 		"leans into the corners; the lean is capped, and at speed the keys ask for less of it."))
 	var r := _row(b)
 	ed.bind_number(r, "motorcycle.max_lean_deg", "max lean (°)", 1, 20.0, 70.0)
-	ed.bind_number(r, "motorcycle.fast_lean_deg", "lean at top speed (°)", 1, 10.0, 60.0)
+	ed.bind_number(r, "motorcycle.fast_lean_deg", "lean at top speed (°)", 1, 10.0, 70.0)
 	ed.bind_number(r, "motorcycle.rake_deg", "rake of the fork (°; not used when the model has a steerhead empty)", 0.5, 15.0, 35.0)
 	r = _row(b)
 	ed.bind_number(r, "motorcycle.rider_mass", "rider mass (kg, on top of the mass)", 5, 0.0, 150.0)
