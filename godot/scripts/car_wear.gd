@@ -84,14 +84,37 @@ static func rolling_force(c: Car, w: Car.Wheel, vl := INF) -> float:
 	return c.rolling * float(w.kind.get("rolling", 1.0)) * w.pressure_roll * ground * w.load * tanh(speed / 0.3)
 
 
+## Shared peak friction coefficient, including load sensitivity. Assistance uses the same
+## envelope as the slip curve; actual sliding forces can be lower than this peak.
+static func peak_mu(w: Car.Wheel, load: float, surf: Dictionary) -> float:
+	var loose: bool = surf.get("loose", false)
+	var grip := float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
+	return clampf(grip - 0.00007 * (load * 0.1 - 3500.0), 0.2 * grip, 1.4 * grip)
+
+
+## Peak longitudinal/lateral force (N), the ellipse used by tyre_force.
+static func capacity(w: Car.Wheel, load: float) -> Vector2:
+	var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
+	var fx := peak_mu(w, load, surf) * maxf(0.0, load)
+	return Vector2(fx, fx * 1.05 * maxf(0.0, w.lat_grip))
+
+
+static func remaining_lateral(w: Car.Wheel, load: float, longitudinal: float, share := 1.0) -> float:
+	var cap := capacity(w, load) * share
+	return cap.y * sqrt(maxf(0.0, 1.0 - pow(longitudinal / maxf(1e-6, cap.x), 2.0)))
+
+
+static func remaining_longitudinal(w: Car.Wheel, load: float, lateral: float, share := 1.0) -> float:
+	var cap := capacity(w, load) * share
+	return cap.x * sqrt(maxf(0.0, 1.0 - pow(lateral / maxf(1e-6, cap.y), 2.0)))
+
+
 ## The magic formula of Wheel.js (tyreForce): the slip along and across in units of the slip at the peak gives
 ## how far the tyre is towards its limit; the curve gives the share of the peak force, which is the friction
 ## times the load, in the direction of the slip.
 static func tyre_force(w: Car.Wheel, load: float, surf: Dictionary, vref: float, cornering: float) -> void:
-	# the grip of the surface, the tyre (its kind, its grip of car.json), its condition (temperature, wear, pressure)
 	var loose: bool = surf.get("loose", false)
-	var grip := float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if loose else 1.0)
-	var mu := clampf(grip - 0.00007 * (load * 0.1 - 3500.0), 0.2 * grip, 1.4 * grip)
+	var mu := peak_mu(w, load, surf)
 	var spin_slide := w.omega * w.radius - w.forward_speed
 	var melt := smoothstep(4.0, 14.0, spin_slide)
 	var ratio := float(surf["kinetic"]) / float(surf["static"])

@@ -918,6 +918,16 @@ func place(pos: Vector3, heading: float) -> void:
 		w.slip_ratio = 0.0
 		w.slip_tan = 0.0
 		w.length = susp_length
+		if bike != null:
+			w.contact = false
+			w.load = 0.0
+			w.grip_load = 0.0
+			w.fx = 0.0
+			w.fy = 0.0
+			w.fy_slip = 0.0
+			w.fe_load = 0.0
+			w.camber_slip = 0.0
+			w.lat_grip = 1.0
 	engine.omega = engine.idle_rpm * PI / 30.0
 	gear = 1
 	if bike != null:
