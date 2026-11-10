@@ -1,6 +1,7 @@
 {
   "name": "Enduro 600",
   "description": "Enduro bike",
+  "type": "motorcycle",
   "model": {
     "type": "gltf",
     "file": "cars/enduro-600/Enduro twin.glb",
@@ -45,7 +46,7 @@
     "height": 1.38
   },
   "chassis": {
-    "mass": 50,
+    "mass": 53,
     "wheelbase": 1.609,
     "front_axle_offset": 0,
     "rear_axle_offset": 0,
@@ -77,11 +78,12 @@
     "toe_rear": 0,
     "camber_front": 0,
     "camber_rear": 0,
-    "roll_camber": 0.6
+    "roll_camber": 0.6,
+    "tire_diameter_rear": 0.594
   },
   "drivetrain": {
     "drive": "rwd",
-    "gearbox": "dct",
+    "gearbox": "amt",
     "cvt_rpm": 5600,
     "tc_stall_rpm": 2300,
     "tc_ratio": 1.9,
@@ -113,7 +115,7 @@
   "engine": {
     "idle_rpm": 850,
     "limiter_rpm": 7000,
-    "inertia": 0.3,
+    "inertia": 0.02,
     "torque_curve": [
       [
         0,
@@ -121,66 +123,66 @@
       ],
       [
         500,
-        21.3
+        17.3
       ],
       [
         1000,
-        47.1
+        38
       ],
       [
         1500,
-        53.4
+        43
       ],
       [
         2000,
-        58.7
+        47.2
       ],
       [
         2500,
-        63
+        50.7
       ],
       [
         3000,
-        66.2
+        53.5
       ],
       [
         3500,
-        68.4
+        55.6
       ],
       [
         4000,
-        69.6
+        57
       ],
       [
         4500,
-        69.8
+        57.7
       ],
       [
         5000,
-        68.5
+        57.6
       ],
       [
         5500,
-        64.2
+        56.3
       ],
       [
         6000,
-        58.6
+        53.3
       ],
       [
         6500,
-        52.1
+        49.6
       ],
       [
         7000,
-        45
+        45.3
       ],
       [
         7500,
-        37.2
+        40.7
       ]
     ],
-    "braking_scale": 1,
+    "braking_scale": 0.5,
     "limiter_hz": 12,
     "two_step_rpm": 4600,
     "launch_rpm": 4000,
@@ -188,14 +190,14 @@
       "block": "Twin 0.8 L (parallel)",
       "layout": "inline-2",
       "rod": 130,
-      "bore": 80,
-      "stroke": 80,
-      "compression": 10,
+      "bore": 74.965974088117,
+      "stroke": 73.841828140673,
+      "compression": 10.6,
       "cam_duration": 228,
-      "intake_flow": 170,
-      "exhaust_flow": 140,
+      "intake_flow": 163,
+      "exhaust_flow": 137,
       "primary_length": 0.35,
-      "exhaust_length": 1.8,
+      "exhaust_length": 1.85,
       "valves": 2,
       "fuel": "pump95",
       "lambda": 0.9,
@@ -213,8 +215,8 @@
     }
   },
   "brakes": {
-    "front": 1201,
-    "rear": 249
+    "front": 290,
+    "rear": 1162
   },
   "cameras": {
     "follow": {
@@ -248,10 +250,10 @@
       "impulse_response": "exhaust_straight",
       "exhaust_type": "custom",
       "convolution": 0.7,
-      "bore": 80,
-      "stroke": 80,
+      "bore": 74.965974088117,
+      "stroke": 73.841828140673,
       "rod": 130,
-      "compression_ratio": 10,
+      "compression_ratio": 10.6,
       "burn_duration": 45,
       "burn_randomness": 0.2,
       "intake_duration": 228,
@@ -260,13 +262,13 @@
       "exhaust_duration": 224,
       "exhaust_lift": 8.5,
       "exhaust_lobe_centre": 110,
-      "intake_flow": 170,
-      "exhaust_flow": 140,
+      "intake_flow": 163,
+      "exhaust_flow": 137,
       "idle_pressure": 0.35,
       "exhaust_systems": 1,
       "primary_length": 0.35,
       "primary_flow": 140,
-      "exhaust_length": 1.8,
+      "exhaust_length": 1.85,
       "outlet_flow": 300,
       "collector_area": 20,
       "hf_gain": 0.01,
@@ -311,36 +313,42 @@
       ]
     }
   },
-  "type": "motorcycle",
   "motorcycle": {
-    "max_lean_deg": 75,
-    "fast_lean_deg": 60,
+    "max_lean_deg": 65,
+    "fast_lean_deg": 58,
     "rake_deg": 24.5,
     "rider_mass": 80,
-    "hang_off": 1,
-    "max_lateral_g": 0.9,
+    "hang_off": 0.22,
+    "max_lateral_g": 1.1,
     "balance": 1,
     "fork_dive": 1,
-    "push": true,
-    "push_foot_kmh": 110
+    "push": false,
+    "push_foot_kmh": 110,
+    "hang_chest_roll": 32,
+    "hang_knee_out": 1.2,
+    "hang_knee_down": 0.8,
+    "hang_tuck_pitch": 25,
+    "hang_shift": 0.8,
+    "lean_speed": 1.2,
+    "hang_sit_pitch": 0
   },
   "tyres": {
     "compound": "road",
     "damage": false,
     "shell": {
-      "width": 0.12,
-      "rings": 4,
-      "segments": 36,
+      "width": 0.13,
+      "rings": 4.5,
+      "segments": 19,
       "inner_ratio": 0.62,
-      "carcass": 0,
+      "carcass": 2,
       "width_rear": 0.19
     },
-    "stiff_x": 20,
-    "stiff_y": 18,
+    "stiff_x": 11,
+    "stiff_y": 11.5,
     "grip": 1,
     "grip_balance": 1,
     "cornering": 1,
-    "rolling_resistance": 0.015,
+    "rolling_resistance": 0.004,
     "heating": 1,
     "life": 1,
     "pressure_front": 2.2,

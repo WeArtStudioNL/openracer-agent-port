@@ -105,7 +105,7 @@
     "diff_lock": 60,
     "clutch_start_rpm": 1050,
     "clutch_full_rpm": 2000,
-    "gearbox": "torque-converter",
+    "gearbox": "dct",
     "cvt_rpm": 4000,
     "tc_stall_rpm": 1700,
     "tc_ratio": 2,
