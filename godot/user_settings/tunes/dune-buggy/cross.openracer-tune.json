@@ -1,0 +1,912 @@
+{
+  "car": "dune-buggy",
+  "config": {
+    "assists": {
+      "esc_gain": 1.0,
+      "tc_allowance": 1.0
+    },
+    "brakes": {
+      "front": 900.0,
+      "rear": 2100.0
+    },
+    "cameras": {
+      "bonnet": {
+        "fov": 70.0,
+        "position": [
+          0.0,
+          1.09,
+          0.46
+        ]
+      },
+      "cockpit": {
+        "fov": 66.0,
+        "hide_driver": false,
+        "position": [
+          0.3,
+          1.2,
+          -0.6
+        ]
+      },
+      "follow": {
+        "distance": 6.1,
+        "distance_fast": 0.0,
+        "dolly": 1.0,
+        "fov_fast": 75.0,
+        "fov_full_speed": 70.0,
+        "fov_standing": 45.0,
+        "height": 2.3,
+        "height_fast": 0.0,
+        "look_height": 0.86,
+        "look_z": 0.0,
+        "smoothing": 3.5
+      }
+    },
+    "chassis": {
+      "ackermann": 0.6,
+      "anti_squat": 0.33,
+      "camber_front": 0.0,
+      "camber_rear": 0.0,
+      "cg_height": 0.42,
+      "damping_front": 0.6,
+      "damping_rear": 0.6,
+      "damping_rebound": 1.7,
+      "downforce_front": 0.0,
+      "downforce_rear": 0.0,
+      "drag_coefficient": 0.31,
+      "front_axle_offset": 0.0,
+      "front_track": 2.374,
+      "mass": 1078.0,
+      "max_steer_deg": 35.0,
+      "rear_axle_offset": 0.0,
+      "rear_track": 2.374,
+      "ride_front": 0.005,
+      "ride_rear": 0.01,
+      "roll_camber": 0.6,
+      "roll_center_front": 0.06,
+      "roll_center_rear": 0.12,
+      "roll_front": 0.46,
+      "spring_front": 8000.0,
+      "spring_progression": 0.3,
+      "spring_rear": 9000.0,
+      "suspension_droop": 0.2,
+      "suspension_length": 0.6,
+      "suspension_travel": 1.2,
+      "tire_diameter": 0.92,
+      "toe_front": 0.0,
+      "toe_rear": 0.0,
+      "unsprung": false,
+      "weight_distribution": 0.365,
+      "wheelbase": 2.774
+    },
+    "cockpit": {
+      "show_speedometer": true
+    },
+    "colors": {
+      "body": "#b66b15",
+      "bodyFinish": "flake",
+      "bodyFlake": 378.0,
+      "bodyUv": "generated",
+      "rim": "#000000",
+      "rimFinish": "metallic"
+    },
+    "description": "Sand roamer.",
+    "dimensions": {
+      "height": 2.18,
+      "length": 3.85,
+      "width": 2.75
+    },
+    "driveline": {
+      "engine": "rear",
+      "mounts": {
+        "engine": {
+          "position": [
+            0.0,
+            0.474,
+            -0.751
+          ],
+          "rotation": [
+            0.0,
+            -179.5,
+            0.0
+          ]
+        },
+        "gearbox": {
+          "position": [
+            0.0,
+            0.535,
+            -0.662
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    },
+    "driver": {
+      "bones": {
+        "armL": [
+          "DEF-upper_armL",
+          "DEF-forearmL",
+          "DEF-handL"
+        ],
+        "armR": [
+          "DEF-upper_armR",
+          "DEF-forearmR",
+          "DEF-handR"
+        ],
+        "chest": "DEF-spine003",
+        "head": "DEF-spine006",
+        "hips": "DEF-spine",
+        "legL": [
+          "DEF-thighL",
+          "DEF-shinL",
+          "DEF-footL"
+        ],
+        "legR": [
+          "DEF-thighR",
+          "DEF-shinR",
+          "DEF-footR"
+        ]
+      },
+      "chest": {
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "elbow_out": 0.5,
+      "enabled": true,
+      "feet": {
+        "direction": [
+          0.0,
+          -0.5,
+          0.85
+        ],
+        "left": [
+          0.407,
+          0.408,
+          0.24
+        ],
+        "offset": {
+          "left": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "right": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "right": [
+          0.189,
+          0.405,
+          0.235
+        ],
+        "rotation": {
+          "left": [
+            0.0,
+            2.866,
+            -22.244
+          ],
+          "right": [
+            0.0,
+            -10.482,
+            0.0
+          ]
+        },
+        "travel": 0.06
+      },
+      "file": "cars/dune-buggy/driver.glb",
+      "grip_curl": "x",
+      "hands": {
+        "grip": {
+          "left": 1.0,
+          "right": 1.0
+        },
+        "left": [
+          0.469,
+          0.892,
+          -0.122
+        ],
+        "offset": {
+          "left": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "right": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "right": [
+          0.077,
+          0.891,
+          -0.12
+        ],
+        "rotation": {
+          "left": [
+            7.98,
+            20.839,
+            -34.736
+          ],
+          "right": [
+            13.793,
+            -12.508,
+            34.576
+          ]
+        }
+      },
+      "head": {
+        "rotation": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "knee_out": 0.15,
+      "pivot": "hips",
+      "poles": {
+        "legR": [
+          0.006,
+          0.905,
+          0.532
+        ]
+      },
+      "position": [
+        0.289,
+        0.479,
+        -0.482
+      ],
+      "rotation": [
+        -180.0,
+        0.0,
+        -180.0
+      ],
+      "scale": 1.0,
+      "wheel": {
+        "position": [
+          0.262,
+          0.892,
+          -0.046
+        ],
+        "radius": 0.15,
+        "rotation": [
+          -159.484,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "drivetrain": {
+      "center_diff": "locked",
+      "center_split": 0.4,
+      "clutch": 1.5,
+      "clutch_full_rpm": 2200.0,
+      "clutch_start_rpm": 650.0,
+      "cvt_rpm": 7500.0,
+      "diff": "welded",
+      "diff_coast": 0.1,
+      "diff_lock": 60.0,
+      "diff_power": 0.8,
+      "diff_preload": 100.0,
+      "drive": "awd",
+      "efficiency": 0.93,
+      "final_drive": 4.25,
+      "gear_ratios": [
+        3.62,
+        2.19,
+        1.52,
+        1.14,
+        0.92,
+        0.76
+      ],
+      "gearbox": "torque-converter",
+      "reverse_ratio": 3.5,
+      "shift_style": "drag",
+      "shift_time": 0.5,
+      "tc_lockup": false,
+      "tc_ratio": 1.0,
+      "tc_stall_rpm": 4150.0
+    },
+    "engine": {
+      "braking_scale": 1.0,
+      "build": {
+        "ambient": {
+          "altitude": 0.0,
+          "celsius": 20.0
+        },
+        "block": "V8 5.7 L crossplane",
+        "bore": 77.5,
+        "cam_duration": 232.0,
+        "compression": 11.1,
+        "exhaust_flow": 189.0,
+        "exhaust_length": 2.8,
+        "fuel": "pump95",
+        "induction": {
+          "boost": 0.6,
+          "intercooler": "air",
+          "size": "medium",
+          "type": "none",
+          "variant": "roots"
+        },
+        "intake_flow": 207.0,
+        "lambda": 0.9,
+        "layout": "v8-crossplane",
+        "primary_length": 0.5,
+        "rod": 146.0,
+        "stroke": 59.375,
+        "valves": 2.0
+      },
+      "idle_rpm": 850.0,
+      "inertia": 0.13,
+      "launch_rpm": 4000.0,
+      "limiter_hz": 12.0,
+      "limiter_rpm": 6400.0,
+      "torque_curve": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          500.0,
+          52.9
+        ],
+        [
+          1000.0,
+          116.8
+        ],
+        [
+          1500.0,
+          133.0
+        ],
+        [
+          2000.0,
+          147.4
+        ],
+        [
+          2500.0,
+          160.1
+        ],
+        [
+          3000.0,
+          171.1
+        ],
+        [
+          3500.0,
+          180.4
+        ],
+        [
+          4000.0,
+          188.0
+        ],
+        [
+          4500.0,
+          193.9
+        ],
+        [
+          5000.0,
+          198.0
+        ],
+        [
+          5500.0,
+          200.5
+        ],
+        [
+          6000.0,
+          201.2
+        ],
+        [
+          6500.0,
+          200.2
+        ],
+        [
+          7000.0,
+          195.6
+        ]
+      ],
+      "two_step_rpm": 4600.0
+    },
+    "exhaust": [
+      {
+        "brightness": 1.5,
+        "diameter": 0.04,
+        "flame_length_cm": 14.0,
+        "flame_width_cm": 6.0,
+        "position": [
+          -0.233,
+          0.157,
+          -0.768
+        ],
+        "rotation": [
+          65.208,
+          0.009,
+          -114.297
+        ],
+        "smoke": 1.0
+      }
+    ],
+    "extras": {
+      "abs_on": true,
+      "antilag_bangs": 100.0,
+      "antilag_boost": 60.0,
+      "antilag_fuel": 60.0,
+      "antilag_mode": "lift",
+      "antilag_on": false,
+      "antilag_rpm": 3000.0,
+      "antilag_time": 5.0,
+      "boost_full": 1.0,
+      "boost_gauge_on": false,
+      "boost_scale": 2.0,
+      "esc_on": true,
+      "governor_on": false,
+      "governor_rpm": 5600.0,
+      "launch_control_on": true,
+      "pops_amount": 60.0,
+      "pops_flames": 100.0,
+      "pops_loud": 100.0,
+      "pops_on": false,
+      "pops_overrun": 2.0,
+      "pops_rpm": 3000.0,
+      "tc_on": true,
+      "two_step_on": true
+    },
+    "fuel": {
+      "tank": 60.0,
+      "use": 1.0
+    },
+    "model": {
+      "file": "cars/dune-buggy/Dune Buggy.glb",
+      "offset": [
+        0.0,
+        0.0929,
+        -0.4577
+      ],
+      "rotation_y": 0.0,
+      "scale": 1.0,
+      "type": "gltf"
+    },
+    "name": "Dune Buggy",
+    "softbody": {
+      "max_nodes": 120.0,
+      "wheel_strength": 25.0
+    },
+    "sound": {
+      "engine_sim": {
+        "audio_volume": 1.0,
+        "bore": 77.5,
+        "burn_duration": 45.0,
+        "burn_randomness": 0.2,
+        "collector_area": 20.0,
+        "compression_ratio": 11.1,
+        "convolution": 1.0,
+        "exhaust_duration": 228.0,
+        "exhaust_flow": 189.0,
+        "exhaust_length": 2.8,
+        "exhaust_lift": 12.0,
+        "exhaust_lobe_centre": 110.0,
+        "exhaust_systems": 2.0,
+        "exhaust_type": "performance",
+        "hf_gain": 0.01,
+        "idle_pressure": 0.35,
+        "impulse_response": "smooth_39",
+        "intake_duration": 232.0,
+        "intake_flow": 207.0,
+        "intake_lift": 12.0,
+        "intake_lobe_centre": 110.0,
+        "jitter": 0.5,
+        "layout": "v8-crossplane",
+        "noise": 1.0,
+        "outlet_flow": 650.0,
+        "primary_flow": 220.0,
+        "primary_length": 0.5,
+        "rod": 146.0,
+        "simulation_frequency": 10000.0,
+        "stroke": 59.375,
+        "timing": [
+          [
+            0.0,
+            12.0
+          ],
+          [
+            1000.0,
+            12.0
+          ],
+          [
+            2000.0,
+            20.0
+          ],
+          [
+            3000.0,
+            26.0
+          ],
+          [
+            4000.0,
+            30.0
+          ],
+          [
+            5000.0,
+            34.0
+          ],
+          [
+            6000.0,
+            38.0
+          ],
+          [
+            9000.0,
+            38.0
+          ]
+        ],
+        "volume": 1.0
+      }
+    },
+    "steering_wheel": {
+      "degrees": 450.0,
+      "stop": "rods"
+    },
+    "suspension": {
+      "front": {
+        "mounts": {
+          "damper_bottom": {
+            "position": [
+              0.745,
+              0.032,
+              1.367
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "damper_top": {
+            "position": [
+              0.624,
+              0.546,
+              1.287
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "lower_hinge": {
+            "position": [
+              0.381,
+              0.05,
+              1.809
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "panhard": {
+            "position": [
+              0.714,
+              0.001,
+              1.879
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "panhard_axle": {
+            "position": [
+              -0.319,
+              0.42,
+              1.86
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "rack": {
+            "position": [
+              0.0,
+              0.406,
+              2.061
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "rack_end": {
+            "position": [
+              0.484,
+              0.406,
+              2.062
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "spring_bottom": {
+            "position": [
+              0.752,
+              0.05,
+              1.811
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "spring_top": {
+            "position": [
+              0.425,
+              0.586,
+              1.765
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tierod_inner": {
+            "position": [
+              0.416,
+              0.409,
+              2.053
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "upper_arm_end": {
+            "position": [
+              0.066,
+              0.001,
+              1.8
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "upper_hinge": {
+            "position": [
+              0.473,
+              0.377,
+              1.775
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "type": "double-wishbone"
+      },
+      "rear": {
+        "mounts": {
+          "damper_bottom": {
+            "position": [
+              0.742,
+              0.029,
+              -0.48
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "damper_top": {
+            "position": [
+              0.685,
+              0.635,
+              -0.493
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "lower_hinge": {
+            "position": [
+              0.436,
+              -0.034,
+              -1.315
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "panhard": {
+            "position": [
+              0.507,
+              0.457,
+              -1.324
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "panhard_axle": {
+            "position": [
+              -0.747,
+              0.021,
+              -1.332
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "spring_bottom": {
+            "position": [
+              0.677,
+              0.024,
+              -1.337
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "spring_top": {
+            "position": [
+              0.563,
+              0.464,
+              -1.327
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "tierod_inner": {
+            "position": [
+              0.424,
+              0.418,
+              -1.491
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "upper_arm_end": {
+            "position": [
+              0.075,
+              0.006,
+              -1.313
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "upper_hinge": {
+            "position": [
+              0.471,
+              0.286,
+              -1.304
+            ],
+            "rotation": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "type": "double-wishbone"
+      }
+    },
+    "tyres": {
+      "compound": "road",
+      "cornering": 1.0,
+      "damage": false,
+      "grip": 1.0,
+      "grip_balance": 0.95,
+      "heating": 0.6,
+      "life": 1.0,
+      "pressure_front": 2.5,
+      "pressure_rear": 1.8,
+      "rolling_resistance": 0.015,
+      "shell": {
+        "carcass": 0.0,
+        "inner_ratio": 0.62,
+        "rings": 3.0,
+        "segments": 12.0,
+        "width": 0.4,
+        "width_rear": 0.4
+      },
+      "stiff_x": 20.0,
+      "stiff_y": 18.0
+    },
+    "wheels": {
+      "library": {
+        "front": {
+          "custom": {
+            "carcass": 0.0,
+            "diameter": 0.92,
+            "inner_ratio": 0.456521739130435,
+            "rim_offset": -21.0,
+            "rings": 3.0,
+            "rubber": 80.0,
+            "segments": 12.0,
+            "tread": 100.0,
+            "width": 0.4
+          },
+          "rim": "beadlock-17",
+          "tyre": "custom"
+        },
+        "rear": {
+          "custom": {
+            "carcass": 0.0,
+            "diameter": 0.9118,
+            "inner_ratio": 0.473568765080061,
+            "rim_offset": -26.0,
+            "rings": 3.0,
+            "rubber": 80.0,
+            "segments": 12.0,
+            "tread": 100.0,
+            "width": 0.4
+          },
+          "rim": "beadlock-17",
+          "tyre": "custom"
+        }
+      },
+      "mode": "model",
+      "nodes": {
+        "FL": [
+          "wheel_FL",
+          "wheel_FL_disc",
+          "wheel_FL_rim"
+        ],
+        "FR": [
+          "wheel_FR",
+          "wheel_FR_disc",
+          "wheel_FR_rim"
+        ],
+        "RL": [
+          "wheel_RL",
+          "wheel_RL_disc",
+          "wheel_RL_rim"
+        ],
+        "RR": [
+          "wheel_RR",
+          "wheel_RR_disc",
+          "wheel_RR_rim"
+        ]
+      }
+    }
+  },
+  "name": "Cross",
+  "openracer-tune": 1,
+  "saved": "2026-11-09T03:12:59Z"
+}

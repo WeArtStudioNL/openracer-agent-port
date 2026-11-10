@@ -1,0 +1,593 @@
+{
+  "name": "Supermoto 700",
+  "description": "A 700 cc single-cylinder supermoto (the GasGas SM 700 of 2023): 65 hp at 7500 rpm, 9000 rpm, 155 kg, long travel and a tall seat.",
+  "type": "motorcycle",
+  "model": {
+    "type": "gltf",
+    "file": "cars/supermoto-700/supermoto-700.glb",
+    "rotation_y": 0,
+    "scale": 1,
+    "offset": [
+      0,
+      0,
+      0
+    ]
+  },
+  "wheels": {
+    "mode": "model",
+    "nodes": {
+      "FR": [
+        "wheel_FL",
+        "wheel_FL_disc",
+        "wheel_FL_rim"
+      ],
+      "FL": [
+        "wheel_FL",
+        "wheel_FL_disc",
+        "wheel_FL_rim"
+      ],
+      "RL": [
+        "wheel_FR",
+        "wheel_FR_disc",
+        "wheel_FR_rim"
+      ],
+      "RR": [
+        "wheel_FR",
+        "wheel_FR_disc",
+        "wheel_FR_rim"
+      ]
+    }
+  },
+  "dimensions": {
+    "length": 2.07,
+    "width": 2.1,
+    "height": 1.36
+  },
+  "chassis": {
+    "mass": 155,
+    "wheelbase": 1.448,
+    "front_track": 0.04,
+    "rear_track": 0.04,
+    "weight_distribution": 0.49,
+    "cg_height": 0.66,
+    "suspension_travel": 0.2,
+    "tire_diameter": 0.606,
+    "drag_coefficient": 0.72,
+    "max_steer_deg": 26,
+    "roll_front": 0.5,
+    "spring_front": 9000,
+    "spring_rear": 15000,
+    "damping_front": 0.4,
+    "damping_rear": 0.45,
+    "downforce_front": 0,
+    "downforce_rear": 0,
+    "ackermann": 0,
+    "ride_front": 0,
+    "ride_rear": 0,
+    "roll_center_front": 0.3,
+    "roll_center_rear": 0.3,
+    "toe_front": 0,
+    "toe_rear": 0,
+    "camber_front": 0,
+    "camber_rear": 0,
+    "roll_camber": 0,
+    "suspension_length": 0.32,
+    "spring_progression": 0,
+    "damping_rebound": 1.7,
+    "front_axle_offset": -0.007,
+    "rear_axle_offset": -0.007,
+    "unsprung": false
+  },
+  "drivetrain": {
+    "drive": "rwd",
+    "diff": "welded",
+    "diff_preload": 0,
+    "diff_power": 0,
+    "diff_coast": 0,
+    "center_diff": "lsd",
+    "center_split": 0.4,
+    "gear_ratios": [
+      2.6,
+      1.85,
+      1.42,
+      1.17,
+      1,
+      0.88
+    ],
+    "reverse_ratio": 3,
+    "final_drive": 6.5,
+    "efficiency": 0.93,
+    "shift_time": 0.14,
+    "clutch": 3,
+    "diff_lock": 0,
+    "clutch_start_rpm": 2800,
+    "clutch_full_rpm": 4200,
+    "gearbox": "amt",
+    "cvt_rpm": 7700,
+    "tc_stall_rpm": 3150,
+    "tc_ratio": 1.9,
+    "tc_lockup": true
+  },
+  "engine": {
+    "idle_rpm": 2000,
+    "limiter_rpm": 9000,
+    "inertia": 0.12,
+    "torque_curve": [
+      [
+        0,
+        0
+      ],
+      [
+        500,
+        30
+      ],
+      [
+        1000,
+        40
+      ],
+      [
+        1500,
+        48
+      ],
+      [
+        2000,
+        52
+      ],
+      [
+        2500,
+        55
+      ],
+      [
+        3000,
+        58
+      ],
+      [
+        3500,
+        61
+      ],
+      [
+        4000,
+        64
+      ],
+      [
+        4500,
+        66
+      ],
+      [
+        5000,
+        67.5
+      ],
+      [
+        5500,
+        68
+      ],
+      [
+        6000,
+        68
+      ],
+      [
+        6500,
+        67
+      ],
+      [
+        7000,
+        65
+      ],
+      [
+        7500,
+        61.7
+      ],
+      [
+        8000,
+        57
+      ],
+      [
+        8500,
+        51
+      ],
+      [
+        9000,
+        45
+      ],
+      [
+        9500,
+        38
+      ]
+    ],
+    "power_scale": 1,
+    "braking_scale": 0.5,
+    "limiter_hz": 10,
+    "two_step_rpm": 6000,
+    "launch_rpm": 6500
+  },
+  "brakes": {
+    "front": 680,
+    "rear": 2720
+  },
+  "cameras": {
+    "follow": {
+      "distance": 3.6,
+      "height": 1.6,
+      "look_height": 0.7,
+      "look_z": 0,
+      "smoothing": 3.5,
+      "fov_standing": 45,
+      "fov_fast": 75,
+      "fov_full_speed": 70,
+      "dolly": 1,
+      "distance_fast": 0,
+      "height_fast": 0
+    },
+    "cockpit": {
+      "position": [
+        0,
+        0.98,
+        0.05
+      ],
+      "fov": 80,
+      "hide_driver": false
+    },
+    "bonnet": {
+      "position": [
+        0,
+        0.78,
+        0.25
+      ],
+      "fov": 72
+    }
+  },
+  "steering_wheel": {
+    "degrees": 450,
+    "stop": "rods"
+  },
+  "sound": {
+    "engine_sim": {
+      "layout": "single",
+      "impulse_response": "mild_exhaust",
+      "exhaust_type": "custom",
+      "convolution": 1,
+      "bore": 105,
+      "stroke": 80,
+      "rod": 130,
+      "compression_ratio": 12.7,
+      "burn_duration": 45,
+      "burn_randomness": 0.2,
+      "intake_duration": 236,
+      "intake_lift": 9.5,
+      "intake_lobe_centre": 108,
+      "exhaust_duration": 232,
+      "exhaust_lift": 9,
+      "exhaust_lobe_centre": 108,
+      "intake_flow": 160,
+      "exhaust_flow": 130,
+      "idle_pressure": 0.35,
+      "exhaust_systems": 1,
+      "primary_length": 0.4,
+      "primary_flow": 130,
+      "exhaust_length": 1.1,
+      "outlet_flow": 260,
+      "collector_area": 20,
+      "hf_gain": 0.01,
+      "noise": 1,
+      "jitter": 0.5,
+      "volume": 1,
+      "audio_volume": 1,
+      "simulation_frequency": 10000,
+      "timing": [
+        [
+          0,
+          10
+        ],
+        [
+          2000,
+          16
+        ],
+        [
+          5000,
+          28
+        ],
+        [
+          7000,
+          34
+        ],
+        [
+          9000,
+          36
+        ],
+        [
+          10000,
+          36
+        ]
+      ]
+    }
+  },
+  "motorcycle": {
+    "max_lean_deg": 75,
+    "fast_lean_deg": 60,
+    "rake_deg": 40,
+    "rider_mass": 80,
+    "hang_off": 0.4,
+    "max_lateral_g": 1,
+    "balance": 2,
+    "fork_dive": 1,
+    "push": true,
+    "push_foot_kmh": 125,
+    "push_upright": 0.25,
+    "push_forward": 0.11,
+    "push_chest_pitch": 5,
+    "push_pelvis_tilt": 45,
+    "push_pelvis_slide": 0.09,
+    "push_foot_out": 0.34,
+    "push_foot_forward": 0.9
+  },
+  "tyres": {
+    "compound": "semislick",
+    "damage": false,
+    "shell": {
+      "width": 0.09,
+      "rings": 3.5,
+      "segments": 12,
+      "inner_ratio": 0.71,
+      "carcass": 1,
+      "width_rear": 0.18
+    },
+    "stiff_x": 13,
+    "stiff_y": 13,
+    "grip": 1,
+    "grip_balance": 1,
+    "cornering": 1,
+    "rolling_resistance": 0.017,
+    "heating": 1,
+    "life": 1,
+    "pressure_front": 2.8,
+    "pressure_rear": 2.2
+  },
+  "fuel": {
+    "tank": 18,
+    "use": 1
+  },
+  "assists": {
+    "tc_allowance": 1,
+    "esc_gain": 0
+  },
+  "extras": {
+    "tc_on": true,
+    "abs_on": true,
+    "esc_on": true,
+    "launch_control_on": true,
+    "two_step_on": true,
+    "governor_on": false,
+    "governor_rpm": 7700,
+    "pops_on": false,
+    "pops_amount": 60,
+    "pops_overrun": 4,
+    "pops_rpm": 1000,
+    "pops_loud": 300,
+    "pops_flames": 100,
+    "antilag_on": false,
+    "antilag_mode": "lift",
+    "antilag_boost": 60,
+    "antilag_rpm": 3000,
+    "antilag_time": 5,
+    "antilag_bangs": 100,
+    "antilag_fuel": 60,
+    "boost_gauge_on": false,
+    "boost_full": 1,
+    "boost_scale": 2
+  },
+  "exhaust": [
+    {
+      "position": [
+        -0.133,
+        0.522,
+        -0.662
+      ],
+      "rotation": [
+        21.783,
+        1.013,
+        -0.841
+      ],
+      "diameter": 0.04,
+      "smoke": 1,
+      "flame_length_cm": 10,
+      "flame_width_cm": 8,
+      "brightness": 3
+    }
+  ],
+  "driver": {
+    "enabled": true,
+    "file": "cars/supermoto-700/driver.glb",
+    "position": [
+      0,
+      0.52,
+      -0.215
+    ],
+    "rotation": [
+      -170.961,
+      0,
+      180
+    ],
+    "scale": 1,
+    "bones": {
+      "armL": [
+        "DEF-upper_armL",
+        "DEF-forearmL",
+        "DEF-handL"
+      ],
+      "armR": [
+        "DEF-upper_armR",
+        "DEF-forearmR",
+        "DEF-handR"
+      ],
+      "legL": [
+        "DEF-thighL",
+        "DEF-shinL",
+        "DEF-footL"
+      ],
+      "legR": [
+        "DEF-thighR",
+        "DEF-shinR",
+        "DEF-footR"
+      ],
+      "hips": "DEF-spine",
+      "head": "DEF-spine006",
+      "chest": "DEF-spine003"
+    },
+    "hands": {
+      "left": [
+        0.277,
+        0.592,
+        0.281
+      ],
+      "right": [
+        -0.282,
+        0.598,
+        0.301
+      ],
+      "rotation": {
+        "left": [
+          -24.759,
+          -39.002,
+          36.696
+        ],
+        "right": [
+          -31.973,
+          26.508,
+          -40.615
+        ]
+      },
+      "grip": {
+        "left": 0,
+        "right": 0
+      },
+      "offset": {
+        "left": [
+          0.019,
+          0.042,
+          -0.071
+        ],
+        "right": [
+          -0.012,
+          0.018,
+          -0.085
+        ]
+      }
+    },
+    "grip_curl": "x",
+    "feet": {
+      "left": [
+        0.208,
+        0.164,
+        -0.239
+      ],
+      "right": [
+        -0.208,
+        0.162,
+        -0.25
+      ],
+      "travel": 0.06,
+      "direction": [
+        0,
+        -0.5,
+        0.85
+      ],
+      "offset": {
+        "left": [
+          0.01,
+          0.127,
+          -0.01
+        ],
+        "right": [
+          -0.017,
+          0.136,
+          -0.016
+        ]
+      }
+    },
+    "elbow_out": 0.5,
+    "knee_out": 0.35,
+    "pivot": "hips",
+    "chest": {
+      "rotation": [
+        19.335,
+        0,
+        0
+      ]
+    },
+    "head": {
+      "rotation": [
+        -14.783,
+        0,
+        0
+      ]
+    }
+  },
+  "softbody": {
+    "layout": [
+      {
+        "x": -0.139884380661622,
+        "y": -0.238315472172275,
+        "z": -0.221662796253032,
+        "r": 0.3
+      },
+      {
+        "x": 0.165552657838937,
+        "y": 0.218879544221926,
+        "z": -0.159727899763923,
+        "r": 0.3
+      },
+      {
+        "x": -0.160284521096353,
+        "y": 0.272573424152627,
+        "z": -0.281063186235327,
+        "r": 0.3
+      },
+      {
+        "x": 0.0155030302180063,
+        "y": 0.223836575275735,
+        "z": 0.426309332924057,
+        "r": 0.3
+      },
+      {
+        "x": 0.0154894582111984,
+        "y": 0.27021801622869,
+        "z": -0.728002313533897,
+        "r": 0.3
+      },
+      {
+        "x": -0.0845095487518957,
+        "y": -0.311504914149683,
+        "z": 0.0801961872989521,
+        "r": 0.3
+      },
+      {
+        "x": 0.0155471923313433,
+        "y": 0.225048013619912,
+        "z": -0.0178174634941687,
+        "r": 0.3
+      },
+      {
+        "x": 0.144856784133906,
+        "y": 0.522109085583253,
+        "z": 0.249800016392632,
+        "r": 0.3
+      },
+      {
+        "x": -0.196939473644166,
+        "y": 0.508895365533544,
+        "z": 0.34979999486135,
+        "r": 0.3
+      },
+      {
+        "x": -0.0959270823745696,
+        "y": 0.344018795959892,
+        "z": -0.411354531103243,
+        "r": 0.3
+      }
+    ],
+    "layout_cg": 0.66,
+    "layout_radius": 0.303,
+    "max_nodes": 120,
+    "wheel_strength": 25
+  }
+}
