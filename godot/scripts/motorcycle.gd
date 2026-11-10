@@ -66,8 +66,14 @@ var rider_roll_kp := 50.0
 var rider_roll_kd := 14.0
 var rider_roll_max := 1.2
 var rider_grip_share := 0.9
+var wheel_share := 1.0              # how much the rider goes by the circle of each tyre apart (0: only by the grip of the whole bike)
+var _felt_load: Array[float] = [-1.0, -1.0]
+var _felt_drive: Array[float] = [0.0, 0.0]
 var rider_ease_off := 45.0 * DEG
 var rider_yaw_hold := 1.0
+var brake_grip_share := 0.8       # in a lean each brake takes this share of the grip that its tyre has left next to the bend (with ABS)
+var _brake_room := [1.0, 1.0]     # the share of the full brake of the front and the rear that fits in that grip
+var _brake_load := [-1.0, -1.0]
 var _corner_t := 0.0
 var _corner_b := 0.0
 var _hold_speed := -1.0           # m/s: the speed that he holds in a bend without gas or brake
@@ -322,6 +328,10 @@ func recover() -> void:
 	_accel = Vector3.ZERO
 	_rear_filt = -1.0
 	_rear_prev = -1.0
+	_brake_load = [-1.0, -1.0]
+	_felt_load = [-1.0, -1.0]
+	_felt_drive = [0.0, 0.0]
+	_brake_room = [1.0, 1.0]
 
 
 ## The riding style: flat track (car.json push, or the menu's "Flat-track style" for every bike) or hang off.
@@ -424,6 +434,18 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	var a_long := maxf(0.0, -_accel.dot(flat))
 	var grip_max := minf(grip_g + (grip_fast * smooth(13.0, 18.0, au) if v2 else 0.0), rider_grip_share * _tyre_grip(car)) * G * (1.0 - drift)
 	speed_max = minf(speed_max, atan(sqrt(maxf(0.0, grip_max * grip_max - a_long * a_long)) / G) + over_lean + extra)
+	# (each tyre has its own circle: the load it carries now, less what it drives or brakes; the rider leans no further than the lesser of the two holds, also when the wind eats the drive and the bike does not gain speed)
+	if wheel_share > 0.0 and car.wheels[0].contact and car.wheels[2].contact:
+		var hold := INF
+		for k in 2:
+			var w: Car.Wheel = car.wheels[0 if k == 0 else 2]
+			_felt_load[k] = w.load if _felt_load[k] < 0.0 else _felt_load[k] + (w.load - _felt_load[k]) * minf(1.0, dt / 0.6)
+			_felt_drive[k] += (absf(w.fx) - _felt_drive[k]) * minf(1.0, dt / 0.6)
+			var most: float = rider_grip_share * _grip_of(w) * _felt_load[k] * (1.0 - drift)
+			var part: float = car.weight_front if k == 0 else 1.0 - car.weight_front
+			hold = minf(hold, sqrt(maxf(0.0, most * most - _felt_drive[k] * _felt_drive[k])) / (car.mass * maxf(0.2, part)))
+		var wheel_max := atan(hold / G) + over_lean + extra
+		speed_max = minf(speed_max, lerpf(speed_max, wheel_max, wheel_share * fast))
 	var phi_max := speed_max + eps_full
 	var want := -c * minf(phi_max, cap) * fast
 	# (the AI asks the angle of the front wheel of a car on its path: the lean is the one that bend needs)
@@ -515,11 +537,28 @@ func _steering_v2(car: Car, st: Dictionary, kinematic: float, u: float, dt: floa
 
 ## What the tyres of the bike can carry now (the lesser of the two, of the road under them, their kind, their temperature and wear): the rider does not lean further than that, or the bike slides away from under him.
 func _tyre_grip(car: Car) -> float:
-	var out := INF
-	for w: Car.Wheel in [car.wheels[0], car.wheels[2]]:
-		var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
-		out = minf(out, (float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if surf.get("loose", false) else 1.0) + 0.24) * 1.05)      # (a light load grips more: CarWear.tyre_force)
-	return out
+	return minf(_grip_of(car.wheels[0]), _grip_of(car.wheels[2]))
+
+
+func _grip_of(w: Car.Wheel) -> float:
+	var surf := Ground.surface(w.surface, w.local_snow, w.local_water)
+	return (float(surf["static"]) * w.grip * w.condition * w.damage_grip * float(w.kind.get("grip", 1.0)) * (float(w.kind.get("looseGrip", 1.0)) if surf.get("loose", false) else 1.0) + 0.24) * 1.05      # (a light load grips more: CarWear.tyre_force)
+
+
+## How much of the full brake of each wheel fits in the grip that its tyre has left next to the bend (the circle of grip, by the load that the wheel carries now): the ABS of a bike in a lean.
+func _brake_rooms(car: Car, dt: float) -> void:
+	var live := car.abs_fitted and car.abs_on
+	var slope := tan(minf(absf(lean), 1.3))
+	var input := maxf(0.05, clampf(car.brake, 0.0, 1.0))
+	for k in 2:
+		var w: Car.Wheel = car.wheels[0 if k == 0 else 2]
+		_brake_load[k] = w.load if _brake_load[k] < 0.0 else _brake_load[k] + (w.load - _brake_load[k]) * minf(1.0, dt / 0.1)
+		if not live:
+			_brake_room[k] = 1.0
+			continue
+		var mu := maxf(0.2, _grip_of(w))
+		var left := sqrt(maxf(0.0, 1.0 - (slope / mu) * (slope / mu)))
+		_brake_room[k] = brake_grip_share * mu * _brake_load[k] * left * w.radius / maxf(1.0, w.max_brake * 2.0 * input)
 
 
 ## The feet at a standstill: both go down below 4 km/h and stay down until 5 km/h; then back on the pegs, the left
@@ -556,6 +595,7 @@ func before_tyres(car: Car, dt: float) -> void:
 		# (at a walking pace with the bars far round: a third of the throttle)
 		var slow_lock := smooth(0.3, 1.2, absf(u)) * (1.0 - smooth(2.0, 4.0, absf(u))) * smooth(0.6, 0.95, absf(command))
 		throttle_scale = wheelie_scale * (1.0 - 0.67 * slow_lock)
+	_brake_rooms(car, dt)
 	# the brakes: the front is let off as the rear wheel comes up, the rear goes with its load
 	var m := car.mass
 	var rear_ratio := car.wheels[2].load / maxf(1.0, (1.0 - car.weight_front) * m * G)
@@ -603,14 +643,15 @@ func fork_load(car: Car, w: Car.Wheel, dt: float) -> float:
 	return w.fe_load
 
 
-## The share of the brake of a wheel: in a bend the front brake stands the bike up, so it goes to a tenth (the one
-## wheel of an end has the brakes of both).
+## The share of the brake of a wheel (the one wheel of an end has the brakes of both).
 func brake_scale(w: Car.Wheel) -> float:
 	if crashed:
 		return 0.0
+	# (in a lean: no more than the grip that the tyre has left next to the bend; the ABS of the bike does that, without it the brake is the rider's)
+	var room: float = lerpf(1.0, minf(1.0, _brake_room[0 if w.front else 1]), smooth(8.0 * DEG, 30.0 * DEG, absf(lean)))
 	if not w.front:
-		return rear_brake * 2.0
-	return front_brake * (1.0 - 0.9 * smooth(8.0 * DEG, 30.0 * DEG, absf(lean))) * 2.0
+		return rear_brake * 2.0 * room
+	return front_brake * 2.0 * room
 
 
 ## The air drag: a rider that sits up has more of it, one that lies flat less.
@@ -991,9 +1032,10 @@ func corner_pedals(car: Car, t: float, b: float, dt: float) -> Vector2:
 	else:
 		_hold_speed = -1.0
 	_corner_t = move_toward(_corner_t, want_t, lerpf(10.0, 1.5 if want_t > _corner_t else 4.0, share) * dt)
-	# (in a lean the front brake is mostly off: the rear tyre does the work, within the grip that it has left)
-	var brake_cap := clampf(0.8 * mu * maxf(rear.load, 300.0) * budget * rear.radius / maxf(1.0, rear.max_brake * 2.0 * maxf(0.1, rear_brake)), 0.1, 1.0)
-	var want_b := minf(b, lerpf(1.0, minf(0.4, brake_cap), share))
+	# (no more than the front tyre, which does most of the work, has grip left for next to the bend)
+	var front: Car.Wheel = car.wheels[0]
+	var brake_cap := clampf(brake_grip_share * mu * maxf(front.load, 300.0) * budget * front.radius / maxf(1.0, front.max_brake * 2.0 * maxf(0.1, front_brake)), 0.05, 1.0)
+	var want_b := minf(b, lerpf(1.0, brake_cap, share))
 	_corner_b = move_toward(_corner_b, want_b, lerpf(30.0, 3.0 if want_b > _corner_b else 10.0, share) * dt)
 	return Vector2(_corner_t, _corner_b)
 
