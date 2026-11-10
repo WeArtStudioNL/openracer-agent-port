@@ -48,8 +48,18 @@ deep lean is weaker than before, because the shared grip ellipse leaves
 little for the brake at 45 degrees. The enduro reaches 25 instead of 33
 degrees right after the change of side at 130 km/h.
 
-The roll settings are `rider_ref_tau`, `rider_roll_kp`, `rider_roll_kd`, and
-`rider_roll_max` in the `motorcycle` object. The last is a torque limit relative
+The damping of the roll servo works on the difference between the rate of
+the asked lean and the rate of the bike (`rider_roll_ff = 1`; 0 damps every
+roll motion, as before). In a steady lean nothing changes; on a change of side
+the bike follows the asked lean instead of lagging about 0.3 s behind it.
+Change of side from full lean, time to -30 degrees at 60 / 100 / 130 km/h:
+sports motorcycle 1.13 / 1.13 / 1.13 s before, 0.79 / 0.79 / 0.86 s with it;
+enduro 1.46 / 2.19 / never, now 0.86 / 0.86 / 0.86 s; supermoto 1.39 / 1.46 /
+1.46, now 1.06 / 1.06 / 1.06 s. Sideslip in the change of side rises by about
+1 to 3 degrees; braking in the lean and straight braking are unchanged.
+
+The roll settings are `rider_ref_tau`, `rider_roll_kp`, `rider_roll_kd`,
+`rider_roll_ff` and `rider_roll_max` in the `motorcycle` object. The last is a torque limit relative
 to mass * gravity * centre-of-gravity height. Obsolete steering-DOF/body-assist
 settings no longer affect v2. Model `v1` keeps its legacy ground roll/yaw controller.
 

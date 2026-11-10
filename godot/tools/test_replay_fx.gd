@@ -102,6 +102,21 @@ func _test_extras(r: Replay, fx: ReplayFx, shatter: Shatter) -> void:
 		fx.call("_build", "bangs/0", _bang_at + 0.05)
 		var after: int = lit.call()
 		_check(before == 0 and after > 0, "the flames of the bangs: %d before, %d just after" % [before, after])
+	if world.car.bike != null:
+		# (the posture of the rider: off the seat and the knee out in the bend, as it was at that time)
+		var rows: Array = fx.rows.get("posture/0", [])
+		_check(rows.size() > 10, "the posture of the rider is recorded: %d rows" % rows.size())
+		var most: Array = rows[0] if not rows.is_empty() else []
+		for row: Array in rows:
+			if absf(float(row[1])) > absf(float(most[1])):
+				most = row
+		if not most.is_empty():
+			var bike: Motorcycle = world.car.bike
+			fx.call("_build", "posture/0", float(rows[0][0]) + 0.01)
+			var at_start := float(bike.posture["lat"])
+			fx.call("_build", "posture/0", float(most[0]) + 0.01)
+			_check(absf(at_start - float(rows[0][1])) < 1e-4 and absf(float(bike.posture["lat"]) - float(most[1])) < 1e-4 and absf(float(most[1])) > 0.05,
+				"the rider hangs off as he did: %.2f m at the start, %.2f m in the bend (%.2f recorded), knee %.2f" % [at_start, float(bike.posture["lat"]), float(most[1]), float(bike.posture["knee"])])
 	if _limp_at > 0.0:
 		var rider: MotorcycleRider = world.car.bike_model.rider
 		_check((fx.rows.get("rider/0", []) as Array).size() > 10, "the ragdoll is recorded: %d rows" % (fx.rows.get("rider/0", []) as Array).size())

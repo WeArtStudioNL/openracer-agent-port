@@ -37,6 +37,8 @@ func attach_all() -> void:
 			continue
 		if c.bike_model != null and c.bike_model.can_ragdoll() and _new("rider", c):
 			_add("rider", c, RiderTrack.new(c))
+		if c.bike != null and _new("posture", c):
+			_add("posture", c, PostureTrack.new(c))
 		if _new("bangs", c):
 			_add("bangs", c, BangTrack.new(c, world))
 		var pit := c.get_node_or_null("PitStop") as PitStop
@@ -194,6 +196,63 @@ class RiderTrack:
 			return
 		r.keep_ragdoll(snap["ragdoll"], snap["p"])
 		r.replay_hold = false
+
+
+## How the rider of a motorcycle sits: [t, the values of POSTURE, foot_down, foot_down_l] when it changed (off the
+## seat into the bend, the inside knee out, flat on the tank, back on the brake, the foot on the road). The replay
+## does not run the physics that moves him, so without it he keeps the posture of the moment the replay began.
+class PostureTrack:
+	extends Effect
+	const POSTURE := ["lat", "long", "drop", "tuck", "sit", "knee", "look", "push", "inside", "lean", "flat"]
+	var _last := []
+
+	func _init(c: Car) -> void:
+		car = c
+
+	func _bike() -> Motorcycle:
+		return car.bike if is_instance_valid(car) else null
+
+	func _now(b: Motorcycle) -> Array:
+		var out := []
+		for k in POSTURE:
+			out.append(float(b.posture.get(k, 0.0)))
+		out.append_array([b.foot_down, b.foot_down_l])
+		return out
+
+	func watch() -> void:
+		var b := _bike()
+		if b == null:
+			return
+		var now := _now(b)
+		var moved := _last.size() != now.size()
+		for i in now.size():
+			if moved or absf(float(now[i]) - float(_last[i])) > 0.002:
+				moved = true
+				break
+		if moved:
+			_last = now
+			ReplayFx.add(kind, car, [0.0] + now)
+
+	func _show(row: Array) -> void:
+		var b := _bike()
+		if b == null or row.size() < 1 + POSTURE.size():
+			return
+		for i in POSTURE.size():
+			b.posture[POSTURE[i]] = float(row[1 + i])
+		if row.size() >= 3 + POSTURE.size():
+			b.foot_down = float(row[1 + POSTURE.size()])
+			b.foot_down_l = float(row[2 + POSTURE.size()])
+
+	func replay_add(_kind: String, row: Array) -> void:
+		_show(row)
+
+	func replay_snapshot(_kind: String) -> Variant:
+		var b := _bike()
+		return [0.0] + _now(b) if b != null else null
+
+	func replay_restore(_kind: String, snap: Variant) -> void:
+		if snap is Array:
+			_show(snap)
 
 
 ## The lamps of the drag tree: [t, pre, stage, amber1, amber2, amber3, green, red] at every change.

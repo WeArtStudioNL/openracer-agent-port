@@ -46,6 +46,8 @@ var rider_ref_tau := 0.12
 var rider_roll_kp := 50.0
 var rider_roll_kd := 14.0
 var rider_roll_max := 1.2
+var rider_roll_ff := 1.0           # the servo goes with the rate of the lean he asks (a quick change of side), it does not brake it
+var _lean_ref_rate := 0.0
 var rider_grip_share := 0.9
 var wheel_share := 1.0              # how much the rider goes by the circle of each tyre apart (0: only by the grip of the whole bike)
 var _felt_load: Array[float] = [-1.0, -1.0]
@@ -192,6 +194,7 @@ func retune(settings: Dictionary) -> void:
 	rider_roll_kp = maxf(0.0, _num("rider_roll_kp", 50.0))
 	rider_roll_kd = maxf(0.0, _num("rider_roll_kd", 14.0))
 	rider_roll_max = maxf(0.0, _num("rider_roll_max", 1.2))
+	rider_roll_ff = clampf(_num("rider_roll_ff", 1.0), 0.0, 1.0)
 	steer_trim_tau = maxf(0.01, _num("steer_trim_tau", 0.2))
 	steer_trim_max = maxf(0.0, _num("steer_trim_max", 0.0))
 	steer_trim_p = maxf(0.0, _num("steer_trim_p", 0.0))
@@ -273,6 +276,7 @@ func recover() -> void:
 	key_command = 0.0
 	target_lean = 0.0
 	_lean_ref = 0.0
+	_lean_ref_rate = 0.0
 	steer = 0.0
 	_steer_trim = 0.0
 	complied = 0.0
@@ -495,7 +499,9 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 ## Geometric steering follows the actual lean. Roll error is handled only by
 ## the roll servo, not by a second feedback loop through the front tyre.
 func _steering_v2(car: Car, st: Dictionary, geometric: float, u: float, dt: float) -> float:
-	_lean_ref += (target_lean - _lean_ref) * (1.0 - exp(-dt / rider_ref_tau))
+	var ref_step := (target_lean - _lean_ref) * (1.0 - exp(-dt / rider_ref_tau))
+	_lean_ref += ref_step
+	_lean_ref_rate = ref_step / dt if dt > 0.0 else 0.0
 	var moving := smooth(3.0, 8.0, absf(u))
 	var yaw_correction := 0.0
 	if car.wheels[0].contact and car.wheels[2].contact and moving > 0.0:
@@ -750,7 +756,7 @@ func physics(car: Car, state: PhysicsDirectBodyState3D, dt: float) -> void:
 		var kp := lerpf(balance * 10.0 * gh, inertia * rider_roll_kp, moving)
 		var kd := lerpf(1.5 * sqrt(balance * 10.0 * gh * inertia), inertia * rider_roll_kd, moving)
 		var cap := lerpf(6.0 * gh, rider_roll_max * gh, moving)
-		t_roll = alive * clampf(kp * (_lean_ref - lean) - kd * float(st["rate"]), -cap, cap)
+		t_roll = alive * clampf(kp * (_lean_ref - lean) - kd * (float(st["rate"]) - rider_roll_ff * moving * _lean_ref_rate), -cap, cap)
 	else:
 		var kp := balance * 10.0 * gh * braced
 		var kd := 1.5 * sqrt(balance * 10.0 * gh * inertia) * braced
