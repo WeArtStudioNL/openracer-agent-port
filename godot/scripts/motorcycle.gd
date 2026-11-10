@@ -482,7 +482,10 @@ func _steering(car: Car, delta: float, u: float, dt: float) -> float:
 	# (the browser's slip is to the right; the tyre of the car here has it to the left)
 	var comply := clampf(front_comply * slip_front, -0.12, 0.12) * smooth(3.0, 8.0, au) * upright * on_brake
 	complied += (comply - complied) * minf(1.0, dt / 0.04)
-	var wanted := w * geometric + (1.0 - w) * (steady + counter + complied)
+	# (model v2: only at a walking pace, as the old v2 had it; at speed three times the slip of the front tyre
+	# turns the wheel further into it, and on a hard brake on the straight it steered itself to 7 degrees)
+	var castor := complied * (1.0 - smooth(7.0, 13.0, au)) if v2 else complied
+	var wanted := w * geometric + (1.0 - w) * (steady + counter + castor)
 	if v2:
 		return _steering_v2(car, st, wanted, u, dt)
 	steer += (wanted - steer) * minf(1.0, dt / 0.05)
