@@ -5,6 +5,9 @@ extends Node
 ## it it is, and back in the game everything is as it was. Nothing is written but into the given folders:
 ##   Godot --headless --fixed-fps 60 --path godot res://tools/test_replay_fx.tscn -- --replay-dir=/tmp/x/r
 ##     --video-cfg=/tmp/x/v.cfg --user-dir=/tmp/x/u --steer=1 [--car=openracer-muscle] [--shot=/tmp/x/shot.png]
+## The traction and stability control are off on the test car. The supermoto makes no marks on full lock: give it
+## --steer=0.5. The hatchback slides but makes no smoke in the 17 s (its front tyre reaches about 155 C, smoke starts at
+## 180 C).
 
 var world: World
 var _fails := 0
@@ -34,6 +37,10 @@ func _ready() -> void:
 	var car_id := Content.arg("car") if Content.arg("car") != "" else "openracer-muscle"
 	world.setup(car_id, "skidpad", {"mode": "practice", "ghost": false, "records": false})
 	world.car.autopilot = true          # (full throttle in a tight circle: --steer, by default 1)
+	# (without traction and stability control: with them on, as a new player has them, the car holds about 18 km/h
+	# on full lock and its tyres never slide: no marks, no smoke)
+	world.car.tc_fitted = false
+	world.car.esc_fitted = false
 
 
 func _strips() -> int:
@@ -106,17 +113,26 @@ func _test_extras(r: Replay, fx: ReplayFx, shatter: Shatter) -> void:
 		# (the posture of the rider: off the seat and the knee out in the bend, as it was at that time)
 		var rows: Array = fx.rows.get("posture/0", [])
 		_check(rows.size() > 10, "the posture of the rider is recorded: %d rows" % rows.size())
-		var most: Array = rows[0] if not rows.is_empty() else []
+		# (the part of the posture that changed most from the start: hanging off on a sports bike, the foot or the
+		# look on a supermoto)
+		var keys: Array = ReplayExtras.PostureTrack.POSTURE
+		var most: Array = []
+		var col := 1
 		for row: Array in rows:
-			if absf(float(row[1])) > absf(float(most[1])):
-				most = row
+			for k in keys.size():
+				var d := absf(float(row[1 + k]) - float(rows[0][1 + k]))
+				if most.is_empty() or d > absf(float(most[col]) - float(rows[0][col])):
+					most = row
+					col = 1 + k
 		if not most.is_empty():
 			var bike: Motorcycle = world.car.bike
+			var key: String = keys[col - 1]
 			fx.call("_build", "posture/0", float(rows[0][0]) + 0.01)
-			var at_start := float(bike.posture["lat"])
+			var at_start := float(bike.posture[key])
 			fx.call("_build", "posture/0", float(most[0]) + 0.01)
-			_check(absf(at_start - float(rows[0][1])) < 1e-4 and absf(float(bike.posture["lat"]) - float(most[1])) < 1e-4 and absf(float(most[1])) > 0.05,
-				"the rider hangs off as he did: %.2f m at the start, %.2f m in the bend (%.2f recorded), knee %.2f" % [at_start, float(bike.posture["lat"]), float(most[1]), float(bike.posture["knee"])])
+			var later := float(bike.posture[key])
+			_check(absf(at_start - float(rows[0][col])) < 1e-4 and absf(later - float(most[col])) < 1e-4 and absf(later - at_start) > 0.05,
+				"the rider sits as he did: %s %.2f at the start, %.2f at %.1f s (%.2f recorded)" % [key, at_start, later, float(most[0]), float(most[col])])
 	if _limp_at > 0.0:
 		var rider: MotorcycleRider = world.car.bike_model.rider
 		_check((fx.rows.get("rider/0", []) as Array).size() > 10, "the ragdoll is recorded: %d rows" % (fx.rows.get("rider/0", []) as Array).size())
@@ -163,7 +179,8 @@ func _test() -> void:
 	var skid: Array = fx.rows.get("skid/0", [])
 	var smoke: Array = fx.rows.get("smoke/0", [])
 	print("rows: %s" % ", ".join(fx.rows.keys().map(func(k): return "%s %d" % [k, (fx.rows[k] as Array).size()])))
-	_check(skid.size() > 20, "the skid marks are recorded: %d strips (the game shows %d)" % [skid.size(), _game_strips])
+	# (a motorcycle hardly slides on the skidpad: a few marks from the rear wheel are enough to test them)
+	_check(skid.size() > (5 if world.car.bike != null else 20), "the skid marks are recorded: %d strips (the game shows %d)" % [skid.size(), _game_strips])
 	_check(smoke.size() > 5, "the smoke is recorded: %d rows" % smoke.size())
 	# the marks at a time: the strips made by then
 	for frac in [0.3, 0.9]:
