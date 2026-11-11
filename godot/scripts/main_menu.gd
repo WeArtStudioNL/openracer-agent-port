@@ -373,7 +373,7 @@ func _mode_step() -> void:
 
 ## A tile of a car (MainMenu.js carTile): its picture, the name, the specs and the power.
 static func car_tile(id: String, cfg: Dictionary, selected: bool, host: Node, size: float, title := "", specs_text := "", pic_key := "") -> Button:
-	var tile := MenuStyle.card(selected, 10, Color("#1b1f25"))
+	var tile := MenuStyle.card(selected, 10, Color("#141c31"))
 	tile.custom_minimum_size = Vector2(size, size)
 	tile.tooltip_text = str(cfg.get("description", ""))
 	var bg := TextureRect.new()
@@ -385,8 +385,8 @@ static func car_tile(id: String, cfg: Dictionary, selected: bool, host: Node, si
 	gradient.fill_from = Vector2(0.5, 0.58)
 	gradient.fill_to = Vector2(1.0, 1.0)
 	gradient.gradient = Gradient.new()
-	gradient.gradient.set_color(0, Color("#3a3f47"))
-	gradient.gradient.set_color(1, Color("#0d0f12"))
+	gradient.gradient.set_color(0, Color("#2f3a52"))
+	gradient.gradient.set_color(1, Color("#0a0f1c"))
 	var back := TextureRect.new()
 	back.texture = gradient
 	back.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -558,7 +558,7 @@ func _track_card(id: String, w: float) -> Button:
 	thumb.texture = CarInfo.track_picture(id)
 	thumb.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var holder := PanelContainer.new()
-	holder.add_theme_stylebox_override("panel", MenuStyle.flat(Color("#1b1f25"), Color(0, 0, 0, 0), 8))
+	holder.add_theme_stylebox_override("panel", MenuStyle.flat(Color("#141c31"), Color(0, 0, 0, 0), 8))
 	holder.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
 	holder.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	holder.add_child(thumb)

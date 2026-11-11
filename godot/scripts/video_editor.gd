@@ -864,7 +864,7 @@ func _toggle_final() -> void:
 func _on(b: Button, on: bool) -> void:
 	if on:
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color("ff5a1f")
+		sb.bg_color = Color("3d7bff")
 		sb.set_corner_radius_all(6)
 		sb.set_content_margin_all(5)
 		b.add_theme_stylebox_override("normal", sb)
@@ -968,7 +968,7 @@ func _build() -> void:
 	var title := _lbl(top, "VIDEO EDITOR", false)
 	title.add_theme_font_size_override("font_size", 16)
 	_ui["message"] = _lbl(top, "", false)
-	_ui["message"].add_theme_color_override("font_color", Color("ff5a1f"))
+	_ui["message"].add_theme_color_override("font_color", Color("3d7bff"))
 	_ui["message"].size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ui["message"].clip_text = true
 	_ui["aspects"] = []
@@ -1121,7 +1121,7 @@ func _draw_src_marks() -> void:
 	var w := c.size.x - 16.0
 	var x := func(t: float) -> float: return 8.0 + w * clampf((t - a) / span, 0.0, 1.0)
 	if src_in >= 0.0 and src_out >= 0.0:
-		c.draw_rect(Rect2(x.call(src_in), 9, x.call(src_out) - x.call(src_in), 8), Color(1.0, 0.35, 0.12, 0.45))
+		c.draw_rect(Rect2(x.call(src_in), 9, x.call(src_out) - x.call(src_in), 8), Color(MenuStyle.ACCENT, 0.45))
 	for m in [src_in, src_out]:
 		if m >= 0.0:
 			c.draw_rect(Rect2(x.call(m) - 1, 3, 2, 20), Color("ffd04d"))

@@ -721,7 +721,7 @@ func _pin_section() -> void:
 
 func _pin_box(pin: Dictionary, i: int) -> void:
 	var box := PanelContainer.new()
-	var st := EditorStyle.box(Color("#1c222a"), 8, 1, EditorStyle.ACCENT if i == pin_sel else EditorStyle.LINE)
+	var st := EditorStyle.box(Color("#162036"), 8, 1, EditorStyle.ACCENT if i == pin_sel else EditorStyle.LINE)
 	st.content_margin_left = 8
 	st.content_margin_right = 8
 	st.content_margin_top = 6

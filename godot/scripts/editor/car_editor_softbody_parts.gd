@@ -114,7 +114,7 @@ func render() -> void:
 
 func _row(part: Dictionary) -> void:
 	var panel := PanelContainer.new()
-	var st := EditorStyle.box(Color("#1c222a"), 8, 1, EditorStyle.LINE)
+	var st := EditorStyle.box(Color("#162036"), 8, 1, EditorStyle.LINE)
 	st.content_margin_left = 10
 	st.content_margin_right = 10
 	st.content_margin_top = 8

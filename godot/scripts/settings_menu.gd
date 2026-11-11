@@ -91,7 +91,7 @@ func _ready() -> void:
 	_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	foot.add_child(_hint)
 	var version := Label.new()
-	version.text = "OpenRacer " + str(ProjectSettings.get_setting("application/config/version"))
+	version.text = "GripWorks " + str(ProjectSettings.get_setting("application/config/version"))
 	version.modulate.a = 0.5
 	foot.add_child(version)
 	_build_pages()

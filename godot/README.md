@@ -1,7 +1,15 @@
-# O-Racer in Godot 4
+# GripWorks
 
-A rebuild of OpenRacer in the Godot engine (4.7), on the branch `O-Racer-Godot`. It is built in phases;
-after each phase the game is tested by driving it.
+GripWorks is the native racing game built in the Godot engine (4.7), on the branch `O-Racer-Godot`. OpenRacer is the
+browser version; GripWorks began as a rebuild of it and has its own name and look (deep cobalt, a blue accent `#3d7bff`,
+ice `#9fe3ff` for the focus; the colours are in `scripts/menu/menu_style.gd`). It is built in phases; after each phase
+the game is tested by driving it.
+
+The user folder is `GripWorks` in the data folder of the system (Application Support on macOS, AppData/Roaming on
+Windows, ~/.local/share on Linux). The first start copies the folder of the earlier name (`Godot/app_userdata/O-Racer
+Godot`) into it when GripWorks has no settings yet (`scripts/user_move.gd`); the old folder stays. The files keep the
+formats and the extensions of the browser game (`.openracer-tune.json`, `.openracer-replay`, `.openracer-ghost`, the
+backup), so they go both ways.
 
 The Godot version reads the same content as the browser game: the cars, tracks and wheels in `../web`
 (`car.json`, `track.json` and the glb models), loaded while the game runs. Nothing is copied, and a car or
@@ -718,7 +726,7 @@ time, paced to real time so the sound of the replay is recorded with it (an Audi
 go straight into ffmpeg (a pipe, raw RGBA to H.264, crf 20, at most 20 Mbit/s, + AAC sound; when the frames came slower
 than real time the sound is stretched to the picture with atempo). ffmpeg is looked for on the PATH and in
 /opt/homebrew/bin, /usr/local/bin, /usr/bin; without it the frames are a PNG sequence in a folder with sound.wav.
-Videos go to Movies/OpenRacer, photos to Pictures/OpenRacer. Esc stops a video (it is kept as far as it went).
+Videos go to Movies/GripWorks, photos to Pictures/GripWorks. Esc stops a video (it is kept as far as it went).
 
 The video editor (`scripts/video_editor.gd`, `scripts/video_timeline.gd`, VideoEditor.js), from the bar (over the
 game, which stays paused) or Edit in Replays: the source monitor (from behind the car, a scrubber, play Shift+Enter,
@@ -889,7 +897,7 @@ The keys of the browser game (web/js/Settings.js): W A S D or the arrows drive, 
 (held), Q two-step, F transbrake, X / Z shift (the first shift makes the gearbox manual), an H-shifter (gear 1 to 8 and
 reverse, buttons of a wheel), R back on the racing line, 4 saves the place for R on a track without a line, Backspace repairs
 the car where it is, Home back to the start, T camera, [ ] turn the follow camera round the car and ` puts it back, H the
-HUD, F3 the debug text, F2 a photo without the HUD (in the pictures folder, O-Racer), C / B / N / J / Y traction control,
+HUD, F3 the debug text, F2 a photo without the HUD (in the pictures folder, GripWorks), C / B / N / J / Y traction control,
 ABS, ESC, launch control, two-step on and off (a short note says it), I starts the engine, E the engine sound, V the
 telemetry, 0 the debug view (- hides the car), U tuning, K calibrates a wheel, M the wheel on and off, F8 a mark in the
 log, Esc pause. A gamepad: the triggers gas and brake, the left stick steers, A handbrake, the shoulders shift, X camera,
@@ -910,7 +918,7 @@ The keys bring the pedals up over a time and a curve (Settings, Keyboard).
 ## Menus, settings and the HUD
 
 **Main menu** (`scripts/main_menu.gd`, `scripts/menu/`, after MainMenu.js): the home screen (Play, the quick start in the
-stadium truck the first time, Garage, Replays, Import, Car editor, Settings, Quit, openracer.eu, Discord, the version), then
+stadium truck the first time, Garage, Replays, Import, Car editor, Settings, Quit, Discord, the version), then
 the steps with the chips at the top and Back / Next at the bottom: the way to play (free drive, race, skidpad), the car
 (tiles with preview.webp, a garage car without one is drawn once and kept in `previews/`; the specs, the top speed in the
 units, the power), its setup (the tunes), the track (cards with the picture, the best lap of the car and setup, Drag top 50,
@@ -1186,12 +1194,12 @@ clutch. Differentials: open, limited slip, welded/locked; four wheel drive with 
    which no bike of the game uses)*.
 6. **Garage, tuning and editors**: tuning menu *(done)*, replays *(the core done)*, car editor *(done, see Car editor)*, track editor, garage.
 7. **Release**: export for the web (openracer.eu), macOS, Windows and Linux. macOS *(done)*: `sh godot/tools/export_macos.sh`
-   makes `godot/build/macos/O-Racer.app` (universal, signed ad hoc, not notarised: the first start needs a right
+   makes `godot/build/macos/GripWorks.app` (universal, signed ad hoc, not notarised: the first start needs a right
    click, Open), with the cars, tracks, wheels and sounds of web/ inside it (Contents/Resources/web; about 380 MB).
    It needs the release build of the native part first (`cd godot/native && scons target=template_release
    arch=universal`). The exported game keeps its logs in its user folder (`logs/`), next to the settings.
    Windows and Linux *(done, built on a Mac)*: `sh godot/tools/export_desktop.sh` makes `godot/build/windows/`
-   (O-Racer.exe) and `godot/build/linux/` (O-Racer.x86_64), each with a folder `web` (cars, tracks, wheels, sounds)
+   (GripWorks.exe) and `godot/build/linux/` (GripWorks.x86_64), each with a folder `web` (cars, tracks, wheels, sounds)
    next to the program, and a zip of each. The native part for them is cross-compiled: Windows with MinGW
    (`brew install mingw-w64`; `cd godot/native && scons platform=windows use_mingw=yes arch=x86_64
    target=template_release`: it needs only the Windows system libraries), Linux with zig (`brew install zig`; the

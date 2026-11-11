@@ -58,13 +58,13 @@ func _draw() -> void:
 	var t := 0.0
 	while t * sc < size.x:
 		draw_line(Vector2(t * sc, 0), Vector2(t * sc, RULER), Color("39424e"))
-		draw_string(font, Vector2(t * sc + 4, 15), VideoEditor.fmt(t).trim_suffix(".00"), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("8d97a3"))
+		draw_string(font, Vector2(t * sc + 4, 15), VideoEditor.fmt(t).trim_suffix(".00"), HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("8e9cb8"))
 		t += step
 	draw_line(Vector2(0, RULER), Vector2(size.x, RULER), Color("2b333d"))
-	draw_line(Vector2(0, CAM_Y), Vector2(size.x, CAM_Y), Color("1c222a"))
-	draw_line(Vector2(0, CAM_Y + CAM_H), Vector2(size.x, CAM_Y + CAM_H), Color("1c222a"))
-	draw_string(font, Vector2(4, RULER + 11), "CLIPS", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("8d97a3"))
-	draw_string(font, Vector2(4, CAM_Y + 11), "CAMERA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("8d97a3"))
+	draw_line(Vector2(0, CAM_Y), Vector2(size.x, CAM_Y), Color("162036"))
+	draw_line(Vector2(0, CAM_Y + CAM_H), Vector2(size.x, CAM_Y + CAM_H), Color("162036"))
+	draw_string(font, Vector2(4, RULER + 11), "CLIPS", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("8e9cb8"))
+	draw_string(font, Vector2(4, CAM_Y + 11), "CAMERA", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color("8e9cb8"))
 	# the clips
 	var starts: Array = ed.starts()
 	for i in ed.clips.size():
@@ -72,7 +72,7 @@ func _draw() -> void:
 		var r := Rect2(starts[i] * sc, CLIP_Y, maxf(6.0, clip["duration"] * sc - 2.0), CLIP_H)
 		var sel: bool = i == ed.selected
 		draw_rect(r, Color("35618c") if sel else Color("2a4a6b"))
-		draw_rect(r, Color("ff5a1f") if sel else Color("4a7aa6"), false, 1.0)
+		draw_rect(r, Color("3d7bff") if sel else Color("4a7aa6"), false, 1.0)
 		var l1 := "%d · %s – %s" % [i + 1, VideoEditor.fmt(clip["in"]), VideoEditor.fmt(clip["out"])]
 		var keys: Array = clip["keys"]
 		var l2 := "×%s · %.2f s" % [str(snappedf(clip["speed"], 0.01)), clip["duration"]]
@@ -82,14 +82,14 @@ func _draw() -> void:
 		draw_string(font, r.position + Vector2(6, 28), l2, HORIZONTAL_ALIGNMENT_LEFT, r.size.x - 8, 10, Color("b9c8d8"))
 		for side in [0.0, 1.0]:
 			var x: float = r.position.x + (r.size.x - 3.0) * side
-			draw_rect(Rect2(x, r.position.y, 3, r.size.y), Color("ff5a1f") if sel else Color(1, 1, 1, 0.35))
+			draw_rect(Rect2(x, r.position.y, 3, r.size.y), Color("3d7bff") if sel else Color(1, 1, 1, 0.35))
 		for kind in ["speed", "zoom", "lead"]:
 			_draw_keyed(clip, i, r, KINDS[kind], kind)
 	# the camera keys
 	for i in ed.camera_keys.size():
 		var k: Dictionary = ed.camera_keys[i]
 		var c := Vector2(float(k["t"]) * sc, CAM_Y + 29)
-		var col := Color("ff5a1f") if i == ed.selected_cam else Color("37d67a")
+		var col := Color("3d7bff") if i == ed.selected_cam else Color("37d67a")
 		if bool(k["parent"]):
 			draw_circle(c, 7.0, col)
 		else:
@@ -116,7 +116,7 @@ func _draw_keyed(clip: Dictionary, index: int, r: Rect2, k: Dictionary, kind: St
 		var key: Dictionary = keys[ki]
 		var c := r.position + Vector2(ed.time_at_offset(clip, key["at"]) * ed.scale_px, scale_y(key[k["field"]], k["lo"], k["hi"], k["linear"]))
 		var sel: bool = index == ed.selected and ki == ed.selected_key(kind)
-		var col: Color = Color("ff5a1f") if sel else k["colour"]
+		var col: Color = Color("3d7bff") if sel else k["colour"]
 		var s := 6.0 if sel else 5.0
 		match kind:
 			"speed":

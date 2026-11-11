@@ -201,7 +201,7 @@ func follow(car: Node3D) -> void:
 	_arrow.pivot_offset = Vector2(15, 15)
 	_arrow.draw.connect(func():
 		var pts := PackedVector2Array([Vector2(15, 2.5), Vector2(25, 25), Vector2(15, 20), Vector2(5, 25)])
-		_arrow.draw_colored_polygon(pts, Color("ff5a1f"))
+		_arrow.draw_colored_polygon(pts, Color("3d7bff"))
 		pts.append(pts[0])
 		_arrow.draw_polyline(pts, Color.WHITE, 1.5, true))
 	row.add_child(_arrow)

@@ -7,12 +7,12 @@ extends RefCounted
 
 const SIDE := 420.0
 const CURB_COLOURS := ["red", "blue", "green", "yellow", "black"]
-const BG := Color("14181d")
-const CARD := Color("181d23")
-const CARD_HEAD := Color("1c222a")
-const LINE := Color("272e37")
-const ACCENT := Color("ff5a1f")
-const MUTED := Color("8d97a3")
+const BG := Color("0e1424")
+const CARD := Color("121a2e")
+const CARD_HEAD := Color("162036")
+const LINE := Color("212c45")
+const ACCENT := Color("3d7bff")
+const MUTED := Color("8e9cb8")
 
 
 static func make_theme() -> Theme:
@@ -32,9 +32,9 @@ static func make_theme() -> Theme:
 	t.set_stylebox("normal", "Button", box.call(Color("232a33"), Color("323c4a")))
 	t.set_stylebox("hover", "Button", box.call(Color("2b3440"), Color("3d4a5c")))
 	t.set_stylebox("pressed", "Button", box.call(Color("26344b"), Color("4a6a9c")))
-	t.set_stylebox("disabled", "Button", box.call(Color("1b2027"), Color("272e37")))
+	t.set_stylebox("disabled", "Button", box.call(Color("1b2027"), Color("212c45")))
 	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
-	t.set_color("font_color", "Button", Color("d9dee5"))
+	t.set_color("font_color", "Button", Color("dbe4f5"))
 	t.set_color("font_pressed_color", "Button", Color.WHITE)
 	t.set_stylebox("normal", "LineEdit", box.call(Color("0f1318"), LINE, 6, 4))
 	t.set_stylebox("focus", "LineEdit", box.call(Color("0f1318"), Color("4a6a9c"), 6, 4))
@@ -47,7 +47,7 @@ static func make_theme() -> Theme:
 	t.set_stylebox("title_hover_panel", "FoldableContainer", box.call(Color("222a33"), LINE, 10, 8))
 	t.set_stylebox("title_collapsed_panel", "FoldableContainer", box.call(CARD_HEAD, LINE, 10, 8))
 	t.set_stylebox("title_collapsed_hover_panel", "FoldableContainer", box.call(Color("222a33"), LINE, 10, 8))
-	t.set_color("font_color", "Label", Color("d9dee5"))
+	t.set_color("font_color", "Label", Color("dbe4f5"))
 	return t
 
 

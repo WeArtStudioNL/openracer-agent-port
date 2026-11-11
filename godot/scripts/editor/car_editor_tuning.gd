@@ -396,7 +396,7 @@ func _import_tune() -> void:
 		dlg.queue_free()
 		var t: Variant = JSON.parse_string(FileAccess.get_file_as_string(p))
 		if not t is Dictionary or not t.get("config") is Dictionary:
-			ed.status("This is not a tune file of OpenRacer.", "error")
+			ed.status("This is not a tune file.", "error")
 			return
 		var n := await ed.ask_text("Import a tune", "The name of this tune" + (" (it was made for %s)" % t.get("car") if str(t.get("car", "")) != ed.car_id else ""),
 			str(t.get("name", p.get_file())))

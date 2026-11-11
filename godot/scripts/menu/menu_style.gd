@@ -1,17 +1,18 @@
 class_name MenuStyle
 extends RefCounted
-## The look of the main menu: the colours of web/theme.css (the same as openracer.eu) and the pieces of MainMenu.js
+## The look of the main menu: the colours of GripWorks (deep cobalt, a blue accent, ice for the focus) and the pieces
+## of MainMenu.js
 ## (a button, a chip, a card, a tile), as StyleBoxFlat.
 
-const BG := Color("#0d0f12")
-const BG2 := Color("#14181d")
-const PANEL := Color("#181d23")
-const LINE := Color("#272e37")
-const TEXT := Color("#d9dee5")
-const MUTED := Color("#8d97a3")
-const HEAD := Color("#f4f6f8")
-const ACCENT := Color("#ff5a1f")
-const ACCENT2 := Color("#ffb020")
+const BG := Color("#0a0f1c")
+const BG2 := Color("#0e1424")
+const PANEL := Color("#121a2e")
+const LINE := Color("#212c45")
+const TEXT := Color("#dbe4f5")
+const MUTED := Color("#8e9cb8")
+const HEAD := Color("#f3f7ff")
+const ACCENT := Color("#3d7bff")
+const ACCENT2 := Color("#9fe3ff")
 const BAD := Color("#ff6b62")
 const OK := Color("#3ddc84")
 
@@ -28,7 +29,7 @@ static func flat(fill: Color, border := Color(0, 0, 0, 0), radius := 10, width :
 
 
 ## The theme of the menu: dark panels, orange for what is chosen, the focus of the keyboard and the gamepad in the
-## second accent (PadNav.js: an outline of #ffb020).
+## second accent (an outline of #9fe3ff, as PadNav.js draws it).
 static func make_theme() -> Theme:
 	var t := Theme.new()
 	t.default_font_size = 16
@@ -126,25 +127,37 @@ static func label(text: String, size := 16, colour := TEXT, wrap := false) -> La
 	return l
 
 
-## The logo of theme.css: a leaning block in the colours of the accent, and the name.
+## The logo of GripWorks: two slanted bars like the blocks of a tread (blue and ice), then GRIP in white and WORKS in
+## the blue.
 static func logo(big: bool) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 16 if big else 10)
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var block := Panel.new()
-	var s := 38 if big else 20
-	block.custom_minimum_size = Vector2(s, s)
-	var box := flat(ACCENT, Color(0, 0, 0, 0), 7 if big else 4)
-	box.skew = Vector2(0.25, 0)
-	block.add_theme_stylebox_override("panel", box)
-	block.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bars := HBoxContainer.new()
+	bars.add_theme_constant_override("separation", 5 if big else 3)
+	bars.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var h := 38 if big else 20
+	for c: Color in [ACCENT, ACCENT2]:
+		var bar := Panel.new()
+		bar.custom_minimum_size = Vector2(h * 0.38, h)
+		var box := flat(c, Color(0, 0, 0, 0), 4 if big else 2)
+		box.skew = Vector2(0.35, 0)
+		bar.add_theme_stylebox_override("panel", box)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		bars.add_child(bar)
 	var holder := CenterContainer.new()
-	holder.add_child(block)
+	holder.add_child(bars)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_child(holder)
-	var title := label("OpenRacer", 46 if big else 22, HEAD)
-	row.add_child(title)
+	var words := HBoxContainer.new()
+	words.add_theme_constant_override("separation", 0)
+	words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for w: Array in [["GRIP", HEAD], ["WORKS", ACCENT]]:
+		var l := label(w[0], 46 if big else 22, w[1])
+		l.add_theme_constant_override("outline_size", 0)
+		words.add_child(l)
+	row.add_child(words)
 	return row
 
 

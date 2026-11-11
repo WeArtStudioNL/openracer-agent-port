@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds the web version of O-Racer: godot/build/web/ with index.html, the engine (index.js, index.wasm, the
+# Builds the web version of GripWorks: godot/build/web/ with index.html, the engine (index.js, index.wasm, the
 # worklets), the game (index.pck), the native part (liboracer.web.*.wasm) and the content (content.pck: the cars,
 # tracks, wheels and sounds of web/ as res://content, fetched by the page before the game starts).
 #   sh godot/tools/export_web.sh [--debug]

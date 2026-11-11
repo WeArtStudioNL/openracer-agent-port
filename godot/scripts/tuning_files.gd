@@ -82,7 +82,7 @@ static func parse_file(path: String) -> Dictionary:
 	if data == null:
 		return {"error": "This is not a tune file (no JSON)."}
 	if not data is Dictionary or int(data.get("openracer-tune", 0)) != 1 or not data.get("config") is Dictionary:
-		return {"error": "This is not an OpenRacer tune file."}
+		return {"error": "This is not a tune file."}
 	var c: Dictionary = (data["config"] as Dictionary).duplicate(true)
 	if not (c.has("chassis") or c.has("drivetrain") or c.has("tyres")):
 		return {"error": "The tune file has no car in it."}

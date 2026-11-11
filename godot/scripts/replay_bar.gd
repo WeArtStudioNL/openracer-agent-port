@@ -356,7 +356,7 @@ func _save() -> void:
 		say("Saved: " + p.get_file(), ProjectSettings.globalize_path(p))
 
 
-## The picture as it is now, without the bar, as a PNG in the Pictures folder (OpenRacer).
+## The picture as it is now, without the bar, as a PNG in the Pictures folder (GripWorks).
 func photo() -> void:
 	visible = false
 	await RenderingServer.frame_post_draw

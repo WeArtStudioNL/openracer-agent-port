@@ -145,7 +145,7 @@ func _calibrate() -> void:
 func _chip(dev: String, text: String, edit: Callable, remove: Callable) -> PanelContainer:
 	var chip := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color("#3a3326") if dev == "Wheel" else Color("#272e37")
+	sb.bg_color = Color("#3a3326") if dev == "Wheel" else Color("#212c45")
 	sb.set_corner_radius_all(4)
 	sb.content_margin_left = 8
 	sb.content_margin_right = 2

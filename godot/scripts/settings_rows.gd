@@ -21,11 +21,11 @@ class CurveView:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
-		draw_rect(Rect2(1, 1, 58, 30), Color("#272e37"), false, 1.0)
+		draw_rect(Rect2(1, 1, 58, 30), Color("#212c45"), false, 1.0)
 		var pts := PackedVector2Array()
 		for i in 21:
 			pts.append(Vector2(2.0 + i * 2.8, 30.0 - 28.0 * pow(i / 20.0, power)))
-		draw_polyline(pts, Color("#ff5a1f"), 2.0, true)
+		draw_polyline(pts, Color("#3d7bff"), 2.0, true)
 
 
 static func section(page: Control, text: String) -> Label:
@@ -181,7 +181,7 @@ static func curve(page: Control, text: String, key: String) -> HBoxContainer:
 
 ## A button that stands out on the dark panel (the buttons of Settings.js: var(--line), the hover lighter).
 static func style(b: Button) -> void:
-	for st in [["normal", Color("#272e37")], ["hover", Color("#343c47")], ["pressed", Color("#ff5a1f")], ["focus", Color(0, 0, 0, 0)],
+	for st in [["normal", Color("#212c45")], ["hover", Color("#2d3a55")], ["pressed", Color("#3d7bff")], ["focus", Color(0, 0, 0, 0)],
 			["disabled", Color("#1e242c")]]:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = st[1]
@@ -192,7 +192,7 @@ static func style(b: Button) -> void:
 		sb.content_margin_bottom = 5
 		if st[0] == "focus":
 			sb.draw_center = false
-			sb.border_color = Color("#ffb020")
+			sb.border_color = Color("#9fe3ff")
 			sb.set_border_width_all(2)
 		b.add_theme_stylebox_override(st[0], sb)
 

@@ -12,12 +12,12 @@ extends PanelContainer
 signal closed
 
 const WIDTH := 470.0
-const HEAD := Color("#f4f6f8")
-const MUTED := Color("#8d97a3")
-const LINE := Color("#272e37")
-const ACCENT := Color("#ff5a1f")
-const ACCENT2 := Color("#ffb020")
-const BG2 := Color("#14181d")
+const HEAD := Color("#f3f7ff")
+const MUTED := Color("#8e9cb8")
+const LINE := Color("#212c45")
+const ACCENT := Color("#3d7bff")
+const ACCENT2 := Color("#9fe3ff")
+const BG2 := Color("#0e1424")
 const GREY := 0.45                  # the alpha of a row that the Godot version does not use yet
 ## Keys of the values that are not settings (they say what the car is).
 const NOT_SETTINGS := ["vehicle_type", "engine_build", "model_tyres", "gear_count"]
@@ -186,7 +186,7 @@ func _make_theme() -> Theme:
 	normal.content_margin_top = 3
 	normal.content_margin_bottom = 3
 	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color("#343c47")
+	hover.bg_color = Color("#2d3a55")
 	var off := normal.duplicate() as StyleBoxFlat
 	off.bg_color = Color(LINE, 0.5)
 	for kind in ["Button", "OptionButton"]:

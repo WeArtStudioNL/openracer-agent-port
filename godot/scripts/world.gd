@@ -711,7 +711,7 @@ func photo() -> void:
 	var img := get_viewport().get_texture().get_image()
 	for l: CanvasLayer in shown:
 		l.visible = true
-	var dir := OS.get_system_dir(OS.SYSTEM_DIR_PICTURES).path_join("O-Racer")
+	var dir := OS.get_system_dir(OS.SYSTEM_DIR_PICTURES).path_join("GripWorks")
 	DirAccess.make_dir_recursive_absolute(dir)
 	var file := dir.path_join("openracer-%s.png" % Time.get_datetime_string_from_system().replace(":", "-"))
 	img.save_png(file)

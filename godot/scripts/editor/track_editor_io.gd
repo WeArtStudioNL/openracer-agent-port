@@ -419,8 +419,8 @@ static func apply_env(ed: TrackEditor) -> void:
 		env.ambient_light_color = Color(str(e["ambient"]["color"]))
 		env.ambient_light_energy = 0.9 * float(e["ambient"]["intensity"]) + 0.2
 	else:
-		sky_mat.sky_top_color = Color("20262f")
-		sky_mat.sky_horizon_color = Color("20262f")
+		sky_mat.sky_top_color = Color("18233a")
+		sky_mat.sky_horizon_color = Color("18233a")
 		ed.sun.light_color = Color.WHITE
 		ed.sun.light_energy = 1.4
 		ed.sun.rotation = Vector3(-0.9, 0.6, 0)

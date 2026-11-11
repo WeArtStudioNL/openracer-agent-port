@@ -355,7 +355,7 @@ func _restore() -> void:
 		dlg.queue_free()
 		var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(p))
 		if not data is Dictionary or int(data.get("openracerBackup", 0)) != 1 or not data.get("files") is Dictionary:
-			_io_status.text = "That is not a backup file of OpenRacer."
+			_io_status.text = "That is not a backup file of GripWorks (or of OpenRacer in the browser)."
 			return
 		var files: Dictionary = data["files"]
 		_confirm("Restore this backup?", "%d files from %s (version %s) replace what this computer has under the same names: the settings, "
@@ -383,7 +383,7 @@ func _file_dialog(mode: FileDialog.FileMode) -> FileDialog:
 	dlg.file_mode = mode
 	dlg.access = FileDialog.ACCESS_FILESYSTEM
 	dlg.use_native_dialog = true
-	dlg.filters = PackedStringArray(["*.json ; OpenRacer backup"])
+	dlg.filters = PackedStringArray(["*.json ; GripWorks / OpenRacer backup"])
 	dlg.process_mode = Node.PROCESS_MODE_ALWAYS
 	dlg.canceled.connect(dlg.queue_free)
 	menu.add_child(dlg)

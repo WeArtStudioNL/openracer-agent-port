@@ -257,7 +257,7 @@ func _draw_boxes() -> void:
 		var id := str(el.get_meta("hud_id", ""))
 		if id == selected:
 			_boxes.draw_rect(r, Color(1, 0.35, 0.12, 0.12))
-			_boxes.draw_rect(r, Color("#ff5a1f"), false, 2.0)
+			_boxes.draw_rect(r, Color("#3d7bff"), false, 2.0)
 		else:
 			_boxes.draw_dashed_line(r.position, Vector2(r.end.x, r.position.y), Color(1, 1, 1, 0.55), 2.0, 6.0)
 			_boxes.draw_dashed_line(Vector2(r.end.x, r.position.y), r.end, Color(1, 1, 1, 0.55), 2.0, 6.0)

@@ -5,7 +5,7 @@ extends RefCounted
 ## per car, the choices of a take. Kept in user://video.cfg (a test gives --video-cfg=<file> to keep it elsewhere).
 ##
 ## Where the files go: the replays in user://replays (--replay-dir=<folder>), the videos and the photos in the
-## Movies and Pictures folders of the system, in OpenRacer (--video-dir=<folder> for both).
+## Movies and Pictures folders of the system, in GripWorks (--video-dir=<folder> for both).
 
 const ASPECTS := {
 	"16:9": {"ratio": 16.0 / 9.0, "width": 1280, "height": 720},
@@ -81,7 +81,7 @@ static func _out_dir(kind: OS.SystemDir) -> String:
 	var d := Content.arg("video-dir")
 	if d == "":
 		var sys := OS.get_system_dir(kind)
-		d = sys.path_join("OpenRacer") if sys != "" else ProjectSettings.globalize_path("user://videos")
+		d = sys.path_join("GripWorks") if sys != "" else ProjectSettings.globalize_path("user://videos")
 	DirAccess.make_dir_recursive_absolute(d)
 	return d
 

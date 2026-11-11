@@ -614,7 +614,7 @@ class Chart:
 		var cfg: Dictionary = cfg_of.call() if cfg_of.is_valid() else engine.ed.cfg
 		var w := size.x
 		var h := size.y
-		draw_rect(Rect2(Vector2.ZERO, size), Color("#12161c"))
+		draw_rect(Rect2(Vector2.ZERO, size), Color("#0d1322"))
 		var curve: Array = Tuning.read(cfg, "engine.torque_curve") if Tuning.read(cfg, "engine.torque_curve") is Array else []
 		var max_rpm := CarEditorEngine._num(cfg, "engine.limiter_rpm", 7000.0)
 		var top := 1.0

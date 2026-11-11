@@ -57,7 +57,7 @@ func _fit_window() -> void:
 
 
 ## The home screen (MainMenu.js home): the logo, Play, the quick start of a first visit, the links (the garage, the
-## replays, the settings, the car editor, an import, quit) and the foot (openracer.eu, Discord, the version).
+## replays, the settings, the car editor, an import, quit) and the foot (Discord, the version).
 func _build_menu() -> void:
 	menu = Control.new()
 	menu.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -73,8 +73,8 @@ func _build_menu() -> void:
 	g.fill_from = Vector2(0.5, -0.1)
 	g.fill_to = Vector2(0.5, 0.55)
 	g.gradient = Gradient.new()
-	g.gradient.set_color(0, Color(1.0, 0.35, 0.12, 0.16))
-	g.gradient.set_color(1, Color(1.0, 0.35, 0.12, 0.0))
+	g.gradient.set_color(0, Color(MenuStyle.ACCENT, 0.2))
+	g.gradient.set_color(1, Color(MenuStyle.ACCENT, 0.0))
 	glow.texture = g
 	glow.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -88,7 +88,7 @@ func _build_menu() -> void:
 	home.add_theme_constant_override("separation", 14)
 	centre.add_child(home)
 	home.add_child(MenuStyle.logo(true))
-	var tag := MenuStyle.label("A racing simulator, rebuilt in Godot.", 18, MenuStyle.MUTED)
+	var tag := MenuStyle.label("Real tyres, real grip, real racing.", 18, MenuStyle.MUTED)
 	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	home.add_child(tag)
 	_note = MenuStyle.label("", 14, MenuStyle.ACCENT2, true)
@@ -155,14 +155,13 @@ func _build_menu() -> void:
 	var foot := HBoxContainer.new()
 	foot.alignment = BoxContainer.ALIGNMENT_CENTER
 	foot.add_theme_constant_override("separation", 16)
-	for l in [["openracer.eu", "https://openracer.eu"], ["Discord", "https://discord.gg/JFgHVFUagF"],
-			["v" + str(ProjectSettings.get_setting("application/config/version")) + _game_version(), "https://openracer.eu/changelog.html"]]:
-		var link := LinkButton.new()
-		link.text = l[0]
-		link.underline = LinkButton.UNDERLINE_MODE_ON_HOVER
-		link.focus_mode = Control.FOCUS_ALL
-		link.pressed.connect(OS.shell_open.bind(l[1]))
-		foot.add_child(link)
+	var discord := LinkButton.new()
+	discord.text = "Discord"
+	discord.underline = LinkButton.UNDERLINE_MODE_ON_HOVER
+	discord.focus_mode = Control.FOCUS_ALL
+	discord.pressed.connect(OS.shell_open.bind("https://discord.gg/JFgHVFUagF"))
+	foot.add_child(discord)
+	foot.add_child(MenuStyle.label("v" + str(ProjectSettings.get_setting("application/config/version")) + _game_version(), 14, MenuStyle.MUTED))
 	var gap := Control.new()
 	gap.custom_minimum_size.y = 26
 	home.add_child(gap)
@@ -170,13 +169,13 @@ func _build_menu() -> void:
 	go.grab_focus.call_deferred()
 
 
-## The version of the browser game whose content this reads (web/js/Version.js), " · OpenRacer 2.5.0".
+## The version of the browser game whose content this reads (web/js/Version.js), " · content 2.5.0".
 func _game_version() -> String:
 	var f := Content.root.path_join("js/Version.js")
 	if not FileAccess.file_exists(f):
 		return ""
 	var m := RegEx.create_from_string("VERSION\\s*=\\s*\"([^\"]+)\"").search(FileAccess.get_file_as_string(f))
-	return " · OpenRacer " + m.get_string(1) if m != null else ""
+	return " · content " + m.get_string(1) if m != null else ""
 
 
 ## Play: the steps (MainMenu) over the home screen.
